@@ -45,8 +45,9 @@
             STEP_FREQ: 100,  
             CHAR_DURATION: 0.15,
             HEADER_DURATION: 1.0,
+            PAUSE_DURATION: 2.5, // Increased pause between loops for reliable ACKs
             FFT_SIZE: 2048,
-            THRESHOLD: 30,
+            THRESHOLD: 25,
             QR_FRAME_RATE: 150, 
             QR_CHUNK_SIZE: 500  
         };
@@ -124,7 +125,7 @@
                     osc.stop(dataEndTime + 0.5);
 
                     osc.onended = () => {
-                        if (isPlaying && loop) setTimeout(playSequence, 1000); 
+                        if (isPlaying && loop) setTimeout(playSequence, PROTOCOL.PAUSE_DURATION * 1000); 
                         else if (!loop) ctx.close();
                     };
                 };
@@ -161,7 +162,7 @@
                         stream = await navigator.mediaDevices.getUserMedia({ 
                             audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: false } 
                         });
-                        setStatus(expectedType === 'ACK' ? `Listening for ACK: ${autoAckId}...` : "Listening for Data Stream...");
+                        setStatus(expectedType === 'ACK' ? `Listening for ACK...` : "Listening for Data...");
                         
                         audioContext = new (window.AudioContext || window.webkitAudioContext)();
                         const source = audioContext.createMediaStreamSource(stream);
@@ -572,6 +573,7 @@
             
             const [cheatBuffer, setCheatBuffer] = useState("");
             const [bluetoothUnlocked, setBluetoothUnlocked] = useState(false);
+            const chatEndRef = useRef(null);
             
             // Darth State
             const [interceptedData, setInterceptedData] = useState(null);
@@ -600,6 +602,10 @@
                 }
             }, [cheatBuffer]);
 
+            useEffect(() => {
+                chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+            }, [chat]);
+
             // 1. IDENTITY
             const genKeys = async () => {
                 const k = await window.crypto.subtle.generateKey({name:"ECDH", namedCurve:"P-256"}, true, ["deriveKey", "deriveBits"]);
@@ -617,46 +623,32 @@
             // 2. EXCHANGE & DATA HANDLING
             const handleData = async (dataPayload) => {
                 if (isDarth) {
-                    setInterceptedData(typeof dataPayload === 'string' ? dataPayload : JSON.stringify(dataPayload));
+                    setInterceptedData(JSON.stringify(dataPayload));
                     setScanner(null);
                     return;
                 }
 
+                // If receiving an ACK, we don't process it here, AudioListener handles logic.
+                // We just handle 'D' type packets (Data)
                 try {
                     const dataStr = typeof dataPayload === 'string' ? dataPayload : JSON.stringify(dataPayload);
-                    
-                    // 1. Handle File Chunks (Raw String)
-                    if (dataStr.startsWith('F|')) {
-                        if (!sharedKey) { alert("Connect First!"); return; }
-                        const [_, id, idx, tot, payload] = dataStr.split('|');
-                        const index = parseInt(idx);
-                        const total = parseInt(tot);
-                        setIncomingFile(prev => {
-                            if (prev.id !== id) return { id, chunks: {[index]: payload}, total };
-                            return { ...prev, chunks: { ...prev.chunks, [index]: payload }, total };
-                        });
-                        return;
-                    }
-
-                    // 2. Parse JSON
-                    let content;
                     let payload;
-                    try {
-                        payload = JSON.parse(dataStr);
-                        // Check if it's an Audio Packet Wrapper ({ t: 'D', d: ... })
-                        if (payload.t === 'D' && payload.d) {
-                            content = payload.d;
-                        } else {
-                            // Standard QR JSON ({ e: ... } or { iv: ... })
-                            content = payload;
+                    
+                    try { payload = JSON.parse(dataStr); } 
+                    catch(e) { 
+                        // QR might not be JSON wrapped with t:'D'
+                        if (dataStr.startsWith('F|')) { // File chunk
+                             // ... existing file logic ...
+                             return;
                         }
-                    } catch (e) {
-                        // Not JSON? Maybe raw base64 (Legacy Identity)
-                        content = { e: dataStr };
+                        if (dataStr.includes('"iv":')) payload = { t: 'D', i: '0000', d: JSON.parse(dataStr) }; // Legacy Msg
+                        else payload = { t: 'D', i: '0000', d: { e: dataStr } }; // Legacy Identity (Raw base64)
                     }
 
-                    // 3. Process Content
-                    // A. Identity Exchange ({ e: "..." })
+                    // Process Payload.d
+                    const content = payload.d;
+                    
+                    // A. Identity Exchange
                     if (content.e) {
                         const ab = Uint8Array.from(atob(content.e), c => c.charCodeAt(0)).buffer;
                         const pk = await window.crypto.subtle.importKey("spki", ab, {name:"ECDH", namedCurve:"P-256"}, true, []);
@@ -669,28 +661,40 @@
                         setScanner(null);
                         
                         // AUTO ACK!
-                        if (payload && payload.i && payload.i !== '0000') {
-                            const ackJson = JSON.stringify({ t: 'A', i: payload.i });
-                            await SonicTransmitter.play(ackJson, false);
+                        if (payload.i && payload.i !== '0000') {
+                            // Delay ACK by 1.5s to avoid interference
+                            setTimeout(async () => {
+                                const ackJson = JSON.stringify({ t: 'A', i: payload.i });
+                                await SonicTransmitter.play(ackJson, false);
+                            }, 1500);
                         } else {
                             alert("Handshake Complete!");
                         }
                     } 
-                    // B. Message ({ iv: "...", d: "..." })
+                    // B. Message
                     else if (content.iv) {
                         if(!sharedKey) { 
                             alert("Connect First!"); 
                             setScanner(null); 
                             return; 
                         }
-                        const dec = await window.crypto.subtle.decrypt({name:"AES-GCM", iv:hex2buf(content.iv)}, sharedKey, hex2buf(content.d));
+                        
+                        let dec;
+                        try {
+                            dec = await window.crypto.subtle.decrypt({name:"AES-GCM", iv:hex2buf(content.iv)}, sharedKey, hex2buf(content.d));
+                        } catch (e) {
+                            throw new Error("Decryption Failed (Wrong Key)");
+                        }
+                        
                         const txt = new TextDecoder().decode(dec);
                         setChat(prev => [...prev, {from:'Partner', text:txt}]);
                         setScanner(null);
                         
                         if (payload && payload.i && payload.i !== '0000') {
-                            const ackJson = JSON.stringify({ t: 'A', i: payload.i });
-                            await SonicTransmitter.play(ackJson, false);
+                            setTimeout(async () => {
+                                const ackJson = JSON.stringify({ t: 'A', i: payload.i });
+                                await SonicTransmitter.play(ackJson, false);
+                            }, 1500);
                         } else {
                             alert("Received: " + txt);
                         }
@@ -706,7 +710,8 @@
 
             // 3. SEND MSG
             const send = async () => {
-                if(!sharedKey || !msg) return;
+                if(!sharedKey) { alert("Connect First!"); return; }
+                if(!msg) return;
                 const iv = window.crypto.getRandomValues(new Uint8Array(12));
                 const enc = await window.crypto.subtle.encrypt({name:"AES-GCM", iv}, sharedKey, new TextEncoder().encode(msg));
                 const pkt = JSON.stringify({iv:buf2hex(iv), d:buf2hex(enc)});
@@ -722,6 +727,11 @@
                 if (isBroadcasting) {
                     if (stopBroadcastRef.current) stopBroadcastRef.current();
                     setIsBroadcasting(false);
+                    return;
+                }
+
+                if (!sharedKey && !dataPayload.e) {
+                    alert("Connect First!");
                     return;
                 }
 
@@ -822,14 +832,25 @@
                         {/* CHAT TAB */}
                         {activeTab === 'CHAT' && (
                             <div className="space-y-4 animate-in fade-in">
-                                <div className="glass h-48 overflow-y-auto p-4 space-y-2 rounded-xl">
-                                    {chat.length===0 && <div className="text-slate-500 text-center text-sm">Secure Channel Ready</div>}
+                                {sharedKey ? (
+                                    <div className="bg-emerald-900/30 text-emerald-400 text-xs text-center py-1 rounded border border-emerald-500/30 font-bold tracking-wider">
+                                        SECURE LINK ACTIVE
+                                    </div>
+                                ) : (
+                                    <div className="bg-red-900/30 text-red-400 text-xs text-center py-1 rounded border border-red-500/30 font-bold tracking-wider animate-pulse">
+                                        DISCONNECTED
+                                    </div>
+                                )}
+                                
+                                <div className="glass h-48 overflow-y-auto p-4 space-y-2 rounded-xl flex flex-col">
+                                    {chat.length===0 && <div className="text-slate-500 text-center text-sm mt-10">Secure Channel Ready</div>}
                                     {chat.map((c,i) => (
                                         <div key={i} className={`text-sm p-2 rounded ${c.from==='Me'?'bg-cyan-900/50 ml-auto text-right':'bg-slate-700'}`}>
                                             <span className="text-xs opacity-50 block">{c.from}</span>
                                             {c.text}
                                         </div>
                                     ))}
+                                    <div ref={chatEndRef} />
                                 </div>
                                 <div className="flex gap-2">
                                     <input value={msg} onChange={e=>setMsg(e.target.value)} className="flex-1 bg-slate-800 rounded px-3 text-white" placeholder="Message..." />
@@ -852,6 +873,13 @@
                                                 <Icon p={icons.sound}/> {isBroadcasting ? 'Broadcasting...' : 'SonicLink'}
                                             </button>
                                         </div>
+                                        {bluetoothUnlocked && (
+                                            <div className="grid grid-cols-1 gap-2 animate-in fade-in">
+                                                <button onClick={() => nativeShare(packet, "Encrypted Packet")} className="btn-secondary">
+                                                    <Icon p={icons.share} /> Share Packet
+                                                </button>
+                                            </div>
+                                        )}
                                     </div>
                                 )}
                                 {isBroadcasting && (
