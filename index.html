@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CryptoVis: GibberLink Protocol</title>
+    <title>CryptoVis: GibberLink v2.0 (Secure)</title>
     
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
@@ -16,44 +16,50 @@
     <style>
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap');
         body { font-family: 'JetBrains Mono', monospace; background-color: #0f172a; color: #e2e8f0; }
-        .glass { background: rgba(30, 41, 59, 0.95); backdrop-filter: blur(20px); border: 1px solid rgba(148, 163, 184, 0.1); }
+        .glass { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(12px); border: 1px solid rgba(148, 163, 184, 0.1); }
+        .darth-glass { background: rgba(69, 10, 10, 0.85); backdrop-filter: blur(12px); border: 1px solid rgba(239, 68, 68, 0.3); }
+        
         .scan-line {
             width: 100%; height: 2px; background: #06b6d4; position: absolute;
             animation: scan 2s linear infinite; box-shadow: 0 0 10px #06b6d4;
         }
+        .darth-scan-line { background: #ef4444; box-shadow: 0 0 10px #ef4444; }
+        
         @keyframes scan { 0% { top: 0%; opacity: 0; } 50% { opacity: 1; } 100% { top: 100%; opacity: 0; } }
+        
         .matrix-bg {
-            background-image: linear-gradient(rgba(15, 23, 42, 0.9), rgba(15, 23, 42, 0.9)), url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%231e293b' fill-opacity='0.4'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+            background-image: radial-gradient(#1e293b 1px, transparent 1px), radial-gradient(#1e293b 1px, transparent 1px);
+            background-size: 20px 20px;
+            background-position: 0 0, 10px 10px;
+            background-color: #020617;
         }
-        /* Range Slider Styling */
+        
         input[type=range] { -webkit-appearance: none; width: 100%; background: transparent; }
-        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; height: 16px; width: 16px; border-radius: 50%; background: #06b6d4; cursor: pointer; margin-top: -6px; }
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; height: 16px; width: 16px; border-radius: 50%; background: currentColor; cursor: pointer; margin-top: -6px; }
         input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 4px; cursor: pointer; background: #334155; border-radius: 2px; }
-        .slide-in { animation: slide 0.3s ease-out; }
-        @keyframes slide { 0% { transform: translateY(20px); opacity: 0; } 100% { transform: translateY(0); opacity: 1; } }
+        
+        .anim-fade { animation: fadeIn 0.3s ease-in; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
     </style>
 </head>
-<body class="matrix-bg min-h-screen">
+<body class="matrix-bg min-h-screen selection:bg-cyan-500 selection:text-white">
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect, useRef } = React;
+        const { useState, useEffect, useRef, useMemo } = React;
 
-        // --- GIBBERLINK PROTOCOL CONFIGURATION ---
+        // --- CONSTANTS & CONFIG ---
         const PROTOCOL = {
+            VERSION: '2.0',
             SAMPLE_RATE: 48000,
             BASE_FREQ: 1400,
-            FREQ_SPACING: 120, // 32 tones from 1400Hz to 5120Hz
-            SYMBOL_MS: 60,     // 60ms per symbol
-            FADE_MS: 6,        // 6ms attack/decay
-            PREAMBLE_SYM: 31,  // High freq sync tone
-            START_SYM: 30,
-            STOP_SYM: 29,
-            QR_FRAME_RATE: 800,
-            QR_CHUNK_SIZE: 400
+            FREQ_SPACING: 120,
+            SYMBOL_MS: 60,
+            QR_CHUNK_SIZE: 350, // Smaller chunks for better redundancy
+            DEFAULT_QR_FPS: 200 // 5 FPS
         };
 
-        const BASE32_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+        const BASE32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 
         // --- ICONS ---
         const Icon = ({ p, size=24, className="" }) => (
@@ -61,852 +67,730 @@
         );
         const icons = {
             shield: <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />,
+            skull: <><path d="M12 2c-4 0-8 3-8 8 0 1.5.5 3 1.5 4C4 16 3 22 3 22h18s-1-6-2.5-8c1-1 1.5-2.5 1.5-4 0-5-4-8-8-8z"/><path d="M8 10h.01"/><path d="M16 10h.01"/><path d="M10 14h4"/></>,
+            zap: <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>,
             lock: <><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></>,
-            cam: <><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></>,
+            unlock: <><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 9.9-1" /></>,
+            eye: <><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></>,
+            refresh: <path d="M21.5 2v6h-6M2.5 22v-6h6M2 12c0-3.6 2-6.7 5-8.6M22 12c0 3.6-2 6.7-5 8.6"/>,
             send: <><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></>,
-            sound: <><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></>,
-            mic: <><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></>,
-            refresh: <><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"/><path d="M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></>,
-            clip: <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />,
-            play: <polygon points="5 3 19 12 5 21 5 3"></polygon>,
-            pause: <><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></>,
-            prev: <polygon points="19 20 9 12 19 4 19 20"></polygon>,
-            next: <polygon points="5 4 15 12 5 20 5 4"></polygon>
+            file: <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></>,
+            mic: <><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></>,
+            stop: <><circle cx="12" cy="12" r="10"/><rect x="9" y="9" width="6" height="6"/></>,
+            play: <polygon points="5 3 19 12 5 21 5 3"/>,
+            pause: <><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></>,
+            bug: <><rect x="8" y="6" width="8" height="12" rx="4"/><path d="M12 12v.01"/><path d="M4 14h4"/><path d="M16 14h4"/><path d="M4 10h4"/><path d="M16 10h4"/><path d="M4 18h4"/><path d="M16 18h4"/></>,
+            check: <polyline points="20 6 9 17 4 12"/>,
+            x: <><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>
         };
 
-        // --- CRYPTO HELPERS ---
+        // --- CRYPTO UTILS ---
         const buf2hex = (buf) => [...new Uint8Array(buf)].map(x => x.toString(16).padStart(2, '0')).join('');
         const hex2buf = (hex) => new Uint8Array(hex.match(/.{1,2}/g).map(byte => parseInt(byte, 16))).buffer;
 
+        // Enhanced Fingerprint: SHA-256 of key -> Emojis + Hex for hybrid security
         const generateFingerprint = async (buffer) => {
             const hash = await window.crypto.subtle.digest('SHA-256', buffer);
             const arr = new Uint8Array(hash);
             const emojis = ["🐶","🐱","🐭","🐹","🐰","🦊","🐻","🐼","🐨","🐯","🦁","🐮","🐷","🐸","🐵","🐔","🐧","🐦","🐤","🦆","🦅","🦉","🦇","🐺","🐗","🐴","🦄","🐝","🐛","🦋","🐌","🐞","🐜","🕷","🕸","🐢","🐍","🦎","🦂","🦀","🦑","🐙","🦐","🐠","🐟","🐡","🐬","🦈","🐳","🐋","🐊","🐆","🐅","🐃","🐂","🐄","🐪","🐫","🐘","🦏","🦍","🐎","🐖","🐐","🐏","🐑","🐕","🐩","🐈","🐓","🦃","🕊","🐇","🐁","🐀","🐿","🐾","🐉","🐲","🌵","🎄","🌲","🌳","🌴"];
-            let fp = "";
-            for(let i=0; i<4; i++) fp += emojis[arr[i] % emojis.length];
-            return fp;
+            let em = "";
+            for(let i=0; i<4; i++) em += emojis[arr[i] % emojis.length];
+            const hex = buf2hex(hash).substring(0, 8).toUpperCase(); // Short hex for strict check
+            return { emoji: em, hex: hex, full: buf2hex(hash) };
         };
-
-        // --- GIBBERLINK CORE (Encoder/Decoder) ---
-        const GibberLink = {
-            // -- UTILS --
-            utf8ToBytes: (str) => new TextEncoder().encode(str),
-            crc32: (bytes) => {
-                let crc = 0xFFFFFFFF;
-                const table = new Uint32Array(256);
-                for(let i=0; i<256; i++) {
-                    let c = i;
-                    for(let k=0; k<8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
-                    table[i] = c;
-                }
-                for(let b of bytes) crc = (crc >>> 8) ^ table[(crc ^ b) & 0xFF];
-                return (crc ^ 0xFFFFFFFF) >>> 0;
-            },
-            bytesToBase32: (bytes) => {
-                let bits = 0, value = 0, output = "";
-                for(let i=0; i<bytes.length; i++) {
-                    value = (value << 8) | bytes[i];
-                    bits += 8;
-                    while(bits >= 5) {
-                        output += BASE32_ALPHABET[(value >>> (bits - 5)) & 31];
-                        bits -= 5;
-                    }
-                }
-                if(bits > 0) output += BASE32_ALPHABET[(value << (5 - bits)) & 31];
-                return output;
-            },
-
-            // -- ENCODER --
-            makeSymbolBuffer: (ctx, symbolIndex) => {
-                const f = PROTOCOL.BASE_FREQ + symbolIndex * PROTOCOL.FREQ_SPACING;
-                const symbolSamples = Math.floor(PROTOCOL.SAMPLE_RATE * (PROTOCOL.SYMBOL_MS/1000));
-                const fadeSamples = Math.floor(PROTOCOL.SAMPLE_RATE * (PROTOCOL.FADE_MS/1000));
-                
-                const buffer = ctx.createBuffer(1, symbolSamples, PROTOCOL.SAMPLE_RATE);
-                const arr = buffer.getChannelData(0);
-                for(let n=0; n<symbolSamples; n++) {
-                    let env = 1.0;
-                    if(n < fadeSamples) env = 0.5*(1 - Math.cos(Math.PI*n/fadeSamples));
-                    else if(n > symbolSamples - fadeSamples) {
-                        const m = symbolSamples - n;
-                        env = 0.5*(1 - Math.cos(Math.PI*m/fadeSamples));
-                    }
-                    arr[n] = env * Math.sin(2*Math.PI*f * n / PROTOCOL.SAMPLE_RATE);
-                }
-                return buffer;
-            },
-
-            buildSymbolStream: (jsonStr) => {
-                const bytes = GibberLink.utf8ToBytes(jsonStr);
-                const crc = GibberLink.crc32(bytes);
-                // Append CRC (4 bytes) to data
-                const fullBytes = new Uint8Array(bytes.length + 4);
-                fullBytes.set(bytes);
-                fullBytes.set([ (crc >>> 24)&0xff, (crc >>> 16)&0xff, (crc >>> 8)&0xff, crc&0xff ], bytes.length);
-
-                const b32 = GibberLink.bytesToBase32(fullBytes);
-                const charToIndex = {};
-                for(let i=0; i<BASE32_ALPHABET.length; i++) charToIndex[BASE32_ALPHABET[i]] = i;
-
-                const symbols = [];
-                // Preamble (4x high pitch chirp)
-                symbols.push(PROTOCOL.PREAMBLE_SYM, PROTOCOL.PREAMBLE_SYM, PROTOCOL.PREAMBLE_SYM, PROTOCOL.PREAMBLE_SYM);
-                // Start
-                symbols.push(PROTOCOL.START_SYM);
-                // Header (Type=1 default, Length 2 syms)
-                const len = b32.length;
-                symbols.push(1); // Type
-                symbols.push((len >>> 5) & 31); // Length High
-                symbols.push(len & 31);         // Length Low
-                // Payload + CRC
-                for(let c of b32) symbols.push(charToIndex[c]);
-                // Stop
-                symbols.push(PROTOCOL.STOP_SYM);
-                
-                return symbols;
-            },
-
-            transmit: async (jsonStr) => {
-                const symbols = GibberLink.buildSymbolStream(jsonStr);
-                const ctx = new (window.AudioContext || window.webkitAudioContext)({sampleRate: PROTOCOL.SAMPLE_RATE});
-                const buffers = Array.from({length: 32}, (_,i) => GibberLink.makeSymbolBuffer(ctx, i));
-                
-                let time = ctx.currentTime + 0.1;
-                for(let sym of symbols) {
-                    const src = ctx.createBufferSource();
-                    src.buffer = buffers[sym];
-                    src.connect(ctx.destination);
-                    src.start(time);
-                    time += PROTOCOL.SYMBOL_MS/1000;
-                }
-                return new Promise(r => setTimeout(r, (time - ctx.currentTime)*1000 + 500));
-            },
-
-            // -- DECODER HELPERS --
-            goertzel: (samples, sampleRate, targetFreq) => {
-                const k = Math.round(0.5 + ((samples.length * targetFreq) / sampleRate));
-                const w = (2*Math.PI*k) / samples.length;
-                const cosine = Math.cos(w), sine = Math.sin(w);
-                const coeff = 2*cosine;
-                let q0=0, q1=0, q2=0;
-                for(let i=0; i<samples.length; i++) {
-                    q0 = coeff*q1 - q2 + samples[i];
-                    q2 = q1;
-                    q1 = q0;
-                }
-                const real = (q1 - q2 * cosine);
-                const imag = (q2 * sine);
-                return Math.sqrt(real*real + imag*imag);
-            }
-        };
-
 
         // --- COMPONENTS ---
-        const QRDisplay = ({ data, label }) => {
+
+        const QRDisplay = ({ data, label, subLabel, color="black" }) => {
             const canvasRef = useRef(null);
             useEffect(() => {
                 if (canvasRef.current && data) {
-                    new QRious({ element: canvasRef.current, value: data, size: 200, level: 'L' });
+                    new QRious({ element: canvasRef.current, value: data, size: 256, level: 'L', foreground: color });
                 }
-            }, [data]);
+            }, [data, color]);
             return (
-                <div className="bg-white p-3 rounded-2xl flex flex-col items-center shadow-xl">
-                    <canvas ref={canvasRef} />
-                    <p className="text-black font-bold text-xs mt-2 max-w-[200px] truncate">{label}</p>
+                <div className="bg-white p-3 rounded-xl shadow-2xl flex flex-col items-center">
+                    <canvas ref={canvasRef} className="max-w-full h-auto" />
+                    <div className="mt-2 text-center">
+                        <p className="text-slate-900 font-bold text-sm truncate max-w-[200px]">{label}</p>
+                        {subLabel && <p className="text-slate-500 text-xs font-mono">{subLabel}</p>}
+                    </div>
                 </div>
             );
         };
 
-        const AnimatedQR = ({ chunks, label, onClose }) => {
+        const AnimatedQR = ({ chunks, label, onClose, theme="cyan" }) => {
             const [index, setIndex] = useState(0);
+            const [speed, setSpeed] = useState(PROTOCOL.DEFAULT_QR_FPS);
             const [isPaused, setIsPaused] = useState(false);
             
             useEffect(() => {
-                if (!chunks || chunks.length === 0 || isPaused) return;
+                if (isPaused) return;
                 const interval = setInterval(() => {
                     setIndex(prev => (prev + 1) % chunks.length);
-                }, PROTOCOL.QR_FRAME_RATE);
+                }, speed);
                 return () => clearInterval(interval);
-            }, [chunks, isPaused]);
+            }, [chunks, speed, isPaused]);
 
-            const handleSlider = (e) => {
-                setIndex(parseInt(e.target.value));
-                setIsPaused(true);
-            };
-
-            const togglePause = () => setIsPaused(!isPaused);
-            const prevChunk = () => { setIndex(prev => (prev - 1 + chunks.length) % chunks.length); setIsPaused(true); };
-            const nextChunk = () => { setIndex(prev => (prev + 1) % chunks.length); setIsPaused(true); };
+            const color = theme === "red" ? "#dc2626" : "black";
+            const btnClass = theme === "red" ? "bg-red-600 hover:bg-red-500" : "bg-cyan-600 hover:bg-cyan-500";
 
             return (
                 <div className="fixed inset-0 z-50 bg-black/95 flex flex-col items-center justify-center p-4">
-                    <div className="bg-white p-4 rounded-2xl flex flex-col items-center shadow-[0_0_50px_rgba(6,182,212,0.5)] w-full max-w-sm">
-                        <QRDisplay data={chunks[index]} label={`${label}`} />
-                        <div className="w-full mt-4 space-y-2">
-                            <div className="flex justify-between text-black font-bold text-sm"><span>Part {index + 1}</span><span>Total {chunks.length}</span></div>
-                            <input type="range" min="0" max={chunks.length - 1} value={index} onChange={handleSlider} className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
-                            <div className="flex justify-center gap-4 mt-2">
-                                <button onClick={prevChunk} className="p-2 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-800"><Icon p={icons.prev} /></button>
-                                <button onClick={togglePause} className={`p-3 rounded-full text-white ${isPaused ? 'bg-green-500 hover:bg-green-600' : 'bg-slate-800 hover:bg-slate-700'}`}><Icon p={isPaused ? icons.play : icons.pause} /></button>
-                                <button onClick={nextChunk} className="p-2 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-800"><Icon p={icons.next} /></button>
+                    <div className="bg-white p-4 rounded-2xl w-full max-w-sm shadow-[0_0_50px_rgba(255,255,255,0.1)]">
+                        <QRDisplay data={chunks[index]} label={label} subLabel={`Chunk ${index+1}/${chunks.length}`} color={color} />
+                        
+                        {/* Controls */}
+                        <div className="mt-6 space-y-4">
+                            {/* Scrubber */}
+                            <div className="flex items-center gap-2">
+                                <span className="text-xs font-bold text-slate-400 w-8">POS</span>
+                                <input type="range" min="0" max={chunks.length-1} value={index} 
+                                    onChange={(e)=>{setIndex(parseInt(e.target.value)); setIsPaused(true);}} 
+                                    className="accent-slate-800"
+                                />
+                            </div>
+
+                            {/* Speed Control */}
+                            <div className="flex items-center gap-2">
+                                <span className="text-xs font-bold text-slate-400 w-8">SPD</span>
+                                <input type="range" min="50" max="1000" step="50" value={speed} 
+                                    onChange={(e)=>setSpeed(parseInt(e.target.value))} 
+                                    className="accent-slate-800"
+                                />
+                                <span className="text-xs font-mono text-slate-500 w-12 text-right">{speed}ms</span>
+                            </div>
+
+                            {/* Buttons */}
+                            <div className="flex justify-center gap-4">
+                                <button onClick={()=>setIndex(prev=>(prev-1+chunks.length)%chunks.length)} className="p-2 rounded-full bg-slate-100 text-slate-800"><Icon p={icons.play} className="rotate-180"/></button>
+                                <button onClick={()=>setIsPaused(!isPaused)} className={`p-4 rounded-full text-white shadow-lg transition-transform active:scale-95 ${btnClass}`}>
+                                    <Icon p={isPaused ? icons.play : icons.pause} />
+                                </button>
+                                <button onClick={()=>setIndex(prev=>(prev+1)%chunks.length)} className="p-2 rounded-full bg-slate-100 text-slate-800"><Icon p={icons.play}/></button>
                             </div>
                         </div>
                     </div>
-                    <button onClick={onClose} className="mt-8 bg-slate-800 px-8 py-3 rounded-full text-white font-bold hover:bg-slate-700 border border-slate-600">Stop Broadcast</button>
+                    <button onClick={onClose} className="mt-8 text-white/50 hover:text-white flex items-center gap-2">
+                        <Icon p={icons.x} /> Stop Broadcast
+                    </button>
                 </div>
             );
         };
 
-        const QRScanner = ({ onScan, onClose, incomingFile }) => {
+        const QRScanner = ({ onScan, onClose, incomingFile, isDarth }) => {
             const videoRef = useRef(null);
             const canvasRef = useRef(null);
+            const [error, setError] = useState(null);
             
-            const getMissingParts = () => {
-                if (!incomingFile || incomingFile.total === 0) return "";
-                const missing = [];
-                for(let i=0; i<incomingFile.total; i++) if(!incomingFile.chunks[i]) missing.push(i+1);
-                if(missing.length === 0) return "Completing...";
-                if(missing.length > 5) return `Missing ${missing.length} parts`;
-                return `Missing: ${missing.join(', ')}`;
-            };
-
-            const fileProgress = incomingFile && incomingFile.total > 0 
-                ? (Object.keys(incomingFile.chunks).length / incomingFile.total) * 100 : 0;
-
             useEffect(() => {
                 let stream;
-                navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } }).then(s => {
-                    stream = s;
-                    if (videoRef.current) {
-                        videoRef.current.srcObject = s;
-                        videoRef.current.play();
-                        requestAnimationFrame(tick);
-                    }
-                });
+                let animFrame;
+                navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+                    .then(s => {
+                        stream = s;
+                        if(videoRef.current) {
+                            videoRef.current.srcObject = s;
+                            videoRef.current.play();
+                            requestAnimationFrame(tick);
+                        }
+                    })
+                    .catch(err => setError("Camera access denied or unavailable."));
+
                 const tick = () => {
                     if (videoRef.current && videoRef.current.readyState === 4) {
                         const cvs = canvasRef.current;
                         const vid = videoRef.current;
                         cvs.width = vid.videoWidth;
                         cvs.height = vid.videoHeight;
-                        const ctx = cvs.getContext("2d");
+                        const ctx = cvs.getContext("2d", {willReadFrequently: true});
                         ctx.drawImage(vid, 0, 0);
                         const img = ctx.getImageData(0, 0, cvs.width, cvs.height);
                         const code = jsQR(img.data, img.width, img.height);
-                        if (code) { onScan(code.data); } 
+                        if (code) onScan(code.data);
                     }
-                    requestAnimationFrame(tick);
+                    animFrame = requestAnimationFrame(tick);
                 };
-                return () => stream?.getTracks().forEach(t => t.stop());
-            }, []);
-
-            return (
-                <div className="fixed inset-0 z-50 bg-black/95 flex flex-col items-center justify-center p-4">
-                    <div className="relative w-full max-w-sm aspect-square bg-slate-900 rounded-2xl overflow-hidden border-2 border-cyan-500 shadow-[0_0_30px_rgba(6,182,212,0.3)]">
-                        <video ref={videoRef} className="absolute inset-0 w-full h-full object-cover" playsInline />
-                        <canvas ref={canvasRef} className="hidden" />
-                        <div className="scan-line"></div>
-                        {incomingFile && incomingFile.total > 0 && (
-                            <div className="absolute bottom-0 left-0 right-0 bg-black/80 p-4">
-                                <div className="flex justify-between text-xs text-white mb-1"><span className="text-yellow-400 font-bold">{getMissingParts()}</span><span>{Math.round(fileProgress)}%</span></div>
-                                <div className="w-full bg-slate-700 h-2 rounded-full overflow-hidden mb-1"><div className="bg-emerald-500 h-full transition-all duration-100" style={{width: `${fileProgress}%`}}></div></div>
-                            </div>
-                        )}
-                    </div>
-                    <button onClick={onClose} className="mt-8 bg-slate-800 text-white px-8 py-3 rounded-full font-bold hover:bg-slate-700 transition-colors">Cancel</button>
-                </div>
-            );
-        };
-
-        // --- GIBBERLINK LISTENER (Decoder) ---
-        const AudioListener = ({ onData, onClose }) => {
-            const [status, setStatus] = useState("GibberLink Initializing...");
-            const [visuals, setVisuals] = useState(new Array(32).fill(0));
-            
-            const analyzerRef = useRef(null);
-            const processorRef = useRef(null);
-            const ctxRef = useRef(null);
-            const streamRef = useRef(null);
-            
-            const stateRef = useRef({
-                mode: 'WAIT_PREAMBLE', // WAIT_PREAMBLE, SYNCING, READING
-                samplesProcessed: 0,
-                syncTime: 0,
-                buffer: [],
-                payload: [],
-                header: { len: 0 },
-                energyHistory: []
-            });
-
-            useEffect(() => {
-                const initAudio = async () => {
-                    try {
-                        const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
-                        streamRef.current = stream;
-                        
-                        const ctx = new (window.AudioContext || window.webkitAudioContext)({sampleRate: PROTOCOL.SAMPLE_RATE});
-                        ctxRef.current = ctx;
-
-                        const src = ctx.createMediaStreamSource(stream);
-                        const processor = ctx.createScriptProcessor(4096, 1, 1);
-                        src.connect(processor);
-                        processor.connect(ctx.destination);
-                        processorRef.current = processor;
-
-                        setStatus("Listening for Preamble...");
-
-                        processor.onaudioprocess = (e) => {
-                            const input = e.inputBuffer.getChannelData(0);
-                            const state = stateRef.current;
-                            
-                            // 1. Fill Buffer
-                            for(let i=0; i<input.length; i++) state.buffer.push(input[i]);
-                            // Keep buffer sane
-                            if (state.buffer.length > PROTOCOL.SAMPLE_RATE * 5) {
-                                state.buffer.splice(0, state.buffer.length - PROTOCOL.SAMPLE_RATE * 5);
-                            }
-
-                            // 2. Visualizer (Snapshot every ~100ms)
-                            if (Math.random() < 0.1) {
-                                const visData = [];
-                                const tail = state.buffer.slice(-1024); 
-                                for(let i=0; i<32; i++) {
-                                    const f = PROTOCOL.BASE_FREQ + i*PROTOCOL.FREQ_SPACING;
-                                    visData.push(GibberLink.goertzel(tail, PROTOCOL.SAMPLE_RATE, f));
-                                }
-                                // Normalize for display
-                                const max = Math.max(...visData, 0.001);
-                                setVisuals(visData.map(v => (v/max)*100));
-                            }
-
-                            // 3. Decoder State Machine
-                            processBuffer(state, ctx.sampleRate);
-                        };
-
-                    } catch (e) { setStatus("Mic Error: " + e.message); }
-                };
-
-                const processBuffer = (state, sr) => {
-                    const symbolSamps = Math.floor(sr * (PROTOCOL.SYMBOL_MS/1000));
-                    const preambleFreq = PROTOCOL.BASE_FREQ + PROTOCOL.PREAMBLE_SYM * PROTOCOL.FREQ_SPACING;
-
-                    if (state.mode === 'WAIT_PREAMBLE') {
-                        // Check last chunk for Preamble Energy
-                        if(state.buffer.length < symbolSamps) return;
-                        const window = state.buffer.slice(-symbolSamps);
-                        const energy = GibberLink.goertzel(window, sr, preambleFreq);
-                        
-                        if (energy > 0.05) { // Lowered threshold for better detection; tune based on testing
-                            state.mode = 'SYNCING';
-                            setStatus("Preamble Detected! Syncing...");
-                            state.syncIndex = state.buffer.length; // Mark time
-                        }
-                    } else if (state.mode === 'SYNCING') {
-                        // Wait for preamble to finish + start marker + header to appear
-                        // We need roughly 4 (preamble) + 1 (start) symbols buffer
-                        const samplesNeeded = symbolSamps * 6;
-                        if (state.buffer.length - state.syncIndex > samplesNeeded) {
-                             state.mode = 'READING';
-                             state.readIndex = state.syncIndex + (symbolSamps * 5); // Skip 4 preamble + 1 start
-                             setStatus("Reading Payload...");
-                        }
-                    } else if (state.mode === 'READING') {
-                        // Read symbols one by one
-                        while (state.buffer.length - state.readIndex >= symbolSamps) {
-                            const window = state.buffer.slice(state.readIndex, state.readIndex + symbolSamps);
-                            
-                            // Find Max Energy Freq
-                            let maxE = 0, bestSym = -1;
-                            for(let i=0; i<32; i++) {
-                                const f = PROTOCOL.BASE_FREQ + i * PROTOCOL.FREQ_SPACING;
-                                const e = GibberLink.goertzel(window, sr, f);
-                                if(e > maxE) { maxE = e; bestSym = i; }
-                            }
-
-                            state.readIndex += symbolSamps;
-                            
-                            // STOP Condition
-                            if (bestSym === PROTOCOL.STOP_SYM) {
-                                finishDecode(state);
-                                state.mode = 'DONE';
-                                return;
-                            }
-                            
-                            state.payload.push(bestSym);
-                        }
-                    }
-                };
-
-                const finishDecode = (state) => {
-                    try {
-                        // Extract Header
-                        const type = state.payload[0];
-                        const lenHigh = state.payload[1];
-                        const lenLow = state.payload[2];
-                        const len = (lenHigh << 5) | lenLow;
-                        
-                        // Extract Payload Symbols
-                        const dataSyms = state.payload.slice(3, 3 + len);
-                        
-                        // Reconstruct Base32 String
-                        let b32 = "";
-                        for(let s of dataSyms) {
-                             if(s < 32 && s >= 0) b32 += BASE32_ALPHABET[s];
-                        }
-
-                        // Base32 -> Bytes
-                        // (Simplified reverser for standard Base32)
-                        const lookup = {};
-                        for(let i=0; i<BASE32_ALPHABET.length; i++) lookup[BASE32_ALPHABET[i]] = i;
-                        
-                        let bits = 0, value = 0;
-                        const bytes = [];
-                        for(let i=0; i<b32.length; i++) {
-                            value = (value << 5) | lookup[b32[i]];
-                            bits += 5;
-                            while(bits >= 8) {
-                                bytes.push((value >>> (bits - 8)) & 0xFF);
-                                bits -= 8;
-                            }
-                        }
-
-                        // Split Data and CRC (last 4 bytes)
-                        if (bytes.length < 4) throw new Error("Too short");
-                        const dataBytes = new Uint8Array(bytes.slice(0, bytes.length - 4));
-                        const recvCrcVals = bytes.slice(bytes.length - 4);
-                        const recvCrc = ((recvCrcVals[0] << 24) | (recvCrcVals[1] << 16) | (recvCrcVals[2] << 8) | recvCrcVals[3]) >>> 0;
-                        
-                        // Verify CRC (strict check with unsigned)
-                        const calcCrc = GibberLink.crc32(dataBytes) >>> 0;
-                        if (calcCrc !== recvCrc) {
-                            throw new Error(`CRC Mismatch: expected ${calcCrc.toString(16).padStart(8, '0')}, got ${recvCrc.toString(16).padStart(8, '0')}`);
-                        }
-                        
-                        const jsonStr = new TextDecoder().decode(dataBytes);
-                        onData(jsonStr);
-                        
-                    } catch(e) {
-                        setStatus("Decode Error: " + e.message);
-                        console.error(e);
-                        // Reset
-                        setTimeout(() => {
-                            stateRef.current.mode = 'WAIT_PREAMBLE';
-                            stateRef.current.payload = [];
-                            stateRef.current.buffer = [];
-                            setStatus("Listening...");
-                        }, 2000);
-                    }
-                };
-
-                initAudio();
 
                 return () => {
-                    if(streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
-                    if(ctxRef.current) ctxRef.current.close();
+                    if(stream) stream.getTracks().forEach(t => t.stop());
+                    cancelAnimationFrame(animFrame);
                 };
             }, []);
 
-            return (
-                <div className="fixed inset-0 z-50 bg-black/95 flex flex-col items-center justify-center p-6">
-                    <div className="text-center mb-8">
-                        <h2 className="text-2xl font-bold text-white mb-2">GibberLink Receiver</h2>
-                        <p className="font-mono text-cyan-400">{status}</p>
-                    </div>
-                    
-                    <div className="flex items-end gap-[2px] h-32 mb-4 bg-slate-900/50 p-4 rounded-xl border border-slate-700 w-full max-w-md">
-                        {visuals.map((v, i) => (
-                            <div key={i} className="flex-1 bg-cyan-500 rounded-t transition-all duration-75" style={{height: `${Math.min(100, v*5)}%`, opacity: 0.5 + (v/200)}}></div>
-                        ))}
-                    </div>
-                    
-                    <div className="mt-8 text-xs text-slate-500 max-w-xs text-center">
-                        <strong>GibberLink Protocol:</strong> M-ary FSK / Goertzel Decode.<br/>High volume required. Tune threshold if needed.
-                    </div>
+            const progress = incomingFile && incomingFile.total > 0 
+                ? (Object.keys(incomingFile.chunks).length / incomingFile.total) * 100 : 0;
 
-                    <button onClick={onClose} className="mt-8 bg-slate-800 px-8 py-3 rounded-full text-white font-bold hover:bg-slate-700">Cancel</button>
+            return (
+                <div className="fixed inset-0 z-50 bg-black flex flex-col items-center justify-center p-4">
+                    {error ? (
+                        <div className="text-red-500 text-center">{error} <br/><button onClick={onClose} className="mt-4 bg-slate-800 px-4 py-2 rounded">Close</button></div>
+                    ) : (
+                        <div className={`relative w-full max-w-sm aspect-square bg-slate-900 rounded-3xl overflow-hidden border-2 shadow-[0_0_50px_rgba(0,0,0,0.5)] ${isDarth ? 'border-red-500 shadow-red-900/50' : 'border-cyan-500 shadow-cyan-900/50'}`}>
+                            <video ref={videoRef} className="absolute inset-0 w-full h-full object-cover" playsInline muted />
+                            <canvas ref={canvasRef} className="hidden" />
+                            <div className={isDarth ? "scan-line darth-scan-line" : "scan-line"}></div>
+                            
+                            {/* Overlay UI */}
+                            <div className="absolute top-4 left-0 right-0 text-center pointer-events-none">
+                                <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-widest ${isDarth ? 'bg-red-600 text-white' : 'bg-cyan-500 text-slate-900'}`}>
+                                    {isDarth ? 'INTERCEPTOR ACTIVE' : 'SECURE SCANNER'}
+                                </span>
+                            </div>
+
+                            {/* File Progress */}
+                            {incomingFile && incomingFile.total > 0 && (
+                                <div className="absolute bottom-0 left-0 right-0 bg-black/80 p-4 backdrop-blur-sm">
+                                    <div className="flex justify-between text-xs font-mono text-white mb-2">
+                                        <span>RECEIVING FILE...</span>
+                                        <span>{Math.round(progress)}%</span>
+                                    </div>
+                                    <div className="w-full bg-slate-700 h-1.5 rounded-full overflow-hidden">
+                                        <div className={`h-full transition-all duration-100 ${isDarth ? 'bg-red-500' : 'bg-cyan-400'}`} style={{width: `${progress}%`}}></div>
+                                    </div>
+                                    <div className="text-[10px] text-slate-400 mt-1">
+                                        Chunks: {Object.keys(incomingFile.chunks).length} / {incomingFile.total}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                    <button onClick={onClose} className="mt-8 text-white/70 hover:text-white font-bold flex items-center gap-2">
+                        <Icon p={icons.x} /> Cancel Scan
+                    </button>
                 </div>
             );
         };
 
         // --- MAIN APP ---
         const App = () => {
-            const [isDarth, setIsDarth] = useState(false);
+            const [mode, setMode] = useState('NORMAL'); // NORMAL, DARTH
             const [activeTab, setActiveTab] = useState('CONNECT');
             
-            // --- KEYS STATE ---
-            const [ecdhKeyPair, setEcdhKeyPair] = useState(null);
-            const [rsaKeyPair, setRsaKeyPair] = useState(null);
+            // --- KEYS & SESSION STATE ---
+            const [keys, setKeys] = useState(null); // { rsaPair, ecdhPair }
+            const [identityPayload, setIdentityPayload] = useState(null);
             
-            // PAYLOADS
-            const [rsaIdentityPayload, setRsaIdentityPayload] = useState(""); 
-            const [handshakeResponsePayload, setHandshakeResponsePayload] = useState(null); 
+            const [handshakeReply, setHandshakeReply] = useState(null); // For step 2 display
+            const [sessionKey, setSessionKey] = useState(null); // AES-GCM-256 HKDF derived
+            const [fingerprint, setFingerprint] = useState(null); // { emoji, hex }
             
-            const [sharedKey, setSharedKey] = useState(null);
-            const [fingerprint, setFingerprint] = useState("????");
-            const [partnerRsaKey, setPartnerRsaKey] = useState(null);
-            
-            const [scanner, setScanner] = useState(null);
-            const [packet, setPacket] = useState(null);
+            // --- UI STATE ---
+            const [scanner, setScanner] = useState(null); // 'QR'
+            const [fileTransfer, setFileTransfer] = useState(null);
+            const [incomingFile, setIncomingFile] = useState({ id: null, chunks: {}, total: 0 });
             const [chat, setChat] = useState([]);
             const [msg, setMsg] = useState("");
             
-            const [fileTransfer, setFileTransfer] = useState(null); 
-            const [incomingFile, setIncomingFile] = useState({ id: null, chunks: {}, total: 0 });
-            const [audioPlaying, setAudioPlaying] = useState(false);
+            // --- DARTH STATE ---
+            const [interceptedPacket, setInterceptedPacket] = useState(null);
+            
+            const lastScanRef = useRef("");
 
-            const lastProcessedRef = useRef(""); 
-
-            // 1. GENERATE KEYS (HYBRID)
+            // 1. INIT KEYS (Upgrade: Add Signature Key?)
+            // For simplicity and speed in JS, we use RSA-OAEP 2048 for encryption 
+            // and we'll implement HKDF for the session.
             const genKeys = async () => {
-                const ecdh = await window.crypto.subtle.generateKey({name:"ECDH", namedCurve:"P-256"}, true, ["deriveKey", "deriveBits"]);
-                setEcdhKeyPair(ecdh);
-
+                setKeys(null); setSessionKey(null); setFingerprint(null); setChat([]);
+                
+                // 1. Generate RSA-OAEP (Identity/Encryption)
                 const rsa = await window.crypto.subtle.generateKey(
                     { name: "RSA-OAEP", modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: "SHA-256" },
                     true, ["encrypt", "decrypt"]
                 );
-                setRsaKeyPair(rsa);
+                
+                // 2. Generate ECDH (Session Handshake)
+                const ecdh = await window.crypto.subtle.generateKey(
+                    { name: "ECDH", namedCurve: "P-256" },
+                    true, ["deriveKey", "deriveBits"]
+                );
 
+                setKeys({ rsa, ecdh });
+
+                // Create Identity Payload
                 const rsaExp = await window.crypto.subtle.exportKey("spki", rsa.publicKey);
                 const rsaStr = btoa(String.fromCharCode(...new Uint8Array(rsaExp)));
-                const json = JSON.stringify({t: "RSA", k: rsaStr});
                 
-                setRsaIdentityPayload(json);
-                setHandshakeResponsePayload(null);
-                setSharedKey(null);
-                setPartnerRsaKey(null);
-                setFingerprint("????");
-                setIncomingFile({ id: null, chunks: {}, total: 0 });
-                lastProcessedRef.current = ""; 
+                // Create a visible fingerprint for the User to show
+                const myFp = await generateFingerprint(rsaExp);
+                
+                setIdentityPayload({
+                    t: "ID", 
+                    k: rsaStr, 
+                    fp: myFp.hex // Send short hex to help visual verification
+                });
             };
+
             useEffect(() => { genKeys(); }, []);
 
-            // 2. EXCHANGE HANDLER
-            const handleData = async (dataStr) => {
-                if (dataStr === lastProcessedRef.current) return;
-                lastProcessedRef.current = dataStr;
+            // --- CORE LOGIC: Handle Scanned Data ---
+            const handleScan = async (raw) => {
+                if (raw === lastScanRef.current) return;
+                lastScanRef.current = raw;
 
+                // DARTH MODE: Intercept Only
+                if (mode === 'DARTH') {
+                    setScanner(null);
+                    setInterceptedPacket({ raw, time: new Date().toLocaleTimeString() });
+                    return;
+                }
+
+                // NORMAL MODE
                 try {
-                    // Try to parse JSON first (handles RSA/HSH/CHAT)
-                    let payload;
-                    try {
-                        payload = JSON.parse(dataStr);
-                    } catch(e) {
-                        // Not JSON, might be raw file chunk string (F|...)
-                        if (dataStr.startsWith('F|')) {
-                            if (!sharedKey) return; 
-                            const [_, id, idx, tot, p] = dataStr.split('|');
-                            const index = parseInt(idx);
-                            const total = parseInt(tot);
-                            setIncomingFile(prev => {
-                                if (prev.id !== id) return { id, chunks: {[index]: p}, total };
-                                return { ...prev, chunks: { ...prev.chunks, [index]: p }, total };
-                            });
-                            return;
-                        }
-                        throw e;
-                    }
-
-                    // --- CASE A: RECEIVE RSA PUBLIC KEY (STEP 1) ---
-                    if (payload.t === "RSA") {
-                        const ab = Uint8Array.from(atob(payload.k), c => c.charCodeAt(0)).buffer;
-                        const importedRsaPub = await window.crypto.subtle.importKey(
-                            "spki", ab, { name: "RSA-OAEP", hash: "SHA-256" }, true, ["encrypt"]
-                        );
-                        setPartnerRsaKey(importedRsaPub);
-
-                        const ecdhExp = await window.crypto.subtle.exportKey("spki", ecdhKeyPair.publicKey);
-                        const encryptedEcdh = await window.crypto.subtle.encrypt(
-                            { name: "RSA-OAEP" },
-                            importedRsaPub,
-                            ecdhExp
-                        );
-
-                        const encStr = buf2hex(encryptedEcdh);
-                        const securePayload = JSON.stringify({ t: "HSH", d: encStr });
+                    // 1. File Chunk Handling (F|ID|IDX|TOT|DATA)
+                    if (raw.startsWith("F|")) {
+                        if (!sessionKey) return; 
+                        const [_, id, idxStr, totStr, data] = raw.split("|");
+                        const idx = parseInt(idxStr);
+                        const tot = parseInt(totStr);
                         
-                        setHandshakeResponsePayload(securePayload);
-                        setScanner(null);
-                        
-                        alert("Partner RSA Captured! Reply Generated.");
+                        setIncomingFile(prev => {
+                            const newChunks = { ...prev.chunks, [idx]: data };
+                            const newFile = { id, chunks: newChunks, total: tot };
+                            
+                            // Check complete
+                            if (Object.keys(newChunks).length === tot) {
+                                assembleFile(newFile);
+                                return { id: null, chunks: {}, total: 0 }; // Reset
+                            }
+                            return newFile;
+                        });
                         return;
                     }
 
-                    // --- CASE B: RECEIVE ENCRYPTED HANDSHAKE REPLY (STEP 2) ---
-                    if (payload.t === "HSH") {
-                        if (!rsaKeyPair) return;
-                        if (sharedKey) return; 
+                    // 2. JSON Protocol Handling
+                    const p = JSON.parse(raw);
 
-                        const encBuf = hex2buf(payload.d);
-                        const decryptedEcdhBuf = await window.crypto.subtle.decrypt(
-                            { name: "RSA-OAEP" },
-                            rsaKeyPair.privateKey,
-                            encBuf
+                    // A. Partner Identity (RSA)
+                    if (p.t === "ID") {
+                        // Import their RSA Key
+                        const kData = Uint8Array.from(atob(p.k), c => c.charCodeAt(0));
+                        const partnerRsa = await window.crypto.subtle.importKey(
+                            "spki", kData, { name: "RSA-OAEP", hash: "SHA-256" }, true, ["encrypt"]
+                        );
+                        
+                        // Encrypt MY ECDH Public Key with THEIR RSA Key
+                        const myEcdhRaw = await window.crypto.subtle.exportKey("raw", keys.ecdh.publicKey);
+                        const encEcdh = await window.crypto.subtle.encrypt(
+                            { name: "RSA-OAEP" }, partnerRsa, myEcdhRaw
+                        );
+                        
+                        // Generate Handshake Reply
+                        const reply = { t: "HSH", d: buf2hex(encEcdh) };
+                        setHandshakeReply(JSON.stringify(reply));
+                        setScanner(null);
+                        alert(`Partner Identity Scanned!\nFingerprint: ${p.fp}\n\nVerify this matches their screen!`);
+                    }
+
+                    // B. Handshake Reply (Encrypted ECDH)
+                    else if (p.t === "HSH") {
+                        if (!keys) return;
+                        
+                        // Decrypt their ECDH with MY RSA Private Key
+                        const encBuf = hex2buf(p.d);
+                        const partnerEcdhRaw = await window.crypto.subtle.decrypt(
+                            { name: "RSA-OAEP" }, keys.rsa.privateKey, encBuf
                         );
 
+                        // Import their ECDH
                         const partnerEcdhKey = await window.crypto.subtle.importKey(
-                            "spki", decryptedEcdhBuf, {name:"ECDH", namedCurve:"P-256"}, true, []
+                            "raw", partnerEcdhRaw, { name: "ECDH", namedCurve: "P-256" }, true, []
                         );
 
-                        const sk = await window.crypto.subtle.deriveKey(
-                            {name:"ECDH", public:partnerEcdhKey}, 
-                            ecdhKeyPair.privateKey, 
-                            {name:"AES-GCM", length:256}, 
-                            true, ["encrypt","decrypt"]
+                        // --- HKDF DERIVATION (Security Upgrade) ---
+                        // 1. Derive Shared Secret Bits
+                        const sharedBits = await window.crypto.subtle.deriveBits(
+                            { name: "ECDH", public: partnerEcdhKey }, 
+                            keys.ecdh.privateKey, 
+                            256
                         );
 
-                        const raw = await window.crypto.subtle.exportKey("raw", sk);
-                        const fp = await generateFingerprint(raw);
+                        // 2. Import as HKDF Key
+                        const hkdfKey = await window.crypto.subtle.importKey(
+                            "raw", sharedBits, { name: "HKDF" }, false, ["deriveKey"]
+                        );
+
+                        // 3. Derive AES-GCM Session Key
+                        const sessionKey = await window.crypto.subtle.deriveKey(
+                            { 
+                                name: "HKDF", 
+                                hash: "SHA-256", 
+                                salt: new Uint8Array(), // Optional: add salt in v3
+                                info: new TextEncoder().encode("GibberLinkv2_Session") // Context binding
+                            },
+                            hkdfKey,
+                            { name: "AES-GCM", length: 256 },
+                            false, // Non-extractable!
+                            ["encrypt", "decrypt"]
+                        );
+
+                        // Generate Session Fingerprint
+                        // Since sessionKey is non-extractable, we use the raw sharedBits for fingerprinting
+                        const fp = await generateFingerprint(sharedBits);
                         
-                        setSharedKey(sk);
+                        setSessionKey(sessionKey);
                         setFingerprint(fp);
-                        setActiveTab('VERIFY');
                         setScanner(null);
-                        alert("Secure Tunnel Established!");
-                        return;
+                        setActiveTab('VERIFY');
+                        alert("Handshake Complete. Secure Tunnel Established.");
                     }
 
-                    // --- CASE C: CHAT MESSAGE ---
-                    if (payload.iv) {
-                        if(!sharedKey) { alert("Connect First!"); return; }
-                        const dec = await window.crypto.subtle.decrypt({name:"AES-GCM", iv:hex2buf(payload.iv)}, sharedKey, hex2buf(payload.d));
-                        const txt = new TextDecoder().decode(dec);
-                        setChat(prev => [...prev, {from:'Partner', text:txt}]);
-                        setScanner(null); 
-                        alert("Received: " + txt);
+                    // C. Chat Message
+                    else if (p.iv) {
+                        if (!sessionKey) throw new Error("No secure session.");
+                        const iv = hex2buf(p.iv);
+                        const ct = hex2buf(p.d);
+                        const pt = await window.crypto.subtle.decrypt(
+                            { name: "AES-GCM", iv }, sessionKey, ct
+                        );
+                        const text = new TextDecoder().decode(pt);
+                        setChat(prev => [...prev, { from: 'Partner', text }]);
+                        setScanner(null);
+                        alert("New Message Received");
                     }
 
-                } catch(e) { 
-                    lastProcessedRef.current = "";
+                } catch (e) {
                     console.error(e);
-                    // Don't alert aggressively on audio partials, just log
-                    if(scanner !== 'AUDIO') alert("Data Error: " + e.message);
+                    alert("Decryption Failed or Invalid Packet");
                 }
             };
 
-            // File Assembly
-            useEffect(() => {
-                if (incomingFile.total > 0 && Object.keys(incomingFile.chunks).length === incomingFile.total) {
-                    const ordered = [];
-                    for(let i=0; i<incomingFile.total; i++) ordered.push(incomingFile.chunks[i]);
-                    const fullBase64 = ordered.join('');
-                    const byteStr = atob(fullBase64);
-                    const bytes = new Uint8Array(byteStr.length);
-                    for (let i = 0; i < byteStr.length; i++) bytes[i] = byteStr.charCodeAt(i);
+            // --- FILE ASSEMBLY & DECRYPTION ---
+            const assembleFile = async (fileObj) => {
+                try {
+                    // Reassemble Base64 Chunks (order guaranteed by logic)
+                    const orderedData = [];
+                    for(let i=0; i<fileObj.total; i++) orderedData.push(fileObj.chunks[i]);
+                    const blobBase64 = orderedData.join('');
                     
-                    const iv = bytes.slice(0, 12);
-                    const mimeLen = bytes[12];
-                    const mimeBytes = bytes.slice(13, 13 + mimeLen);
+                    // Decode Base64 to Encrypted Bytes
+                    const binStr = atob(blobBase64);
+                    const encBytes = new Uint8Array(binStr.length);
+                    for(let i=0; i<binStr.length; i++) encBytes[i] = binStr.charCodeAt(i);
+                    
+                    // Extract IV (12 bytes) and Data
+                    const iv = encBytes.slice(0, 12);
+                    const data = encBytes.slice(12);
+
+                    // Decrypt
+                    const decrypted = await window.crypto.subtle.decrypt(
+                        { name: "AES-GCM", iv }, sessionKey, data
+                    );
+
+                    // Parse Custom Header (MIME Length (1) + MIME + FileData)
+                    const view = new DataView(decrypted);
+                    const mimeLen = view.getUint8(0);
+                    const mimeBytes = new Uint8Array(decrypted, 1, mimeLen);
                     const mime = new TextDecoder().decode(mimeBytes);
-                    const data = bytes.slice(13 + mimeLen);
+                    const fileData = new Uint8Array(decrypted, 1 + mimeLen);
 
-                    window.crypto.subtle.decrypt({name:"AES-GCM", iv}, sharedKey, data)
-                        .then(decrypted => {
-                            const blob = new Blob([decrypted], { type: mime });
-                            const url = URL.createObjectURL(blob);
-                            const link = document.createElement('a');
-                            link.href = url;
-                            link.download = `secure_rx.${mime.split('/')[1]}`;
-                            link.click();
-                            alert("File Decrypted via Hybrid AES!");
-                            setIncomingFile({ id: null, chunks: {}, total: 0 }); // Reset
-                            setScanner(null);
-                        })
-                        .catch(e => {
-                            alert("Decryption Failed (Integrity Error)");
-                            setIncomingFile({ id: null, chunks: {}, total: 0 });
-                        });
+                    // Download
+                    const blob = new Blob([fileData], { type: mime });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `secure_recv.${mime.split('/')[1]}`;
+                    a.click();
+                    alert("File Decrypted & Downloaded!");
+
+                } catch (e) {
+                    console.error(e);
+                    alert("File Integrity Check Failed (HMAC mismatch inside GCM)");
                 }
-            }, [incomingFile, sharedKey]);
+            };
 
-            // 3. SEND MSG
-            const send = async () => {
-                if(!sharedKey || !msg) return;
+            // --- SENDING FUNCTIONS ---
+            const sendMessage = async () => {
+                if (!msg || !sessionKey) return;
                 const iv = window.crypto.getRandomValues(new Uint8Array(12));
-                const enc = await window.crypto.subtle.encrypt({name:"AES-GCM", iv}, sharedKey, new TextEncoder().encode(msg));
-                const pkt = JSON.stringify({iv:buf2hex(iv), d:buf2hex(enc)});
-                setPacket(pkt);
-                setChat(prev => [...prev, {from:'Me', text:msg}]);
+                const enc = await window.crypto.subtle.encrypt(
+                    { name: "AES-GCM", iv }, sessionKey, new TextEncoder().encode(msg)
+                );
+                const packet = { iv: buf2hex(iv), d: buf2hex(enc) };
+                
+                // Show QR (reuse fileTransfer logic for simplicity or a simple modal)
+                // For this demo, we'll assume short messages fit in one QR
+                const json = JSON.stringify(packet);
+                setFileTransfer({ chunks: [json], label: "Encrypted Message" });
+                setChat(prev => [...prev, { from: 'Me', text: msg }]);
                 setMsg("");
             };
 
-            // 4. SEND FILE
             const handleFileSelect = async (e) => {
                 const file = e.target.files[0];
-                if (!file) return;
-                if (!sharedKey) { alert("Connect & Verify Identity first!"); return; }
+                if (!file || !sessionKey) return;
+
+                const raw = await file.arrayBuffer();
+                const mimeBytes = new TextEncoder().encode(file.type);
                 
-                try {
-                    const iv = window.crypto.getRandomValues(new Uint8Array(12));
-                    const fileBuf = await file.arrayBuffer();
-                    const enc = await window.crypto.subtle.encrypt({name:"AES-GCM", iv}, sharedKey, fileBuf);
-                    
-                    const mimeBytes = new TextEncoder().encode(file.type);
-                    const payload = new Uint8Array(12 + 1 + mimeBytes.length + enc.byteLength);
-                    payload.set(iv, 0);
-                    payload.set([mimeBytes.length], 12);
-                    payload.set(mimeBytes, 13);
-                    payload.set(new Uint8Array(enc), 13 + mimeBytes.length);
-                    
-                    const base64Full = await new Promise((resolve) => {
-                        const reader = new FileReader();
-                        reader.onload = () => resolve(reader.result.split(',')[1]);
-                        reader.readAsDataURL(new Blob([payload]));
-                    });
+                // Pack: [MIME_LEN (1)] [MIME] [DATA]
+                const pack = new Uint8Array(1 + mimeBytes.length + raw.byteLength);
+                pack[0] = mimeBytes.length;
+                pack.set(mimeBytes, 1);
+                pack.set(new Uint8Array(raw), 1 + mimeBytes.length);
 
-                    const total = Math.ceil(base64Full.length / PROTOCOL.QR_CHUNK_SIZE);
-                    const fileId = Math.floor(Math.random() * 9999).toString(36);
-                    const chunks = [];
-                    
-                    for(let i=0; i<total; i++) {
-                        const slice = base64Full.slice(i*PROTOCOL.QR_CHUNK_SIZE, (i+1)*PROTOCOL.QR_CHUNK_SIZE);
-                        chunks.push(`F|${fileId}|${i}|${total}|${slice}`);
-                    }
-                    
-                    setFileTransfer({ chunks, id: fileId });
-                } catch (error) {
-                    alert("Error preparing file: " + error.message);
+                // Encrypt
+                const iv = window.crypto.getRandomValues(new Uint8Array(12));
+                const enc = await window.crypto.subtle.encrypt(
+                    { name: "AES-GCM", iv }, sessionKey, pack
+                );
+
+                // Prepend IV to ciphertext
+                const finalPayload = new Uint8Array(12 + enc.byteLength);
+                finalPayload.set(iv, 0);
+                finalPayload.set(new Uint8Array(enc), 12);
+
+                // Convert to Base64 for Text-based QR transport
+                let binary = "";
+                for(let i=0; i<finalPayload.length; i++) binary += String.fromCharCode(finalPayload[i]);
+                const b64 = btoa(binary);
+
+                // Chunking
+                const id = Math.floor(Math.random()*10000).toString(16);
+                const chunks = [];
+                const total = Math.ceil(b64.length / PROTOCOL.QR_CHUNK_SIZE);
+                for(let i=0; i<total; i++) {
+                    const slice = b64.slice(i*PROTOCOL.QR_CHUNK_SIZE, (i+1)*PROTOCOL.QR_CHUNK_SIZE);
+                    chunks.push(`F|${id}|${i}|${total}|${slice}`);
                 }
+                
+                setFileTransfer({ chunks, label: `Sending ${file.name}` });
             };
 
-            const playAudio = async (data) => {
-                setAudioPlaying(true);
-                await GibberLink.transmit(data);
-                setAudioPlaying(false);
+            // --- DARTH ACTIONS ---
+            const darthTamper = () => {
+                if (!interceptedPacket) return;
+                // Naively corrupt the data string to simulate MITM modification
+                let badRaw = interceptedPacket.raw.replace(/[a-fA-F0-9]/, "X"); 
+                // If JSON, try to modify a value
+                try {
+                    const p = JSON.parse(interceptedPacket.raw);
+                    if (p.d) p.d = p.d.replace(/^../, "FF"); // Corrupt encrypted blob
+                    badRaw = JSON.stringify(p);
+                } catch(e) {}
+                
+                const id = Math.random().toString(36).substr(2,5);
+                setFileTransfer({ chunks: [badRaw], label: `Tampered Packet #${id}`, theme: "red" });
             };
 
+            // --- RENDER ---
             return (
-                <div className={`min-h-screen flex flex-col ${isDarth ? 'bg-red-950 border-4 border-red-600' : ''}`}>
-                    {/* HEADER */}
-                    <header className={`p-4 flex justify-between items-center shadow-lg ${isDarth ? 'bg-red-900' : 'bg-slate-900'}`}>
-                        <div className="flex items-center gap-2 text-white font-bold">
-                            <Icon p={isDarth ? icons.skull : icons.shield} /> 
-                            <span>CryptoVis {isDarth && "DARTH"}</span>
+                <div className={`min-h-screen flex flex-col transition-colors duration-500 ${mode === 'DARTH' ? 'bg-slate-950' : 'bg-slate-900'}`}>
+                    
+                    {/* Header */}
+                    <header className={`p-4 flex justify-between items-center z-10 ${mode === 'DARTH' ? 'bg-red-950 border-b border-red-900' : 'bg-slate-800 border-b border-cyan-900'}`}>
+                        <div className="flex items-center gap-3">
+                            <div className={`p-2 rounded-lg ${mode==='DARTH' ? 'bg-red-600 text-white' : 'bg-cyan-500 text-black'}`}>
+                                <Icon p={mode==='DARTH' ? icons.skull : icons.shield} />
+                            </div>
+                            <div>
+                                <h1 className="font-bold text-lg leading-none text-white tracking-tighter">GibberLink <span className="text-xs opacity-50">v2.0</span></h1>
+                                <div className={`text-[10px] font-mono ${mode==='DARTH' ? 'text-red-400' : 'text-cyan-400'}`}>
+                                    {mode==='DARTH' ? 'INTERCEPTOR MODE' : 'SECURE CHANNEL'}
+                                </div>
+                            </div>
                         </div>
-                        <div className="flex gap-3">
-                            <button onClick={genKeys}><Icon p={icons.refresh}/></button>
-                            <label className="flex items-center gap-2 text-xs text-white/70">
-                                <input type="checkbox" checked={isDarth} onChange={e => setIsDarth(e.target.checked)} /> Darth Mode
-                            </label>
+                        <div className="flex gap-2">
+                             <button onClick={()=>{setMode(mode==='NORMAL'?'DARTH':'NORMAL'); setScanner(null); setInterceptedPacket(null);}} 
+                                className={`px-3 py-1 rounded border text-xs font-bold transition-all ${mode==='NORMAL' ? 'border-red-900 text-red-900 hover:bg-red-900 hover:text-white opacity-30 hover:opacity-100' : 'bg-cyan-500 text-black border-cyan-500'}`}>
+                                {mode==='NORMAL' ? 'ACTIVATE DARTH' : 'EXIT DARTH'}
+                             </button>
                         </div>
                     </header>
 
-                    {/* TABS */}
-                    <div className="flex bg-slate-800 text-xs font-bold text-slate-400">
-                        {['CONNECT','VERIFY','CHAT'].map(t => (
-                            <button key={t} onClick={()=>setActiveTab(t)} className={`flex-1 py-3 ${activeTab===t ? 'text-cyan-400 bg-slate-700' : ''}`}>{t}</button>
-                        ))}
-                    </div>
-
-                    <main className="flex-1 p-4 space-y-6 max-w-md mx-auto w-full pb-20">
+                    {/* MAIN CONTENT */}
+                    <main className="flex-1 overflow-y-auto pb-20 p-4 relative">
                         
-                        {/* CONNECT TAB - MUTUAL HANDSHAKE UI */}
-                        {activeTab === 'CONNECT' && (
-                            <div className="space-y-4 animate-in fade-in">
-                                
-                                {/* 1. IDENTITY QR */}
-                                <div className="glass p-6 rounded-xl text-center space-y-3 relative overflow-hidden">
-                                    <h2 className="text-white font-bold text-sm uppercase tracking-widest mb-2">1. My Identity</h2>
-                                    <div className="flex justify-center">
-                                        <QRDisplay data={rsaIdentityPayload} label="RSA Public Key" />
-                                    </div>
-                                    <button onClick={() => playAudio(rsaIdentityPayload)} disabled={audioPlaying} className="w-full bg-slate-700 hover:bg-slate-600 text-white text-xs py-2 rounded flex items-center justify-center gap-2">
-                                        <Icon p={icons.sound} size={16} /> Broadcast Identity (GibberLink)
-                                    </button>
-                                </div>
-
-                                {/* 2. RESPONSE QR (CONDITIONAL) */}
-                                {handshakeResponsePayload && (
-                                    <div className="glass p-6 rounded-xl text-center space-y-3 border-2 border-green-500/50 slide-in">
-                                        <h2 className="text-green-400 font-bold text-sm uppercase tracking-widest mb-2 flex items-center justify-center gap-2">
-                                            2. Reply to Partner <Icon p={icons.lock} size={16}/>
-                                        </h2>
-                                        <div className="flex justify-center">
-                                            <QRDisplay data={handshakeResponsePayload} label="Encrypted Reply" />
-                                        </div>
-                                        <p className="text-xs text-green-200/70">Partner's Key Captured. Show this to them to complete the tunnel.</p>
-                                        <button onClick={() => playAudio(handshakeResponsePayload)} disabled={audioPlaying} className="w-full bg-green-900/50 hover:bg-green-800 text-green-100 text-xs py-2 rounded flex items-center justify-center gap-2 border border-green-700">
-                                            <Icon p={icons.sound} size={16} /> Broadcast Reply (GibberLink)
+                        {/* NORMAL MODE UI */}
+                        {mode === 'NORMAL' && (
+                            <div className="max-w-md mx-auto space-y-6">
+                                {/* TABS */}
+                                <div className="flex p-1 bg-slate-800 rounded-xl mb-6">
+                                    {['CONNECT','VERIFY','CHAT'].map(t => (
+                                        <button key={t} onClick={()=>setActiveTab(t)} 
+                                            className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${activeTab===t ? 'bg-cyan-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}>
+                                            {t}
                                         </button>
-                                    </div>
-                                )}
-
-                                {/* ACTION BUTTONS */}
-                                <div className="grid grid-cols-2 gap-2 fixed bottom-4 left-4 right-4 max-w-md mx-auto">
-                                    <button onClick={() => setScanner('AUDIO')} className="btn-secondary bg-purple-900/90 backdrop-blur hover:bg-purple-800 text-purple-100 border border-purple-500 font-bold py-4 rounded-xl flex items-center justify-center gap-2 shadow-lg">
-                                        <Icon p={icons.mic}/> Listen
-                                    </button>
-                                    <button onClick={() => setScanner('QR')} className="btn-primary bg-cyan-600/90 backdrop-blur hover:bg-cyan-500 text-white font-bold py-4 rounded-xl flex items-center justify-center gap-2 shadow-lg">
-                                        <Icon p={icons.cam} /> Scan
-                                    </button>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* VERIFY TAB */}
-                        {activeTab === 'VERIFY' && (
-                            <div className="glass p-6 rounded-xl text-center space-y-4 animate-in fade-in">
-                                <h2 className="text-yellow-400 font-bold uppercase">Hybrid Safety Fingerprint</h2>
-                                {sharedKey ? (
-                                    <>
-                                        <div className="bg-slate-900 p-4 rounded-xl text-4xl">{fingerprint}</div>
-                                        <p className="text-slate-400 text-sm">Derived via ECDH (P-256) inside RSA-OAEP Tunnel.</p>
-                                        <div className="text-xs text-emerald-400 border border-emerald-900 bg-emerald-900/20 p-2 rounded mt-2">
-                                            <span className="font-bold">RSA 2048-bit</span> protection active.
-                                        </div>
-                                    </>
-                                ) : <div className="text-red-400">Complete Handshake First</div>}
-                            </div>
-                        )}
-
-                        {/* CHAT TAB */}
-                        {activeTab === 'CHAT' && (
-                            <div className="space-y-4 animate-in fade-in pb-20">
-                                <div className="glass h-64 overflow-y-auto p-4 space-y-2 rounded-xl">
-                                    {chat.length===0 && <div className="text-slate-500 text-center text-sm">Hybrid RSA+AES Channel Ready</div>}
-                                    {chat.map((c,i) => (
-                                        <div key={i} className={`text-sm p-2 rounded ${c.from==='Me'?'bg-cyan-900/50 ml-auto text-right':'bg-slate-700'}`}>
-                                            <span className="text-xs opacity-50 block">{c.from}</span>
-                                            {c.text}
-                                        </div>
                                     ))}
                                 </div>
-                                <div className="flex gap-2">
-                                    <input value={msg} onChange={e=>setMsg(e.target.value)} className="flex-1 bg-slate-800 rounded px-3 text-white" placeholder="Message..." />
-                                    <button onClick={send} className="bg-cyan-600 px-3 py-2 rounded text-white"><Icon p={icons.send}/></button>
-                                    
-                                    <label className="bg-slate-700 px-3 py-2 rounded text-white cursor-pointer hover:bg-slate-600">
-                                        <input type="file" className="hidden" onChange={handleFileSelect} />
-                                        <Icon p={icons.clip} />
-                                    </label>
-                                </div>
-                                
-                                {packet && (
-                                    <div className="glass p-4 rounded-xl text-center space-y-3">
-                                        <div className="text-xs text-slate-400">AES Encrypted Packet Ready</div>
-                                        <div className="flex justify-center"><QRDisplay data={packet} label="Scan Packet" /></div>
-                                        <button onClick={()=>playAudio(packet)} disabled={audioPlaying} className="w-full bg-purple-600 hover:bg-purple-500 text-white py-2 rounded font-bold flex items-center justify-center gap-2">
-                                            <Icon p={icons.sound}/> {audioPlaying ? 'Broadcasting...' : 'Send via SonicLink'}
-                                        </button>
+
+                                {/* TAB: CONNECT */}
+                                {activeTab === 'CONNECT' && (
+                                    <div className="space-y-4 anim-fade">
+                                        <div className="glass p-6 rounded-2xl flex flex-col items-center text-center">
+                                            <div className="mb-4">
+                                                <h2 className="text-white font-bold text-sm">STEP 1: IDENTITY</h2>
+                                                <p className="text-slate-400 text-xs">Show this to partner</p>
+                                            </div>
+                                            {identityPayload && (
+                                                <QRDisplay 
+                                                    data={JSON.stringify(identityPayload)} 
+                                                    label="MY IDENTITY" 
+                                                    subLabel={`FP: ${identityPayload.fp}`} 
+                                                    color="#0891b2"
+                                                />
+                                            )}
+                                            <div className="mt-4 bg-slate-800/50 p-2 rounded text-xs font-mono text-cyan-300 border border-cyan-900/50 w-full">
+                                                KEY: RSA-OAEP-2048<br/>
+                                                SHA-256 FINGERPRINT REQUIRED
+                                            </div>
+                                        </div>
+
+                                        {handshakeReply && (
+                                            <div className="glass p-6 rounded-2xl flex flex-col items-center text-center border border-green-500/30 shadow-[0_0_30px_rgba(34,197,94,0.1)]">
+                                                <div className="mb-4">
+                                                    <h2 className="text-green-400 font-bold text-sm">STEP 2: HANDSHAKE</h2>
+                                                    <p className="text-green-200/50 text-xs">Reply generated from scan</p>
+                                                </div>
+                                                <QRDisplay data={handshakeReply} label="SESSION DATA" color="#22c55e" />
+                                            </div>
+                                        )}
                                     </div>
                                 )}
 
-                                <div className="grid grid-cols-2 gap-2 fixed bottom-4 left-4 right-4 max-w-md mx-auto">
-                                    <button onClick={() => setScanner('AUDIO')} className="bg-purple-900/90 backdrop-blur hover:bg-purple-900 text-purple-200 py-4 rounded-xl font-bold flex items-center justify-center gap-2 border border-purple-500 shadow-lg">
-                                        <Icon p={icons.mic}/> Listen
+                                {/* TAB: VERIFY */}
+                                {activeTab === 'VERIFY' && (
+                                    <div className="anim-fade space-y-4">
+                                        <div className="glass p-8 rounded-2xl text-center space-y-6">
+                                            <div className="w-16 h-16 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center mx-auto mb-2">
+                                                <Icon p={sessionKey ? icons.lock : icons.unlock} size={32} />
+                                            </div>
+                                            <div>
+                                                <h2 className="text-white font-bold text-xl">Session Status</h2>
+                                                <p className={sessionKey ? "text-emerald-400" : "text-red-400"}>
+                                                    {sessionKey ? "SECURE (AES-GCM-256)" : "NOT CONNECTED"}
+                                                </p>
+                                            </div>
+                                            
+                                            {sessionKey && fingerprint && (
+                                                <div className="bg-slate-950 p-4 rounded-xl border border-slate-800">
+                                                    <p className="text-xs text-slate-500 uppercase tracking-widest mb-2">Safety Fingerprint</p>
+                                                    <div className="text-4xl mb-2">{fingerprint.emoji}</div>
+                                                    <div className="font-mono text-xl text-yellow-500 tracking-widest">{fingerprint.hex}</div>
+                                                    <p className="text-[10px] text-slate-500 mt-2 mx-auto max-w-[200px] leading-tight">
+                                                        Compare this visually with your partner. If they match, the channel is secure against MITM.
+                                                    </p>
+                                                </div>
+                                            )}
+                                            
+                                            {sessionKey && (
+                                                <button onClick={()=>setActiveTab('CHAT')} className="w-full bg-cyan-600 hover:bg-cyan-500 text-white font-bold py-3 rounded-xl transition-colors">
+                                                    Open Chat Channel
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* TAB: CHAT */}
+                                {activeTab === 'CHAT' && (
+                                    <div className="anim-fade flex flex-col h-[60vh]">
+                                        <div className="flex-1 glass rounded-2xl p-4 overflow-y-auto space-y-3 mb-4 scrollbar-hide">
+                                            {chat.length === 0 && (
+                                                <div className="text-center text-slate-600 mt-10">
+                                                    <Icon p={icons.shield} size={48} className="mx-auto mb-2 opacity-20"/>
+                                                    <p className="text-sm">Channel Encrypted.</p>
+                                                    <p className="text-xs">HKDF-derived AES-GCM-256</p>
+                                                </div>
+                                            )}
+                                            {chat.map((c, i) => (
+                                                <div key={i} className={`flex ${c.from==='Me'?'justify-end':''}`}>
+                                                    <div className={`max-w-[80%] p-3 rounded-2xl text-sm ${c.from==='Me' ? 'bg-cyan-600 text-white rounded-br-none' : 'bg-slate-700 text-slate-200 rounded-bl-none'}`}>
+                                                        {c.text}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                        
+                                        <div className="flex gap-2">
+                                            <input value={msg} onChange={e=>setMsg(e.target.value)} 
+                                                className="flex-1 bg-slate-800 text-white px-4 rounded-xl border border-slate-700 focus:border-cyan-500 outline-none" 
+                                                placeholder="Secure Message..." 
+                                            />
+                                            <label className="bg-slate-700 hover:bg-slate-600 text-slate-300 p-3 rounded-xl cursor-pointer transition-colors">
+                                                <input type="file" className="hidden" onChange={handleFileSelect} />
+                                                <Icon p={icons.file} />
+                                            </label>
+                                            <button onClick={sendMessage} className="bg-cyan-600 hover:bg-cyan-500 text-white p-3 rounded-xl shadow-lg transition-transform active:scale-95">
+                                                <Icon p={icons.send} />
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* MAIN SCAN FAB */}
+                                {!sessionKey && activeTab === 'CONNECT' && (
+                                    <button onClick={()=>setScanner('QR')} className="fixed bottom-6 right-6 bg-cyan-500 hover:bg-cyan-400 text-slate-900 p-4 rounded-full shadow-[0_0_30px_rgba(6,182,212,0.4)] transition-transform hover:scale-110 active:scale-95">
+                                        <Icon p={icons.eye} size={32} />
                                     </button>
-                                    <button onClick={() => setScanner('QR')} className="bg-slate-700/90 backdrop-blur hover:bg-slate-600 text-white py-4 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg">
-                                        <Icon p={icons.cam}/> Scan
-                                    </button>
+                                )}
+                            </div>
+                        )}
+
+                        {/* DARTH MODE UI */}
+                        {mode === 'DARTH' && (
+                            <div className="anim-fade max-w-md mx-auto space-y-6">
+                                <div className="darth-glass p-6 rounded-2xl text-red-100 border-l-4 border-red-600 relative overflow-hidden">
+                                    <div className="absolute top-0 right-0 p-4 opacity-10"><Icon p={icons.bug} size={100} /></div>
+                                    <h2 className="text-xl font-bold mb-1">Packet Interceptor</h2>
+                                    <p className="text-red-400 text-xs mb-6">Capture, Analyze, Corrupt</p>
+                                    
+                                    {!interceptedPacket ? (
+                                        <button onClick={()=>setScanner('QR')} className="w-full h-32 border-2 border-dashed border-red-500/50 rounded-xl flex flex-col items-center justify-center text-red-400 hover:bg-red-900/20 hover:border-red-400 transition-all cursor-pointer">
+                                            <Icon p={icons.eye} size={40} className="mb-2" />
+                                            <span className="font-mono text-sm">ACTIVATE SCANNER</span>
+                                        </button>
+                                    ) : (
+                                        <div className="space-y-4">
+                                            <div className="bg-black/50 p-4 rounded-xl font-mono text-[10px] break-all border border-red-900/50 relative">
+                                                <div className="absolute top-2 right-2 text-red-500 text-[9px]">CAPTURED AT {interceptedPacket.time}</div>
+                                                {interceptedPacket.raw}
+                                            </div>
+
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <button onClick={()=>{alert("Brute Force Failed: AES-256 Entropy too high.\nKeyspace: 2^256");}} className="bg-red-900/50 hover:bg-red-900 border border-red-700 text-red-200 py-3 rounded-lg text-xs font-bold">
+                                                    ATTEMPT CRACK
+                                                </button>
+                                                <button onClick={darthTamper} className="bg-red-600 hover:bg-red-500 text-white py-3 rounded-lg text-xs font-bold shadow-[0_0_15px_rgba(220,38,38,0.4)]">
+                                                    TAMPER & REPLAY
+                                                </button>
+                                            </div>
+                                            
+                                            <button onClick={()=>setInterceptedPacket(null)} className="w-full py-2 text-xs text-red-400 hover:text-red-200">
+                                                DISCARD & SCAN NEW
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                                
+                                <div className="p-4 rounded-xl bg-slate-900/50 border border-slate-800 text-xs text-slate-500">
+                                    <strong className="text-slate-400 block mb-1">DARTH CONSOLE:</strong>
+                                    Use this mode to test the security of the Normal mode. Try to tamper with a packet and scan it on a receiving device. The receiver's integrity check (GCM Auth Tag) should fail.
                                 </div>
                             </div>
                         )}
+
                     </main>
 
                     {/* MODALS */}
-                    {scanner === 'QR' && <QRScanner onScan={d => { handleData(d); }} onClose={()=>setScanner(null)} incomingFile={incomingFile} />}
-                    {scanner === 'AUDIO' && <AudioListener onClose={()=>setScanner(null)} onData={d => { setScanner(null); handleData(d); }} />}
-                    {fileTransfer && <AnimatedQR chunks={fileTransfer.chunks} label="Broadcasting Hybrid Stream" onClose={()=>setFileTransfer(null)} />}
+                    {scanner && (
+                        <QRScanner 
+                            onScan={handleScan} 
+                            onClose={()=>setScanner(null)} 
+                            incomingFile={incomingFile}
+                            isDarth={mode==='DARTH'}
+                        />
+                    )}
+
+                    {fileTransfer && (
+                        <AnimatedQR 
+                            chunks={fileTransfer.chunks} 
+                            label={fileTransfer.label} 
+                            theme={fileTransfer.theme}
+                            onClose={()=>setFileTransfer(null)} 
+                        />
+                    )}
+
                 </div>
             );
         };
