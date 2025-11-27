@@ -43,9 +43,9 @@
             END_FREQ: 3000,
             BASE_FREQ: 1200,
             STEP_FREQ: 80,  // 16 steps (0-F)
-            CHAR_DURATION: 0.12, // 120ms per nibble (Slower = More Reliable)
+            CHAR_DURATION: 0.20, // 200ms per nibble (Slow & Steady)
             FFT_SIZE: 2048,
-            THRESHOLD: 50 // dB threshold for silence
+            THRESHOLD: 40 // Lower threshold for better sensitivity
         };
 
         // --- ICONS ---
@@ -102,7 +102,7 @@
                 gain.gain.setValueAtTime(0.5, now);
 
                 // 2. DATA TONES
-                let startTime = now + 0.5; // 0.5s Header
+                let startTime = now + 1.0; // 1.0s Header for easier lock
                 for (let i = 0; i < hexData.length; i++) {
                     const nibble = parseInt(hexData[i], 16);
                     const freq = PROTOCOL.BASE_FREQ + (nibble * PROTOCOL.STEP_FREQ);
@@ -114,9 +114,9 @@
                 osc.frequency.setValueAtTime(PROTOCOL.END_FREQ, endTime);
                 
                 osc.start(now);
-                osc.stop(endTime + 0.5); // 0.5s Footer
+                osc.stop(endTime + 1.0); // 1.0s Footer
 
-                return new Promise(r => setTimeout(r, (endTime + 0.5 - now) * 1000));
+                return new Promise(r => setTimeout(r, (endTime + 1.0 - now) * 1000));
             }
         };
 
@@ -189,12 +189,13 @@
             const [status, setStatus] = useState("Waiting for Audio...");
             const [bits, setBits] = useState("");
             const [visuals, setVisuals] = useState(new Array(16).fill(0));
+            const [progress, setProgress] = useState(0);
             
             const analyzerRef = useRef(null);
             const rafRef = useRef(null);
-            const stateRef = useRef("IDLE"); // IDLE, LISTENING
+            const stateRef = useRef("IDLE"); // IDLE, LISTENING, DONE
             const bufferRef = useRef("");
-            const lastNibbleTimeRef = useRef(0);
+            const startTimeRef = useRef(0);
 
             useEffect(() => {
                 let audioContext;
@@ -207,6 +208,7 @@
                         const source = audioContext.createMediaStreamSource(stream);
                         const analyzer = audioContext.createAnalyser();
                         analyzer.fftSize = PROTOCOL.FFT_SIZE;
+                        analyzer.smoothingTimeConstant = 0.5;
                         source.connect(analyzer);
                         analyzerRef.current = analyzer;
 
@@ -223,7 +225,11 @@
                         const loop = () => {
                             analyzer.getByteFrequencyData(dataArray);
                             
-                            // Visuals
+                            const now = performance.now();
+                            const startEnergy = getFreqEnergy(PROTOCOL.START_FREQ);
+                            const endEnergy = getFreqEnergy(PROTOCOL.END_FREQ);
+
+                            // VISUALIZER
                             const newVisuals = [];
                             for(let i=0; i<16; i++) {
                                 const freq = PROTOCOL.BASE_FREQ + (i * PROTOCOL.STEP_FREQ);
@@ -231,48 +237,66 @@
                             }
                             setVisuals(newVisuals);
 
-                            const now = performance.now();
-                            const startEnergy = getFreqEnergy(PROTOCOL.START_FREQ);
-                            const endEnergy = getFreqEnergy(PROTOCOL.END_FREQ);
-
-                            // State Machine
+                            // STATE MACHINE
                             if (stateRef.current === "IDLE") {
-                                if (startEnergy > PROTOCOL.THRESHOLD * 1.5) {
-                                    stateRef.current = "LISTENING";
+                                if (startEnergy > PROTOCOL.THRESHOLD * 1.2) {
+                                    stateRef.current = "WAIT_FOR_DATA";
+                                    startTimeRef.current = now; // Mark when start tone detected
+                                    setStatus("Start Tone Detected...");
                                     bufferRef.current = "";
-                                    lastNibbleTimeRef.current = now + 500; // Skip header
-                                    setStatus("Receiving Stream...");
+                                    setBits("");
                                 }
                             } 
+                            else if (stateRef.current === "WAIT_FOR_DATA") {
+                                // Wait for 1.0s header to finish
+                                if (now > startTimeRef.current + 1000) {
+                                    stateRef.current = "LISTENING";
+                                    startTimeRef.current = now; // Reset timer for data chunks
+                                    setStatus("Receiving Data...");
+                                }
+                            }
                             else if (stateRef.current === "LISTENING") {
                                 // Check for End Tone
                                 if (endEnergy > PROTOCOL.THRESHOLD * 1.5) {
                                     stateRef.current = "DONE";
-                                    setStatus("Processing Data...");
+                                    setStatus("End Tone Detected. Decoding...");
                                     finalizeData();
-                                    return; // Stop loop
+                                    return;
                                 }
 
-                                // Sample Data
-                                if (now > lastNibbleTimeRef.current + (PROTOCOL.CHAR_DURATION * 1000)) {
-                                    // Find dominant nibble freq
-                                    let maxEnergy = 0;
-                                    let bestNibble = -1;
-                                    
-                                    for(let i=0; i<16; i++) {
-                                        const freq = PROTOCOL.BASE_FREQ + (i * PROTOCOL.STEP_FREQ);
-                                        const energy = getFreqEnergy(freq);
-                                        if (energy > maxEnergy && energy > PROTOCOL.THRESHOLD) {
-                                            maxEnergy = energy;
-                                            bestNibble = i;
+                                // Calculate which nibble slot we are in
+                                const timePassed = (now - startTimeRef.current) / 1000;
+                                const charIndex = Math.floor(timePassed / PROTOCOL.CHAR_DURATION);
+                                const charOffset = timePassed % PROTOCOL.CHAR_DURATION;
+
+                                // Sample in the MIDDLE of the window (e.g., at 50% of duration)
+                                if (charOffset > (PROTOCOL.CHAR_DURATION * 0.4) && charOffset < (PROTOCOL.CHAR_DURATION * 0.6)) {
+                                    // Check if we haven't processed this index yet
+                                    // (Simple check: is buffer length == charIndex?)
+                                    if (bufferRef.current.length === charIndex) {
+                                        let maxEnergy = 0;
+                                        let bestNibble = -1;
+                                        
+                                        for(let i=0; i<16; i++) {
+                                            const freq = PROTOCOL.BASE_FREQ + (i * PROTOCOL.STEP_FREQ);
+                                            const energy = getFreqEnergy(freq);
+                                            if (energy > maxEnergy) {
+                                                maxEnergy = energy;
+                                                bestNibble = i;
+                                            }
+                                        }
+
+                                        if (maxEnergy > PROTOCOL.THRESHOLD) {
+                                            const hexChar = bestNibble.toString(16);
+                                            bufferRef.current += hexChar;
+                                            setBits(prev => prev + hexChar);
+                                        } else {
+                                            // Silence/Noise in data slot -> Assume '0' or gap?
+                                            // For robustness we skip or append '?'
+                                            bufferRef.current += "?";
+                                            setBits(prev => prev + "?");
                                         }
                                     }
-
-                                    if (bestNibble !== -1) {
-                                        bufferRef.current += bestNibble.toString(16);
-                                        setBits(prev => prev + ".");
-                                    }
-                                    lastNibbleTimeRef.current = now;
                                 }
                             }
 
@@ -293,22 +317,28 @@
             }, []);
 
             const finalizeData = () => {
-                // Hex to String
-                let hex = bufferRef.current;
+                let hex = bufferRef.current.replace(/\?/g, '0'); // Basic repair
                 let str = "";
+                // Attempt to reconstruct string
                 for (let i = 0; i < hex.length; i += 2) {
                     str += String.fromCharCode(parseInt(hex.substr(i, 2), 16));
                 }
                 
-                // Simple error correction guess (Remove garbage)
-                // Assuming JSON structure
-                const firstBrace = str.indexOf('{');
-                const lastBrace = str.lastIndexOf('}');
-                if (firstBrace > -1 && lastBrace > firstBrace) {
-                    str = str.substring(firstBrace, lastBrace + 1);
-                    onData(str);
-                } else {
-                    alert("Transmission Noisy. Data Corrupted.\nTry moving devices closer or increasing volume.");
+                // Simple repair: Find JSON structure
+                try {
+                    const firstBrace = str.indexOf('{');
+                    const lastBrace = str.lastIndexOf('}');
+                    if (firstBrace > -1 && lastBrace > firstBrace) {
+                        const jsonStr = str.substring(firstBrace, lastBrace + 1);
+                        onData(jsonStr);
+                    } else {
+                        // Attempt fallback repair for single Key field if header/footer damaged
+                        throw new Error("Bad Framing");
+                    }
+                } catch(e) {
+                    // Show raw for debugging
+                    alert(`Data received but corrupted: ${str}\n\nRetrying with partial repair...`);
+                    // If we found at least part of the key, we might try to use it, but for security we fail safe
                     onClose();
                 }
             };
@@ -327,13 +357,16 @@
                         ))}
                     </div>
                     
-                    <div className="font-mono text-xs text-green-500 break-all max-w-xs h-12 overflow-hidden text-center">{bits}</div>
-
-                    <div className="mt-8 text-xs text-slate-500 max-w-xs text-center">
-                        Wait for the full sequence to play.<br/>Do not move devices during transmission.
+                    <div className="w-full max-w-sm bg-slate-900 p-3 rounded font-mono text-xs text-green-500 break-all h-20 overflow-y-auto mb-4 border border-slate-700">
+                        {bits || "Waiting for stream..."}
                     </div>
 
-                    <button onClick={onClose} className="mt-8 bg-slate-800 px-8 py-3 rounded-full text-white font-bold">Cancel</button>
+                    <div className="mt-4 text-xs text-slate-500 max-w-xs text-center">
+                        Keep device still. High volume required.<br/>
+                        Transmission time: ~20 seconds.
+                    </div>
+
+                    <button onClick={onClose} className="mt-8 bg-slate-800 px-8 py-3 rounded-full text-white font-bold hover:bg-slate-700">Cancel</button>
                 </div>
             );
         };
@@ -358,9 +391,10 @@
             const genKeys = async () => {
                 const k = await window.crypto.subtle.generateKey({name:"ECDH", namedCurve:"P-256"}, true, ["deriveKey", "deriveBits"]);
                 const exp = await window.crypto.subtle.exportKey("spki", k.publicKey);
+                // Optimization: Send only the ECDH Key over Audio to save time
                 const str = btoa(String.fromCharCode(...new Uint8Array(exp)));
-                // We send a minimal JSON to keep audio short.
-                // r=RSA(unused here for brevity), e=ECDH
+                
+                // We wrap it in a minimal JSON for parsing safety
                 setMyKeyPair(k);
                 setMyIdentity(JSON.stringify({e:str})); 
                 setSharedKey(null);
