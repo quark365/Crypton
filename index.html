@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CryptoVis: SonicLink + Video QR Transfer</title>
+    <title>CryptoVis: Secure Air-Gap System</title>
     
     <!-- React & Tailwind -->
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
@@ -47,8 +47,8 @@
             HEADER_DURATION: 1.5,
             FFT_SIZE: 2048,
             THRESHOLD: 30,
-            QR_FRAME_RATE: 150, // ms per frame for file transfer
-            QR_CHUNK_SIZE: 500  // Increased chunk size for faster transfer
+            QR_FRAME_RATE: 150, 
+            QR_CHUNK_SIZE: 500  
         };
 
         // --- ICONS ---
@@ -69,8 +69,8 @@
             refresh: <><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"/><path d="M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></>,
             file: <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />,
             clip: <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />,
-            share: <><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></>,
-            import: <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+            import: <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>,
+            share: <><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></>
         };
 
         // --- CRYPTO HELPERS ---
@@ -137,7 +137,6 @@
 
         const AnimatedQR = ({ chunks, label, onClose }) => {
             const [index, setIndex] = useState(0);
-            
             useEffect(() => {
                 if (!chunks || chunks.length === 0) return;
                 const interval = setInterval(() => {
@@ -145,7 +144,6 @@
                 }, PROTOCOL.QR_FRAME_RATE);
                 return () => clearInterval(interval);
             }, [chunks]);
-
             return (
                 <div className="fixed inset-0 z-50 bg-black/95 flex flex-col items-center justify-center p-4">
                     <div className="bg-white p-4 rounded-2xl flex flex-col items-center shadow-[0_0_50px_rgba(6,182,212,0.5)]">
@@ -154,7 +152,7 @@
                             <div className="bg-blue-600 h-full transition-all" style={{width: `${((index+1)/chunks.length)*100}%`}}></div>
                         </div>
                     </div>
-                    <p className="text-cyan-400 mt-4 font-mono text-sm animate-pulse">Broadcasting File Stream...</p>
+                    <p className="text-cyan-400 mt-4 font-mono text-sm animate-pulse text-center">DIRECT STREAMING...<br/>Point Camera to Receive File</p>
                     <button onClick={onClose} className="mt-8 bg-slate-800 px-8 py-3 rounded-full text-white font-bold hover:bg-slate-700">Stop Broadcast</button>
                 </div>
             );
@@ -164,7 +162,6 @@
             const videoRef = useRef(null);
             const canvasRef = useRef(null);
             const [error, setError] = useState("");
-
             useEffect(() => {
                 let stream;
                 navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
@@ -177,7 +174,6 @@
                         }
                     })
                     .catch(() => setError("Camera Access Denied. Ensure HTTPS/Localhost."));
-
                 const tick = () => {
                     if (videoRef.current && videoRef.current.readyState === 4) {
                         const cvs = canvasRef.current;
@@ -188,13 +184,12 @@
                         ctx.drawImage(vid, 0, 0);
                         const img = ctx.getImageData(0, 0, cvs.width, cvs.height);
                         const code = jsQR(img.data, img.width, img.height);
-                        if (code) { onScan(code.data); } // Continuous scanning
+                        if (code) { onScan(code.data); }
                     }
                     requestAnimationFrame(tick);
                 };
                 return () => stream?.getTracks().forEach(t => t.stop());
             }, []);
-
             return (
                 <div className="fixed inset-0 z-50 bg-black/95 flex flex-col items-center justify-center p-4">
                     <div className="relative w-full max-w-sm aspect-square bg-slate-900 rounded-2xl overflow-hidden border-2 border-cyan-500 shadow-[0_0_30px_rgba(6,182,212,0.3)]">
@@ -202,17 +197,10 @@
                         <canvas ref={canvasRef} className="hidden" />
                         <div className="scan-line"></div>
                         {error && <div className="absolute inset-0 flex items-center justify-center text-red-400 font-bold bg-black/80 text-center p-6">{error}</div>}
-                        
-                        {/* File Progress Overlay */}
                         {fileProgress && (
                             <div className="absolute bottom-0 left-0 right-0 bg-black/80 p-4">
-                                <div className="flex justify-between text-xs text-white mb-1">
-                                    <span>Downloading File...</span>
-                                    <span>{Math.round(fileProgress)}%</span>
-                                </div>
-                                <div className="w-full bg-slate-700 h-2 rounded-full overflow-hidden">
-                                    <div className="bg-emerald-500 h-full transition-all duration-100" style={{width: `${fileProgress}%`}}></div>
-                                </div>
+                                <div className="flex justify-between text-xs text-white mb-1"><span>Direct Transfer...</span><span>{Math.round(fileProgress)}%</span></div>
+                                <div className="w-full bg-slate-700 h-2 rounded-full overflow-hidden"><div className="bg-emerald-500 h-full transition-all duration-100" style={{width: `${fileProgress}%`}}></div></div>
                             </div>
                         )}
                     </div>
@@ -223,32 +211,21 @@
 
         const DataImporter = ({ onImport, onClose }) => {
             const [text, setText] = useState("");
-            
             const handleFile = async (e) => {
                 const file = e.target.files[0];
                 if (!file) return;
                 const content = await file.text();
                 onImport(content);
             };
-
             return (
                 <div className="fixed inset-0 z-50 bg-black/95 p-6 flex flex-col items-center justify-center">
                     <div className="w-full max-w-md glass p-6 rounded-2xl">
-                        <h2 className="text-white text-xl font-bold mb-4 flex items-center gap-2"><Icon p={icons.import} /> Import Data</h2>
-                        <p className="text-slate-400 text-sm mb-4">Paste data received via Bluetooth, AirDrop, or Email.</p>
-                        
-                        <textarea 
-                            value={text} 
-                            onChange={e=>setText(e.target.value)} 
-                            className="w-full h-32 bg-slate-900 border border-slate-700 text-white p-3 rounded-xl mb-4 font-mono text-xs focus:border-cyan-500 outline-none" 
-                            placeholder="Paste Encrypted Packet here..."
-                        ></textarea>
-                        
-                        <div className="flex items-center gap-2 mb-6">
-                            <span className="text-slate-500 text-xs">OR Upload File:</span>
-                            <input type="file" onChange={handleFile} className="text-white text-xs file:bg-slate-700 file:border-none file:text-white file:py-1 file:px-2 file:rounded-lg" />
+                        <h2 className="text-white text-xl font-bold mb-4 flex items-center gap-2"><Icon p={icons.import} /> Manual Input</h2>
+                        <textarea value={text} onChange={e=>setText(e.target.value)} className="w-full h-32 bg-slate-900 border border-slate-700 text-white p-3 rounded-xl mb-4 font-mono text-xs focus:border-cyan-500 outline-none" placeholder="Paste Encrypted Packet here..."></textarea>
+                        <div className="flex items-center gap-2 mb-4">
+                            <span className="text-slate-500 text-xs">OR Upload:</span>
+                            <input type="file" onChange={handleFile} className="text-white text-xs"/>
                         </div>
-
                         <div className="grid grid-cols-2 gap-4">
                             <button onClick={onClose} className="bg-slate-700 text-white py-3 rounded-xl font-bold hover:bg-slate-600">Cancel</button>
                             <button onClick={() => onImport(text)} className="bg-cyan-600 text-white py-3 rounded-xl font-bold hover:bg-cyan-500">Process</button>
@@ -263,7 +240,6 @@
             const [status, setStatus] = useState("Initializing Mic...");
             const [visuals, setVisuals] = useState(new Array(16).fill(0));
             const [recording, setRecording] = useState(false);
-            
             const analyzerRef = useRef(null);
             const rafRef = useRef(null);
             const bufferRef = useRef([]); 
@@ -272,12 +248,10 @@
             useEffect(() => {
                 let audioContext;
                 let stream;
-
                 const initAudio = async () => {
                     try {
                         stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
                         setStatus("Listening for Start Tone...");
-                        
                         audioContext = new (window.AudioContext || window.webkitAudioContext)();
                         const source = audioContext.createMediaStreamSource(stream);
                         const analyzer = audioContext.createAnalyser();
@@ -285,16 +259,14 @@
                         analyzer.smoothingTimeConstant = 0; 
                         source.connect(analyzer);
                         analyzerRef.current = analyzer;
-
                         const bufferLength = analyzer.frequencyBinCount;
                         const dataArray = new Uint8Array(bufferLength);
                         const binWidth = audioContext.sampleRate / analyzer.fftSize;
-
+                        
                         const getFreqEnergy = (freq) => {
                             const bin = Math.round(freq / binWidth);
                             return (dataArray[bin-1] + dataArray[bin] + dataArray[bin+1]) / 3;
                         };
-
                         const findDominantNibble = () => {
                             let maxE = 0, bestI = -1;
                             for(let i=0; i<16; i++) {
@@ -305,21 +277,17 @@
                             if (maxE < (PROTOCOL.THRESHOLD * 3)) return -1;
                             return bestI;
                         };
-
                         const loop = () => {
                             analyzer.getByteFrequencyData(dataArray);
                             const now = performance.now();
-
                             const v = [];
                             for(let i=0; i<16; i++) {
                                 const f = PROTOCOL.BASE_FREQ + (i*PROTOCOL.STEP_FREQ);
                                 v.push((getFreqEnergy(f)/255)*100);
                             }
                             setVisuals(v);
-
                             const startE = getFreqEnergy(PROTOCOL.START_FREQ);
                             const endE = getFreqEnergy(PROTOCOL.END_FREQ);
-
                             if (!startTimeRef.current) {
                                 if (startE > (PROTOCOL.THRESHOLD * 4)) {
                                     startTimeRef.current = now;
@@ -330,7 +298,6 @@
                             } else {
                                 const currentNibble = findDominantNibble();
                                 bufferRef.current.push({ t: now, val: currentNibble });
-
                                 if (endE > (PROTOCOL.THRESHOLD * 4) && (now - startTimeRef.current > 2000)) {
                                     setStatus("End Detected. Decoding...");
                                     decodeSignal();
@@ -341,12 +308,9 @@
                             rafRef.current = requestAnimationFrame(loop);
                         };
                         loop();
-
                     } catch (e) { setStatus("Microphone Error: " + e.message); }
                 };
-
                 initAudio();
-
                 return () => {
                     if(stream) stream.getTracks().forEach(t => t.stop());
                     if(audioContext) audioContext.close();
@@ -357,38 +321,29 @@
             const decodeSignal = () => {
                 const rec = bufferRef.current;
                 if (rec.length < 10) return;
-
                 const startT = rec[0].t;
                 const dataStartT = startT + (PROTOCOL.HEADER_DURATION * 1000);
-                
                 let hex = "";
                 let timeCursor = dataStartT;
                 const charMs = PROTOCOL.CHAR_DURATION * 1000;
-
                 while (true) {
                     const samples = rec.filter(s => s.t >= timeCursor && s.t < timeCursor + charMs);
                     if (samples.length === 0) break; 
-
                     const counts = {};
                     samples.forEach(s => { if (s.val !== -1) counts[s.val] = (counts[s.val] || 0) + 1; });
-
                     let bestVal = -1, maxCount = 0;
                     for (const [val, count] of Object.entries(counts)) {
                         if (count > maxCount) { maxCount = count; bestVal = val; }
                     }
-
                     if (bestVal !== -1) hex += parseInt(bestVal).toString(16);
                     else hex += "?"; 
-
                     timeCursor += charMs;
                 }
-
                 let str = "";
                 for(let i=0; i<hex.length; i+=2) {
                     const h = hex.substr(i, 2);
                     if (h.indexOf('?') === -1) str += String.fromCharCode(parseInt(h, 16));
                 }
-
                 try {
                     const first = str.indexOf('{');
                     const last = str.lastIndexOf('}');
@@ -409,18 +364,110 @@
                         <h2 className="text-2xl font-bold text-white mb-2">SonicLink Receiver</h2>
                         <p className={`font-mono ${recording ? 'text-emerald-400 animate-pulse' : 'text-cyan-400'}`}>{status}</p>
                     </div>
-                    
                     <div className="flex items-end gap-1 h-32 mb-4 bg-slate-900/50 p-4 rounded-xl border border-slate-700">
                         {visuals.map((v, i) => (
                             <div key={i} className="w-3 bg-cyan-500 rounded-t transition-all duration-75" style={{height: `${v}%`}}></div>
                         ))}
                     </div>
-                    
-                    <div className="mt-8 text-xs text-slate-500 max-w-xs text-center">
-                        <strong>Instructions:</strong> High Volume on Sender. Wait for Start Tone. Don't move until End Tone.
-                    </div>
-
+                    <div className="mt-8 text-xs text-slate-500 max-w-xs text-center"><strong>Instructions:</strong> High Volume on Sender. Wait for Start Tone. Don't move until End Tone.</div>
                     <button onClick={onClose} className="mt-8 bg-slate-800 px-8 py-3 rounded-full text-white font-bold hover:bg-slate-700">Cancel</button>
+                </div>
+            );
+        };
+
+        // --- HACKING TERMINAL FOR DARTH ---
+        const HackingTerminal = ({ targetData, onClose }) => {
+            const [logs, setLogs] = useState(["> INITIALIZING CRYPTANALYSIS SUITE..."]);
+            const [progress, setProgress] = useState(0);
+            const [cracking, setCracking] = useState(true);
+            const [displayContent, setDisplayContent] = useState(null);
+
+            useEffect(() => {
+                let steps = [];
+                let content = "";
+                let type = "UNKNOWN";
+
+                if (targetData.includes('"e":')) {
+                    type = "IDENTITY (PUBLIC KEY)";
+                    steps = [
+                        "Captured Public Key Block...",
+                        "Calculating Elliptic Curve Order (P-256)...",
+                        "Attempting Discrete Logarithm Attack...",
+                        "Running Pollard's Rho Algorithm...",
+                        "Brute forcing Private Scalar...",
+                        "Complexity: 2^128 operations required...",
+                        "Estimated time: 4 Billion Years...",
+                        "FAILED: Key is mathematically secure."
+                    ];
+                    content = JSON.parse(targetData).e.substring(0, 50) + "...";
+                } else if (targetData.includes('"iv":')) {
+                    type = "ENCRYPTED MESSAGE";
+                    steps = [
+                        "Captured AES-GCM Packet...",
+                        "Extracting IV and Auth Tag...",
+                        "Checking for Key Reuse...",
+                        "Attempting Padding Oracle Attack...",
+                        "Brute Forcing Key Space (2^256)...",
+                        "Progress: 0.0000000000001%...",
+                        "ERROR: Integrity Check Failed.",
+                        "FAILED: Missing Shared Secret."
+                    ];
+                    const p = JSON.parse(targetData);
+                    content = `IV: ${p.iv}\nCIPHER: ${p.d.substring(0, 20)}...`;
+                } else if (targetData.startsWith("F|")) {
+                    type = "FILE STREAM";
+                    steps = [
+                        "Intercepting Data Stream...",
+                        "Reassembling Packets...",
+                        "Detected Binary Blob...",
+                        "Attempting Entropy Analysis...",
+                        "Decrypting without Key...",
+                        "OUTPUT: Garbage Data",
+                        "FAILED: Encryption Robust."
+                    ];
+                    content = "BINARY_STREAM_CAPTURED";
+                }
+
+                let stepIndex = 0;
+                const timer = setInterval(() => {
+                    if (stepIndex < steps.length) {
+                        setLogs(prev => [...prev, `> ${steps[stepIndex]}`]);
+                        setProgress(((stepIndex + 1) / steps.length) * 100);
+                        stepIndex++;
+                    } else {
+                        clearInterval(timer);
+                        setCracking(false);
+                        setDisplayContent(content);
+                    }
+                }, 800);
+                return () => clearInterval(timer);
+            }, [targetData]);
+
+            return (
+                <div className="fixed inset-0 z-50 bg-black/95 flex flex-col items-center justify-center p-4 font-mono">
+                    <div className="w-full max-w-lg bg-slate-900 border-2 border-red-600 rounded-xl overflow-hidden shadow-[0_0_50px_rgba(220,38,38,0.5)]">
+                        <div className="bg-red-900/30 p-3 border-b border-red-600 flex justify-between items-center">
+                            <span className="text-red-500 font-bold animate-pulse">☠️ INTERCEPTOR CONSOLE</span>
+                            <span className="text-xs text-red-400">TARGET ACQUIRED</span>
+                        </div>
+                        <div className="h-64 p-4 overflow-y-auto space-y-2 font-mono text-xs text-green-400 bg-black">
+                            {logs.map((l, i) => <div key={i}>{l}</div>)}
+                            {cracking && <div className="animate-pulse">_</div>}
+                        </div>
+                        
+                        {!cracking && (
+                            <div className="p-4 bg-slate-900 border-t border-red-900/50 text-center">
+                                <div className="text-xs text-slate-500 mb-2">CAPTURED PAYLOAD (ENCRYPTED)</div>
+                                <div className="bg-black p-2 rounded text-red-500 text-xs break-all mb-4 border border-red-900">
+                                    {displayContent}
+                                </div>
+                                <div className="text-red-500 font-bold mb-4">ACCESS DENIED</div>
+                                <button onClick={onClose} className="w-full bg-slate-700 hover:bg-slate-600 text-white font-bold py-3 rounded-lg">
+                                    CLOSE TERMINAL
+                                </button>
+                            </div>
+                        )}
+                    </div>
                 </div>
             );
         };
@@ -429,21 +476,46 @@
         const App = () => {
             const [isDarth, setIsDarth] = useState(false);
             const [activeTab, setActiveTab] = useState('CONNECT');
-            
             const [myKeyPair, setMyKeyPair] = useState(null);
             const [myIdentity, setMyIdentity] = useState("");
             const [sharedKey, setSharedKey] = useState(null);
             const [fingerprint, setFingerprint] = useState("????");
-            
-            const [scanner, setScanner] = useState(null); // 'QR', 'AUDIO', 'IMPORT'
+            const [scanner, setScanner] = useState(null);
             const [packet, setPacket] = useState(null);
             const [chat, setChat] = useState([]);
             const [msg, setMsg] = useState("");
-            
-            // File Transfer State
-            const [fileTransfer, setFileTransfer] = useState(null); // { chunks: [], id: string }
+            const [fileTransfer, setFileTransfer] = useState(null);
             const [incomingFile, setIncomingFile] = useState({ id: null, chunks: {}, total: 0 });
             const [audioPlaying, setAudioPlaying] = useState(false);
+            const [cheatBuffer, setCheatBuffer] = useState("");
+            const [bluetoothUnlocked, setBluetoothUnlocked] = useState(false);
+            
+            // Darth State
+            const [interceptedData, setInterceptedData] = useState(null);
+            const [fakeMsg, setFakeMsg] = useState("YOU HAVE BEEN HACKED");
+            const [fakePacket, setFakePacket] = useState(null);
+
+            // CHEAT CODE LISTENER
+            useEffect(() => {
+                const handleKeyDown = (e) => {
+                    setCheatBuffer(prev => (prev + e.key).slice(-10).toLowerCase());
+                };
+                window.addEventListener('keydown', handleKeyDown);
+                return () => window.removeEventListener('keydown', handleKeyDown);
+            }, []);
+
+            useEffect(() => {
+                if (cheatBuffer.endsWith("red")) {
+                    setIsDarth(true);
+                    setCheatBuffer(""); 
+                    alert("🛑 DARTH MODE UNLOCKED 🛑");
+                }
+                if (cheatBuffer.endsWith("blue")) {
+                    setBluetoothUnlocked(true);
+                    setCheatBuffer("");
+                    alert("🔵 BLUETOOTH/SYSTEM SHARE UNLOCKED 🔵");
+                }
+            }, [cheatBuffer]);
 
             // 1. IDENTITY
             const genKeys = async () => {
@@ -451,7 +523,6 @@
                 const exp = await window.crypto.subtle.exportKey("spki", k.publicKey);
                 const str = btoa(String.fromCharCode(...new Uint8Array(exp)));
                 const json = JSON.stringify({e:str});
-                
                 setMyKeyPair(k);
                 setMyIdentity(json);
                 setSharedKey(null);
@@ -462,6 +533,12 @@
 
             // 2. EXCHANGE
             const handleData = async (dataStr) => {
+                if (isDarth) {
+                    setInterceptedData(dataStr);
+                    setScanner(null);
+                    return;
+                }
+
                 try {
                     // FILE CHUNK (F|ID|IDX|TOT|DATA)
                     if (dataStr.startsWith('F|')) {
@@ -469,14 +546,12 @@
                         const [_, id, idx, tot, payload] = dataStr.split('|');
                         const index = parseInt(idx);
                         const total = parseInt(tot);
-                        
                         setIncomingFile(prev => {
                             if (prev.id !== id) return { id, chunks: {[index]: payload}, total };
                             return { ...prev, chunks: { ...prev.chunks, [index]: payload }, total };
                         });
                         return;
                     }
-
                     // Message
                     if (dataStr.includes('"iv":')) {
                         if(!sharedKey) { alert("Connect First!"); return; }
@@ -488,7 +563,6 @@
                         alert("Received: " + txt);
                         return;
                     }
-
                     // Identity
                     const payload = JSON.parse(dataStr);
                     if (!payload.e) throw new Error("Missing Key");
@@ -502,7 +576,6 @@
                     setActiveTab('VERIFY');
                     setScanner(null);
                     alert("Handshake Successful!");
-
                 } catch(e) { 
                     alert("Data Error: " + e.message);
                 }
@@ -514,17 +587,14 @@
                     const ordered = [];
                     for(let i=0; i<incomingFile.total; i++) ordered.push(incomingFile.chunks[i]);
                     const fullBase64 = ordered.join('');
-                    
                     const byteStr = atob(fullBase64);
                     const bytes = new Uint8Array(byteStr.length);
                     for (let i = 0; i < byteStr.length; i++) bytes[i] = byteStr.charCodeAt(i);
-                    
                     const iv = bytes.slice(0, 12);
                     const mimeLen = bytes[12];
                     const mimeBytes = bytes.slice(13, 13 + mimeLen);
                     const mime = new TextDecoder().decode(mimeBytes);
                     const data = bytes.slice(13 + mimeLen);
-
                     window.crypto.subtle.decrypt({name:"AES-GCM", iv}, sharedKey, data)
                         .then(decrypted => {
                             const blob = new Blob([decrypted], { type: mime });
@@ -560,19 +630,16 @@
                 const file = e.target.files[0];
                 if (!file) return;
                 if (!sharedKey) { alert("Connect & Verify Identity first!"); return; }
-                
                 try {
                     const iv = window.crypto.getRandomValues(new Uint8Array(12));
                     const fileBuf = await file.arrayBuffer();
                     const enc = await window.crypto.subtle.encrypt({name:"AES-GCM", iv}, sharedKey, fileBuf);
-                    
                     const mimeBytes = new TextEncoder().encode(file.type);
                     const payload = new Uint8Array(12 + 1 + mimeBytes.length + enc.byteLength);
                     payload.set(iv, 0);
                     payload.set([mimeBytes.length], 12);
                     payload.set(mimeBytes, 13);
                     payload.set(new Uint8Array(enc), 13 + mimeBytes.length);
-                    
                     const base64Full = await new Promise((resolve) => {
                         const reader = new FileReader();
                         reader.onload = () => {
@@ -582,16 +649,13 @@
                         };
                         reader.readAsDataURL(new Blob([payload]));
                     });
-
                     const total = Math.ceil(base64Full.length / PROTOCOL.QR_CHUNK_SIZE);
                     const fileId = Math.floor(Math.random() * 9999).toString(36);
                     const chunks = [];
-                    
                     for(let i=0; i<total; i++) {
                         const slice = base64Full.slice(i*PROTOCOL.QR_CHUNK_SIZE, (i+1)*PROTOCOL.QR_CHUNK_SIZE);
                         chunks.push(`F|${fileId}|${i}|${total}|${slice}`);
                     }
-                    
                     setFileTransfer({ chunks, id: fileId });
                 } catch (error) {
                     console.error("File processing error:", error);
@@ -603,6 +667,14 @@
                 setAudioPlaying(true);
                 await SonicTransmitter.play(data || myIdentity);
                 setAudioPlaying(false);
+            };
+
+            const generateFakePacket = async () => {
+                // Random key for fake encryption
+                const key = await window.crypto.subtle.generateKey({name:"AES-GCM", length:256}, true, ["encrypt"]);
+                const iv = window.crypto.getRandomValues(new Uint8Array(12));
+                const enc = await window.crypto.subtle.encrypt({name:"AES-GCM", iv}, key, new TextEncoder().encode(fakeMsg));
+                setFakePacket(JSON.stringify({iv:buf2hex(iv), d:buf2hex(enc)}));
             };
 
             const nativeShare = async (data, title = "Crypto Packet") => {
@@ -620,19 +692,63 @@
                 }
             };
 
+            // DARTH UI
+            if (isDarth) {
+                return (
+                    <div className="min-h-screen bg-slate-950 flex flex-col font-mono">
+                        <header className="p-4 border-b border-red-900 bg-black flex justify-between items-center shadow-lg shadow-red-900/20">
+                            <div className="flex items-center gap-2 text-red-500 font-bold tracking-widest">
+                                <Icon p={icons.skull} /> DARTH_OS v1.0
+                            </div>
+                            <button onClick={() => setIsDarth(false)} className="text-xs text-red-400 cursor-pointer border border-red-800 px-3 py-1 rounded hover:bg-red-900/20">
+                                EXIT
+                            </button>
+                        </header>
+                        <main className="flex-1 p-6 space-y-8 overflow-y-auto">
+                            
+                            {/* INTERCEPT MODULE */}
+                            <section className="border border-red-900/50 rounded-xl p-6 bg-black/50">
+                                <h2 className="text-red-500 text-lg font-bold mb-4 flex items-center gap-2"><Icon p={icons.cam}/> 1. SIGNAL INTERCEPTOR</h2>
+                                <p className="text-red-400/50 text-xs mb-4">Scan any QR (Identity or Message) to attempt decryption.</p>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <button onClick={()=>setScanner('QR')} className="bg-red-900/30 hover:bg-red-900/50 border border-red-800 text-red-300 py-4 rounded-lg font-bold transition-all">SCAN QR</button>
+                                    <button onClick={()=>setScanner('AUDIO')} className="bg-red-900/30 hover:bg-red-900/50 border border-red-800 text-red-300 py-4 rounded-lg font-bold transition-all">LISTEN AUDIO</button>
+                                </div>
+                            </section>
+
+                            {/* INJECTION MODULE */}
+                            <section className="border border-red-900/50 rounded-xl p-6 bg-black/50">
+                                <h2 className="text-red-500 text-lg font-bold mb-4 flex items-center gap-2"><Icon p={icons.send}/> 2. INJECTION ATTACK</h2>
+                                <p className="text-red-400/50 text-xs mb-4">Generate valid-looking but malicious packets. Victims will fail integrity check.</p>
+                                <input value={fakeMsg} onChange={e=>setFakeMsg(e.target.value)} className="w-full bg-black border border-red-900 text-red-100 p-3 rounded mb-4 focus:outline-none focus:border-red-500" placeholder="Enter fake message..."/>
+                                <button onClick={generateFakePacket} className="w-full bg-red-700 hover:bg-red-600 text-white font-bold py-3 rounded-lg shadow-lg shadow-red-900/20">GENERATE TOXIC QR</button>
+                                {fakePacket && (
+                                    <div className="mt-6 flex flex-col items-center animate-in fade-in">
+                                        <div className="border-4 border-red-600 p-2 bg-white rounded-lg">
+                                            <QRDisplay data={fakePacket} label="TOXIC PAYLOAD" />
+                                        </div>
+                                        <p className="text-red-500 text-xs mt-2 font-bold animate-pulse">READY TO DEPLOY</p>
+                                    </div>
+                                )}
+                            </section>
+                        </main>
+                        {scanner === 'QR' && <QRScanner onScan={handleData} onClose={()=>setScanner(null)} />}
+                        {scanner === 'AUDIO' && <AudioListener onData={handleData} onClose={()=>setScanner(null)} />}
+                        {interceptedData && <HackingTerminal targetData={interceptedData} onClose={()=>setInterceptedData(null)} />}
+                    </div>
+                );
+            }
+
+            // ALICE/BOB UI (Standard)
             return (
-                <div className={`min-h-screen flex flex-col ${isDarth ? 'bg-red-950 border-4 border-red-600' : ''}`}>
-                    {/* HEADER */}
-                    <header className={`p-4 flex justify-between items-center shadow-lg ${isDarth ? 'bg-red-900' : 'bg-slate-900'}`}>
+                <div className="min-h-screen flex flex-col">
+                    {/* Header */}
+                    <header className="p-4 flex justify-between items-center shadow-lg bg-slate-900">
                         <div className="flex items-center gap-2 text-white font-bold">
-                            <Icon p={isDarth ? icons.skull : icons.shield} /> 
-                            <span>CryptoVis {isDarth && "DARTH"}</span>
+                            <Icon p={icons.shield} /> <span>CryptoVis</span>
                         </div>
                         <div className="flex gap-3">
                             <button onClick={genKeys}><Icon p={icons.refresh}/></button>
-                            <label className="flex items-center gap-2 text-xs text-white/70">
-                                <input type="checkbox" checked={isDarth} onChange={e => setIsDarth(e.target.checked)} /> Darth Mode
-                            </label>
                         </div>
                     </header>
 
@@ -659,20 +775,21 @@
                                         <Icon p={icons.cam} /> Scan QR
                                     </button>
                                 </div>
-                                <div className="grid grid-cols-2 gap-2">
-                                    <button onClick={() => nativeShare(myIdentity, "Identity Key")} className="btn-secondary">
-                                        <Icon p={icons.share} /> Share
-                                    </button>
-                                    <button onClick={() => setScanner('IMPORT')} className="btn-secondary">
-                                        <Icon p={icons.import} /> Import
-                                    </button>
-                                </div>
-                                {isDarth && <div className="text-red-400 text-xs border border-red-500 p-2 rounded">Darth: Use SonicLink to broadcast fake identity signals.</div>}
                                 <div className="grid grid-cols-1 gap-2 mt-2">
                                      <button onClick={() => setScanner('AUDIO')} className="btn-secondary bg-purple-900/50 hover:bg-purple-900 border border-purple-500">
                                         <Icon p={icons.mic}/> Receive SonicLink (Listen)
                                     </button>
                                 </div>
+                                {bluetoothUnlocked && (
+                                    <div className="grid grid-cols-2 gap-2 mt-2 animate-in fade-in">
+                                        <button onClick={() => nativeShare(myIdentity, "Identity Key")} className="btn-secondary">
+                                            <Icon p={icons.share} /> Share ID
+                                        </button>
+                                        <button onClick={() => setScanner('IMPORT')} className="btn-secondary">
+                                            <Icon p={icons.import} /> Import
+                                        </button>
+                                    </div>
+                                )}
                             </div>
                         )}
 
@@ -689,11 +806,6 @@
                                         <button onClick={() => playAudio(myIdentity)} disabled={audioPlaying} className="w-full bg-purple-600 hover:bg-purple-500 text-white py-2 rounded font-bold flex items-center justify-center gap-2">
                                             <Icon p={icons.sound}/> Send ID via SonicLink
                                         </button>
-                                        <div className="grid grid-cols-1 gap-2 mt-2">
-                                            <button onClick={() => nativeShare(myIdentity, "Identity Key")} className="btn-secondary">
-                                                <Icon p={icons.share} /> Share Identity System-Wide
-                                            </button>
-                                        </div>
                                     </>
                                 ) : <div className="text-red-400">Connect First</div>}
                             </div>
@@ -716,9 +828,9 @@
                                     <button onClick={send} className="bg-cyan-600 px-3 py-2 rounded text-white"><Icon p={icons.send}/></button>
                                     
                                     {/* FILE INPUT */}
-                                    <label className="bg-slate-700 px-3 py-2 rounded text-white cursor-pointer hover:bg-slate-600">
+                                    <label className="bg-slate-700 px-3 py-2 rounded text-white cursor-pointer hover:bg-slate-600 flex items-center gap-1">
                                         <input type="file" className="hidden" onChange={handleFileSelect} />
-                                        <Icon p={icons.clip} />
+                                        <Icon p={icons.clip} /> <span className="text-[10px]">Send File (Direct)</span>
                                     </label>
                                 </div>
                                 
@@ -727,14 +839,18 @@
                                         <div className="text-xs text-slate-400">Encrypted Packet Ready</div>
                                         <div className="flex justify-center"><QRDisplay data={packet} label="Scan Packet" /></div>
                                         
-                                        <div className="grid grid-cols-2 gap-2">
+                                        <div className="grid grid-cols-1 gap-2">
                                             <button onClick={()=>playAudio(packet)} disabled={audioPlaying} className="btn-primary bg-purple-600 hover:bg-purple-500">
                                                 <Icon p={icons.sound}/> {audioPlaying ? 'Broadcasting...' : 'SonicLink'}
                                             </button>
-                                            <button onClick={() => nativeShare(packet, "Encrypted Message")} className="btn-secondary">
-                                                <Icon p={icons.share} /> Share
-                                            </button>
                                         </div>
+                                        {bluetoothUnlocked && (
+                                            <div className="grid grid-cols-1 gap-2 animate-in fade-in">
+                                                <button onClick={() => nativeShare(packet, "Encrypted Packet")} className="btn-secondary">
+                                                    <Icon p={icons.share} /> Share Packet
+                                                </button>
+                                            </div>
+                                        )}
                                     </div>
                                 )}
 
@@ -746,9 +862,11 @@
                                         <Icon p={icons.cam}/> Scan
                                     </button>
                                 </div>
-                                <button onClick={() => setScanner('IMPORT')} className="w-full bg-slate-800 hover:bg-slate-700 text-white py-3 rounded font-bold flex items-center justify-center gap-2">
-                                    <Icon p={icons.import}/> Import / Paste Packet
-                                </button>
+                                {bluetoothUnlocked && (
+                                    <button onClick={() => setScanner('IMPORT')} className="w-full bg-slate-800 hover:bg-slate-700 text-white py-3 rounded font-bold flex items-center justify-center gap-2 animate-in fade-in">
+                                        <Icon p={icons.import}/> Import / Paste Packet
+                                    </button>
+                                )}
                             </div>
                         )}
                     </main>
