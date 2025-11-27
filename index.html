@@ -194,7 +194,9 @@
                     q2 = q1;
                     q1 = q0;
                 }
-                return Math.sqrt(q1*q1 + q2*q2 - q1*q2*coeff);
+                const real = (q1 - q2 * cosine);
+                const imag = (q2 * sine);
+                return Math.sqrt(real*real + imag*imag);
             }
         };
 
@@ -394,7 +396,7 @@
                         const window = state.buffer.slice(-symbolSamps);
                         const energy = GibberLink.goertzel(window, sr, preambleFreq);
                         
-                        if (energy > 0.1) { // Threshold
+                        if (energy > 0.05) { // Lowered threshold for better detection; tune based on testing
                             state.mode = 'SYNCING';
                             setStatus("Preamble Detected! Syncing...");
                             state.syncIndex = state.buffer.length; // Mark time
@@ -472,14 +474,13 @@
                         if (bytes.length < 4) throw new Error("Too short");
                         const dataBytes = new Uint8Array(bytes.slice(0, bytes.length - 4));
                         const recvCrcVals = bytes.slice(bytes.length - 4);
-                        const recvCrc = (recvCrcVals[0] << 24) | (recvCrcVals[1] << 16) | (recvCrcVals[2] << 8) | recvCrcVals[3];
+                        const recvCrc = ((recvCrcVals[0] << 24) | (recvCrcVals[1] << 16) | (recvCrcVals[2] << 8) | recvCrcVals[3]) >>> 0;
                         
-                        // Verify CRC
-                        const calcCrc = GibberLink.crc32(dataBytes);
-                        
-                        // Note: CRC check might fail due to sign issues in JS bitwise ops, 
-                        // for this demo we proceed if it looks loosely valid to handle signed/unsigned matches
-                        // In production, strictly enforce `calcCrc >>> 0 === recvCrc >>> 0`
+                        // Verify CRC (strict check with unsigned)
+                        const calcCrc = GibberLink.crc32(dataBytes) >>> 0;
+                        if (calcCrc !== recvCrc) {
+                            throw new Error(`CRC Mismatch: expected ${calcCrc.toString(16).padStart(8, '0')}, got ${recvCrc.toString(16).padStart(8, '0')}`);
+                        }
                         
                         const jsonStr = new TextDecoder().decode(dataBytes);
                         onData(jsonStr);
@@ -491,6 +492,7 @@
                         setTimeout(() => {
                             stateRef.current.mode = 'WAIT_PREAMBLE';
                             stateRef.current.payload = [];
+                            stateRef.current.buffer = [];
                             setStatus("Listening...");
                         }, 2000);
                     }
@@ -518,7 +520,7 @@
                     </div>
                     
                     <div className="mt-8 text-xs text-slate-500 max-w-xs text-center">
-                        <strong>GibberLink Protocol:</strong> M-ary FSK / Goertzel Decode.<br/>High volume required.
+                        <strong>GibberLink Protocol:</strong> M-ary FSK / Goertzel Decode.<br/>High volume required. Tune threshold if needed.
                     </div>
 
                     <button onClick={onClose} className="mt-8 bg-slate-800 px-8 py-3 rounded-full text-white font-bold hover:bg-slate-700">Cancel</button>
