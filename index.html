@@ -57,9 +57,6 @@
         .touch-scroll { -webkit-overflow-scrolling: touch; }
         .anim-fade { animation: fadeIn 0.3s ease-in; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        .terminal { background: #000; color: #00ff00; font-family: 'Courier New', monospace; overflow-y: auto; }
-        .progress-bar { height: 4px; background: #333; border-radius: 2px; overflow: hidden; }
-        .progress-fill { height: 100%; background: linear-gradient(90deg, #ff0000, #ff6600); transition: width 0.1s; }
     </style>
 </head>
 <body class="matrix-bg selection:bg-cyan-500 selection:text-white">
@@ -326,4 +323,768 @@
                     {error ? (
                         <div className="text-red-500 text-center">{error} <br/><button onClick={onClose} className="mt-4 bg-slate-800 px-4 py-2 rounded">Close</button></div>
                     ) : (
-                        <div className={`relative w-full max-w-sm
+                        <div className={`relative w-full max-w-sm aspect-square bg-slate-900 rounded-3xl overflow-hidden border-2 shadow-[0_0_50px_rgba(0,0,0,0.5)] ${isDarth ? 'border-red-500 shadow-red-900/50' : 'border-cyan-500 shadow-cyan-900/50'}`}>
+                            <video ref={videoRef} className="absolute inset-0 w-full h-full object-cover" playsInline muted />
+                            <canvas ref={canvasRef} className="hidden" />
+                            <div className={isDarth ? "scan-line darth-scan-line" : "scan-line"}></div>
+                            <div className="absolute top-4 left-0 right-0 text-center pointer-events-none">
+                                <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-widest ${isDarth ? 'bg-red-600 text-white' : 'bg-cyan-500 text-slate-900'}`}>
+                                    {isDarth ? 'INTERCEPTOR ACTIVE' : 'SECURE SCANNER'}
+                                </span>
+                            </div>
+                            {incomingFile && incomingFile.total > 0 && (
+                                <div className="absolute bottom-0 left-0 right-0 bg-black/80 p-4 backdrop-blur-sm">
+                                    <div className="flex justify-between text-xs font-mono text-white mb-2">
+                                        <span>RECEIVING FILE...</span>
+                                        <span>{Math.round(progress)}%</span>
+                                    </div>
+                                    <div className="w-full bg-slate-700 h-1.5 rounded-full overflow-hidden mb-2">
+                                        <div className={`h-full transition-all duration-100 ${isDarth ? 'bg-red-500' : 'bg-cyan-400'}`} style={{width: `${progress}%`}}></div>
+                                    </div>
+                                    <div className="text-[10px] text-slate-400 mb-1">
+                                        Chunks: {Object.keys(incomingFile.chunks).length} / {incomingFile.total}
+                                    </div>
+                                    {missingChunks.length > 0 && (
+                                        <div className="text-[10px] text-red-400 font-bold">
+                                            Missing: {missingChunks.join(', ')}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    )}
+                    <button onClick={onClose} className="mt-8 text-white/70 hover:text-white font-bold flex items-center gap-2">
+                        <Icon p={icons.x} /> Cancel Scan
+                    </button>
+                </div>
+            );
+        };
+        const AudioListener = ({ onData, onClose }) => {
+            const [status, setStatus] = useState("Initializing Mic...");
+            const [visuals, setVisuals] = useState(new Array(32).fill(0));
+            const analyzerRef = useRef(null);
+            const processorRef = useRef(null);
+            const ctxRef = useRef(null);
+            const streamRef = useRef(null);
+           
+            const stateRef = useRef({
+                mode: 'WAIT_PREAMBLE',
+                samplesProcessed: 0,
+                syncTime: 0,
+                buffer: [],
+                payload: [],
+                header: { len: 0 }
+            });
+            useEffect(() => {
+                const initAudio = async () => {
+                    try {
+                        const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
+                        streamRef.current = stream;
+                       
+                        const ctx = new (window.AudioContext || window.webkitAudioContext)({sampleRate: PROTOCOL.SAMPLE_RATE});
+                        ctxRef.current = ctx;
+                        const src = ctx.createMediaStreamSource(stream);
+                        const processor = ctx.createScriptProcessor(4096, 1, 1);
+                        src.connect(processor);
+                        processor.connect(ctx.destination);
+                        processorRef.current = processor;
+                        setStatus("Listening for GibberLink...");
+                        processor.onaudioprocess = (e) => {
+                            const input = e.inputBuffer.getChannelData(0);
+                            const state = stateRef.current;
+                            for(let i=0; i<input.length; i++) state.buffer.push(input[i]);
+                            if (state.buffer.length > PROTOCOL.SAMPLE_RATE * 5) {
+                                state.buffer.splice(0, state.buffer.length - PROTOCOL.SAMPLE_RATE * 5);
+                            }
+                            if (Math.random() < 0.1) {
+                                const visData = [];
+                                const tail = state.buffer.slice(-1024);
+                                for(let i=0; i<32; i++) {
+                                    const f = PROTOCOL.BASE_FREQ + i*PROTOCOL.FREQ_SPACING;
+                                    visData.push(GibberLink.goertzel(tail, PROTOCOL.SAMPLE_RATE, f));
+                                }
+                                const max = Math.max(...visData, 0.001);
+                                setVisuals(visData.map(v => (v/max)*100));
+                            }
+                            processBuffer(state, ctx.sampleRate);
+                        };
+                    } catch (e) { setStatus("Mic Error: " + e.message); }
+                };
+                const processBuffer = (state, sr) => {
+                    const symbolSamps = Math.floor(sr * (PROTOCOL.SYMBOL_MS/1000));
+                    const preambleFreq = PROTOCOL.BASE_FREQ + PROTOCOL.PREAMBLE_SYM * PROTOCOL.FREQ_SPACING;
+                    if (state.mode === 'WAIT_PREAMBLE') {
+                        if(state.buffer.length < symbolSamps) return;
+                        const window = state.buffer.slice(-symbolSamps);
+                        const energy = GibberLink.goertzel(window, sr, preambleFreq);
+                        if (energy > 0.05) {
+                            state.mode = 'SYNCING';
+                            setStatus("Preamble Detected! Syncing...");
+                            state.syncIndex = state.buffer.length;
+                        }
+                    } else if (state.mode === 'SYNCING') {
+                        const samplesNeeded = symbolSamps * 6;
+                        if (state.buffer.length - state.syncIndex > samplesNeeded) {
+                             state.mode = 'READING';
+                             state.readIndex = state.syncIndex + (symbolSamps * 5);
+                             setStatus("Reading Payload...");
+                        }
+                    } else if (state.mode === 'READING') {
+                        while (state.buffer.length - state.readIndex >= symbolSamps) {
+                            const window = state.buffer.slice(state.readIndex, state.readIndex + symbolSamps);
+                            let maxE = 0, bestSym = -1;
+                            for(let i=0; i<32; i++) {
+                                const f = PROTOCOL.BASE_FREQ + i * PROTOCOL.FREQ_SPACING;
+                                const e = GibberLink.goertzel(window, sr, f);
+                                if(e > maxE) { maxE = e; bestSym = i; }
+                            }
+                            state.readIndex += symbolSamps;
+                            if (bestSym === PROTOCOL.STOP_SYM) {
+                                finishDecode(state);
+                                state.mode = 'DONE';
+                                return;
+                            }
+                            state.payload.push(bestSym);
+                        }
+                    }
+                };
+                const finishDecode = (state) => {
+                    try {
+                        const type = state.payload[0];
+                        const lenHigh = state.payload[1];
+                        const lenLow = state.payload[2];
+                        const len = (lenHigh << 5) | lenLow;
+                        const dataSyms = state.payload.slice(3, 3 + len);
+                        let b32 = "";
+                        for(let s of dataSyms) if(s < 32 && s >= 0) b32 += BASE32_ALPHABET[s];
+                        const lookup = {};
+                        for(let i=0; i<BASE32_ALPHABET.length; i++) lookup[BASE32_ALPHABET[i]] = i;
+                        let bits = 0, value = 0;
+                        const bytes = [];
+                        for(let i=0; i<b32.length; i++) {
+                            value = (value << 5) | lookup[b32[i]];
+                            bits += 5;
+                            while(bits >= 8) {
+                                bytes.push((value >>> (bits - 8)) & 0xFF);
+                                bits -= 8;
+                            }
+                        }
+                        if (bytes.length < 4) throw new Error("Too short");
+                        const dataBytes = new Uint8Array(bytes.slice(0, bytes.length - 4));
+                        const recvCrcVals = bytes.slice(bytes.length - 4);
+                        const recvCrc = ((recvCrcVals[0] << 24) | (recvCrcVals[1] << 16) | (recvCrcVals[2] << 8) | recvCrcVals[3]) >>> 0;
+                        const calcCrc = GibberLink.crc32(dataBytes) >>> 0;
+                        if (calcCrc !== recvCrc) throw new Error("CRC Fail");
+                        const jsonStr = new TextDecoder().decode(dataBytes);
+                        onData(jsonStr);
+                    } catch(e) {
+                        setStatus("Decode Error: " + e.message);
+                        setTimeout(() => {
+                            stateRef.current.mode = 'WAIT_PREAMBLE';
+                            stateRef.current.payload = [];
+                            stateRef.current.buffer = [];
+                            setStatus("Listening...");
+                        }, 2000);
+                    }
+                };
+                initAudio();
+                return () => {
+                    if(streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
+                    if(ctxRef.current) ctxRef.current.close();
+                };
+            }, []);
+            return (
+                <div className="fixed inset-0 z-50 bg-black/95 flex flex-col items-center justify-center p-6">
+                    <div className="text-center mb-8">
+                        <h2 className="text-2xl font-bold text-white mb-2">Sonic Receiver</h2>
+                        <p className="font-mono text-cyan-400">{status}</p>
+                    </div>
+                    <div className="flex items-end gap-[2px] h-32 mb-4 bg-slate-900/50 p-4 rounded-xl border border-slate-700 w-full max-w-md">
+                        {visuals.map((v, i) => (
+                            <div key={i} className="flex-1 bg-cyan-500 rounded-t transition-all duration-75" style={{height: `${Math.min(100, v*5)}%`, opacity: 0.5 + (v/200)}}></div>
+                        ))}
+                    </div>
+                    <button onClick={onClose} className="mt-8 bg-slate-800 px-8 py-3 rounded-full text-white font-bold hover:bg-slate-700 border border-slate-600">Cancel</button>
+                </div>
+            );
+        };
+        const FileLog = ({ fileLog, onDownload }) => (
+            <div className="space-y-3 overflow-y-auto touch-scroll flex-1">
+                {fileLog.length === 0 ? (
+                    <div className="text-center text-slate-600 mt-10">
+                        <Icon p={icons.file} size={48} className="mx-auto mb-2 opacity-20"/>
+                        <p className="text-sm">No files shared yet.</p>
+                    </div>
+                ) : (
+                    fileLog.map((log, i) => (
+                        <div key={i} className="glass p-4 rounded-xl flex items-center justify-between">
+                            <div className="flex items-center gap-3 flex-1">
+                                <div className={`p-2 rounded-lg ${log.type === 'sent' ? 'bg-green-600' : 'bg-blue-600'}`}>
+                                    <Icon p={icons.file} size={20} className="text-white" />
+                                </div>
+                                <div>
+                                    <p className="font-bold text-sm text-white truncate">{log.name}</p>
+                                    <p className="text-xs text-slate-400 font-mono">{log.timestamp}</p>
+                                </div>
+                            </div>
+                            {log.type === 'received' && !log.downloaded && (
+                                <button onClick={() => onDownload(log)} className="bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded-lg text-xs font-bold transition-colors">
+                                    Download
+                                </button>
+                            )}
+                            {log.type === 'received' && log.downloaded && (
+                                <div className="text-green-400 text-xs font-bold flex items-center gap-1">
+                                    <Icon p={icons.check} size={12} /> Downloaded
+                                </div>
+                            )}
+                        </div>
+                    ))
+                )}
+            </div>
+        );
+        // --- MAIN APP ---
+        const App = () => {
+            const [mode, setMode] = useState('NORMAL');
+            const [activeTab, setActiveTab] = useState('CONNECT');
+            const [keys, setKeys] = useState(null);
+            const [identityPayload, setIdentityPayload] = useState(null);
+            const [handshakeReply, setHandshakeReply] = useState(null);
+            const [sessionKey, setSessionKey] = useState(null);
+            const [fingerprint, setFingerprint] = useState(null);
+            const [scanner, setScanner] = useState(null);
+            const [fileTransfer, setFileTransfer] = useState(null);
+            const [incomingFile, setIncomingFile] = useState({ id: null, chunks: {}, total: 0, complete: false });
+            const [pendingDownload, setPendingDownload] = useState(null);
+            const [fileLog, setFileLog] = useState([]);
+            const [chat, setChat] = useState([]);
+            const [msg, setMsg] = useState("");
+            const [audioPlaying, setAudioPlaying] = useState(false);
+            const chatEndRef = useRef(null);
+            const chatContainerRef = useRef(null);
+            const [interceptedPacket, setInterceptedPacket] = useState(null);
+            const lastScanRef = useRef("");
+           
+            useEffect(() => {
+                if (scanner) lastScanRef.current = "";
+            }, [scanner]);
+           
+            useEffect(() => {
+                if (incomingFile.complete && incomingFile.total > 0) {
+                    assembleFileNoDownload(incomingFile).then(({url, filename}) => {
+                        const newLog = { type: 'received', name: filename, timestamp: new Date().toLocaleString(), url, downloaded: false };
+                        setFileLog(prev => [newLog, ...prev]);
+                        setChat(prev => [...prev, { from: 'Partner', text: `📎 Shared file: ${filename}` }]);
+                        setPendingDownload(newLog);
+                    }).catch(e => {
+                        console.error(e);
+                        alert("File assembly failed: " + e.message);
+                    }).finally(() => {
+                        setIncomingFile({ id: null, chunks: {}, total: 0, complete: false });
+                        setScanner(null);
+                    });
+                }
+            }, [incomingFile.complete]);
+            useEffect(() => {
+                if (chatContainerRef.current) {
+                    chatContainerRef.current.scrollTo({
+                        top: chatContainerRef.current.scrollHeight,
+                        behavior: 'smooth'
+                    });
+                }
+            }, [chat]);
+            const genKeys = async () => {
+                setKeys(null); setSessionKey(null); setFingerprint(null); setChat([]);
+                const rsa = await window.crypto.subtle.generateKey(
+                    { name: "RSA-OAEP", modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: "SHA-256" },
+                    true, ["encrypt", "decrypt"]
+                );
+                const ecdh = await window.crypto.subtle.generateKey(
+                    { name: "ECDH", namedCurve: "P-256" },
+                    true, ["deriveKey", "deriveBits"]
+                );
+                setKeys({ rsa, ecdh });
+                const rsaExp = await window.crypto.subtle.exportKey("spki", rsa.publicKey);
+                const rsaStr = btoa(String.fromCharCode(...new Uint8Array(rsaExp)));
+                const myFp = await generateFingerprint(rsaExp);
+                setIdentityPayload({
+                    t: "ID",
+                    k: rsaStr,
+                    fp: myFp.hex
+                });
+            };
+            useEffect(() => { genKeys(); }, []);
+           
+            const playAudioPayload = async (dataStr) => {
+                if(audioPlaying) return;
+                setAudioPlaying(true);
+                await GibberLink.transmit(dataStr);
+                setAudioPlaying(false);
+            };
+            const handleScan = async (raw) => {
+                if (raw === lastScanRef.current) return;
+                lastScanRef.current = raw;
+                if (mode === 'DARTH') {
+                    setScanner(null);
+                    setInterceptedPacket({ raw, time: new Date().toLocaleTimeString() });
+                    return;
+                }
+                try {
+                    if (raw.startsWith("F|")) {
+                        if (!sessionKey) return;
+                        const [_, id, idxStr, totStr, data] = raw.split("|");
+                        const idx = parseInt(idxStr);
+                        const tot = parseInt(totStr);
+                       
+                        setIncomingFile(prev => {
+                            if (prev.complete) return prev;
+                            const isNewFile = prev.id !== id;
+                            let newChunks = isNewFile ? {} : { ...prev.chunks };
+                           
+                            if (newChunks[idx]) return prev;
+                            newChunks[idx] = data;
+                           
+                            const isComplete = Object.keys(newChunks).length === tot;
+                           
+                            return {
+                                id: id,
+                                chunks: newChunks,
+                                total: tot,
+                                complete: isComplete
+                            };
+                        });
+                        return;
+                    }
+                    const p = JSON.parse(raw);
+                    if (p.t === "ID") {
+                        const kData = Uint8Array.from(atob(p.k), c => c.charCodeAt(0));
+                        const partnerRsa = await window.crypto.subtle.importKey(
+                            "spki", kData, { name: "RSA-OAEP", hash: "SHA-256" }, true, ["encrypt"]
+                        );
+                        const myEcdhRaw = await window.crypto.subtle.exportKey("raw", keys.ecdh.publicKey);
+                        const encEcdh = await window.crypto.subtle.encrypt(
+                            { name: "RSA-OAEP" }, partnerRsa, myEcdhRaw
+                        );
+                        const reply = { t: "HSH", d: buf2hex(encEcdh) };
+                        setHandshakeReply(JSON.stringify(reply));
+                        setScanner(null);
+                        alert(`Partner Identity Scanned!\nFingerprint: ${p.fp}\n\nVerify this matches their screen!`);
+                    }
+                    else if (p.t === "HSH") {
+                        if (!keys) return;
+                        const encBuf = hex2buf(p.d);
+                        const partnerEcdhRaw = await window.crypto.subtle.decrypt(
+                            { name: "RSA-OAEP" }, keys.rsa.privateKey, encBuf
+                        );
+                        const partnerEcdhKey = await window.crypto.subtle.importKey(
+                            "raw", partnerEcdhRaw, { name: "ECDH", namedCurve: "P-256" }, true, []
+                        );
+                        const sharedBits = await window.crypto.subtle.deriveBits(
+                            { name: "ECDH", public: partnerEcdhKey },
+                            keys.ecdh.privateKey,
+                            256
+                        );
+                        const hkdfKey = await window.crypto.subtle.importKey(
+                            "raw", sharedBits, { name: "HKDF" }, false, ["deriveKey"]
+                        );
+                        const sessionKey = await window.crypto.subtle.deriveKey(
+                            {
+                                name: "HKDF",
+                                hash: "SHA-256",
+                                salt: new Uint8Array(),
+                                info: new TextEncoder().encode("GibberLinkv2_Session")
+                            },
+                            hkdfKey,
+                            { name: "AES-GCM", length: 256 },
+                            false,
+                            ["encrypt", "decrypt"]
+                        );
+                        const fp = await generateFingerprint(sharedBits);
+                        setSessionKey(sessionKey);
+                        setFingerprint(fp);
+                        setScanner(null);
+                        setActiveTab('VERIFY');
+                        alert("Handshake Complete. Secure Tunnel Established.");
+                    }
+                    else if (p.iv) {
+                        if (!sessionKey) throw new Error("No secure session.");
+                        const iv = hex2buf(p.iv);
+                        const ct = hex2buf(p.d);
+                        const pt = await window.crypto.subtle.decrypt(
+                            { name: "AES-GCM", iv }, sessionKey, ct
+                        );
+                        const text = new TextDecoder().decode(pt);
+                        setChat(prev => [...prev, { from: 'Partner', text }]);
+                        setScanner(null);
+                        setActiveTab('CHAT');
+                        alert("New Message Received");
+                    }
+                } catch (e) {
+                    console.error(e);
+                }
+            };
+            const assembleFileNoDownload = async (fileObj) => {
+                const orderedData = [];
+                for(let i=0; i<fileObj.total; i++) orderedData.push(fileObj.chunks[i]);
+                const blobBase64 = orderedData.join('');
+                const binStr = atob(blobBase64);
+                const encBytes = new Uint8Array(binStr.length);
+                for(let i=0; i<binStr.length; i++) encBytes[i] = binStr.charCodeAt(i);
+                const iv = encBytes.slice(0, 12);
+                const data = encBytes.slice(12);
+                const decrypted = await window.crypto.subtle.decrypt(
+                    { name: "AES-GCM", iv }, sessionKey, data
+                );
+                const view = new DataView(decrypted);
+                const mimeLen = view.getUint8(0);
+                const mimeBytes = new Uint8Array(decrypted, 1, mimeLen);
+                const mime = new TextDecoder().decode(mimeBytes);
+                const fileData = new Uint8Array(decrypted, 1 + mimeLen);
+                const blob = new Blob([fileData], { type: mime });
+                const url = URL.createObjectURL(blob);
+                const ext = mime.split('/')[1] || 'bin';
+                const filename = `secure_recv.${ext}`;
+                return { url, filename };
+            };
+            const handleDownload = (logEntry) => {
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = logEntry.url;
+                a.download = logEntry.name;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(logEntry.url);
+                setFileLog(prev => prev.map(log => log === logEntry ? { ...log, downloaded: true } : log));
+                setPendingDownload(null);
+                alert("File Downloaded!");
+            };
+            const sendMessage = async () => {
+                if (!msg || !sessionKey) return;
+                const iv = window.crypto.getRandomValues(new Uint8Array(12));
+                const enc = await window.crypto.subtle.encrypt(
+                    { name: "AES-GCM", iv }, sessionKey, new TextEncoder().encode(msg)
+                );
+                const packet = { iv: buf2hex(iv), d: buf2hex(enc) };
+                const json = JSON.stringify(packet);
+                setFileTransfer({ chunks: [json], label: "Encrypted Message" });
+                setChat(prev => [...prev, { from: 'Me', text: msg }]);
+                setMsg("");
+            };
+            const handleFileSelect = async (e) => {
+                const file = e.target.files[0];
+                if (!file || !sessionKey) return;
+                const newLog = { type: 'sent', name: file.name, timestamp: new Date().toLocaleString() };
+                setFileLog(prev => [newLog, ...prev]);
+                setChat(prev => [...prev, { from: 'Me', text: `📎 Shared file: ${file.name}` }]);
+                const raw = await file.arrayBuffer();
+                const mimeBytes = new TextEncoder().encode(file.type);
+                const pack = new Uint8Array(1 + mimeBytes.length + raw.byteLength);
+                pack[0] = mimeBytes.length;
+                pack.set(mimeBytes, 1);
+                pack.set(new Uint8Array(raw), 1 + mimeBytes.length);
+                const iv = window.crypto.getRandomValues(new Uint8Array(12));
+                const enc = await window.crypto.subtle.encrypt(
+                    { name: "AES-GCM", iv }, sessionKey, pack
+                );
+                const finalPayload = new Uint8Array(12 + enc.byteLength);
+                finalPayload.set(iv, 0);
+                finalPayload.set(new Uint8Array(enc), 12);
+                let binary = "";
+                for(let i=0; i<finalPayload.length; i++) binary += String.fromCharCode(finalPayload[i]);
+                const b64 = btoa(binary);
+                const id = Math.floor(Math.random()*10000).toString(16);
+                const chunks = [];
+                const total = Math.ceil(b64.length / PROTOCOL.QR_CHUNK_SIZE);
+                for(let i=0; i<total; i++) {
+                    const slice = b64.slice(i*PROTOCOL.QR_CHUNK_SIZE, (i+1)*PROTOCOL.QR_CHUNK_SIZE);
+                    chunks.push(`F|${id}|${i}|${total}|${slice}`);
+                }
+                setFileTransfer({ chunks, label: `Sending ${file.name}` });
+            };
+            const darthTamper = () => {
+                if (!interceptedPacket) return;
+                let badRaw = interceptedPacket.raw.replace(/[a-fA-F0-9]/, "X");
+                try {
+                    const p = JSON.parse(interceptedPacket.raw);
+                    if (p.d) p.d = p.d.replace(/^../, "FF");
+                    badRaw = JSON.stringify(p);
+                } catch(e) {}
+                const id = Math.random().toString(36).substr(2,5);
+                setFileTransfer({ chunks: [badRaw], label: `Tampered Packet #${id}`, theme: "red" });
+            };
+            return (
+                <div className={`h-full w-full flex flex-col transition-colors duration-500 ${mode === 'DARTH' ? 'bg-slate-950' : 'bg-slate-900'}`}>
+                    {/* Header */}
+                    <header className={`p-4 flex-shrink-0 flex justify-between items-center z-10 ${mode === 'DARTH' ? 'bg-red-950 border-b border-red-900' : 'bg-slate-800 border-b border-cyan-900'}`}>
+                        <div className="flex items-center gap-3">
+                            <div className={`p-2 rounded-lg ${mode==='DARTH' ? 'bg-red-600 text-white' : 'bg-cyan-500 text-black'}`}>
+                                <Icon p={mode==='DARTH' ? icons.skull : icons.shield} />
+                            </div>
+                            <div>
+                                <h1 className="font-bold text-lg leading-none text-white tracking-tighter">GibberLink <span className="text-xs opacity-50">v2.1</span></h1>
+                                <div className={`text-[10px] font-mono ${mode==='DARTH' ? 'text-red-400' : 'text-cyan-400'}`}>
+                                    {mode==='DARTH' ? 'INTERCEPTOR MODE' : 'SECURE CHANNEL'}
+                                </div>
+                            </div>
+                        </div>
+                        <div className="flex gap-2">
+                             <button onClick={()=>{setMode(mode==='NORMAL'?'DARTH':'NORMAL'); setScanner(null); setInterceptedPacket(null);}}
+                                className={`px-3 py-1 rounded border text-xs font-bold transition-all ${mode==='NORMAL' ? 'border-red-900 text-red-900 hover:bg-red-900 hover:text-white opacity-30 hover:opacity-100' : 'bg-cyan-500 text-black border-cyan-500'}`}>
+                                {mode==='NORMAL' ? 'ACTIVATE DARTH' : 'EXIT DARTH'}
+                             </button>
+                        </div>
+                    </header>
+                    {/* MAIN CONTENT */}
+                    <main className="flex-1 overflow-hidden relative flex flex-col min-h-0">
+                        {mode === 'NORMAL' && (
+                            <div className="flex-1 flex flex-col p-4 w-full mx-auto max-w-md md:max-w-4xl transition-all duration-300 min-h-0">
+                                {/* TABS */}
+                                <div className="flex-shrink-0 flex p-1 bg-slate-800 rounded-xl mb-4">
+                                    {['CONNECT','VERIFY','CHAT','FILES'].map(t => (
+                                        <button key={t} onClick={()=>setActiveTab(t)}
+                                            className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${activeTab===t ? 'bg-cyan-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}>
+                                            {t}
+                                        </button>
+                                    ))}
+                                </div>
+                                {/* TAB: CONNECT */}
+                                {activeTab === 'CONNECT' && (
+                                    <div className="h-full flex flex-col min-h-0">
+                                        <div className="flex-1 overflow-y-auto touch-scroll">
+                                            <div className={`grid grid-cols-1 ${handshakeReply ? 'md:grid-cols-2' : ''} gap-4 items-start pb-20`}>
+                                                {/* Identity Panel */}
+                                                <div className="glass p-6 rounded-2xl flex flex-col items-center text-center h-full">
+                                                    <div className="mb-4">
+                                                        <h2 className="text-white font-bold text-sm">STEP 1: IDENTITY</h2>
+                                                        <p className="text-slate-400 text-xs">Show this to partner</p>
+                                                    </div>
+                                                    {identityPayload && (
+                                                        <QRDisplay
+                                                            data={JSON.stringify(identityPayload)}
+                                                            label="MY IDENTITY"
+                                                            subLabel={`FP: ${identityPayload.fp}`}
+                                                            color="black"
+                                                        />
+                                                    )}
+                                                    {identityPayload && (
+                                                        <button onClick={()=>playAudioPayload(JSON.stringify(identityPayload))} disabled={audioPlaying}
+                                                            className="w-full mt-3 bg-cyan-900/40 hover:bg-cyan-800 border border-cyan-700 text-cyan-200 text-xs py-2 rounded flex items-center justify-center gap-2 transition-colors">
+                                                            <Icon p={icons.sound} size={14} /> {audioPlaying ? 'Broadcasting...' : 'Broadcast via Audio'}
+                                                        </button>
+                                                    )}
+                                                </div>
+                                                {/* Reply Panel */}
+                                                {handshakeReply && (
+                                                    <div className="glass p-6 rounded-2xl flex flex-col items-center text-center border border-green-500/30 shadow-[0_0_30px_rgba(34,197,94,0.1)] h-full">
+                                                        <div className="mb-4">
+                                                            <h2 className="text-green-400 font-bold text-sm">STEP 2: HANDSHAKE</h2>
+                                                            <p className="text-green-200/50 text-xs">Reply generated from scan</p>
+                                                        </div>
+                                                        <QRDisplay data={handshakeReply} label="SESSION DATA" color="black" />
+                                                        <button onClick={()=>playAudioPayload(handshakeReply)} disabled={audioPlaying}
+                                                            className="w-full mt-3 bg-green-900/40 hover:bg-green-800 border border-green-700 text-green-200 text-xs py-2 rounded flex items-center justify-center gap-2 transition-colors">
+                                                            <Icon p={icons.sound} size={14} /> {audioPlaying ? 'Broadcasting...' : 'Broadcast via Audio'}
+                                                        </button>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                                {/* TAB: VERIFY */}
+                                {activeTab === 'VERIFY' && (
+                                    <div className="anim-fade space-y-4 overflow-y-auto touch-scroll flex-1 min-h-0">
+                                        <div className="glass p-8 rounded-2xl text-center space-y-6">
+                                            <div className="w-16 h-16 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center mx-auto mb-2">
+                                                <Icon p={sessionKey ? icons.lock : icons.unlock} size={32} />
+                                            </div>
+                                            <div>
+                                                <h2 className="text-white font-bold text-xl">Session Status</h2>
+                                                <p className={sessionKey ? "text-emerald-400" : "text-red-400"}>
+                                                    {sessionKey ? "SECURE (AES-GCM-256)" : "NOT CONNECTED"}
+                                                </p>
+                                            </div>
+                                           
+                                            {sessionKey && fingerprint && (
+                                                <div className="bg-slate-950 p-4 rounded-xl border border-slate-800">
+                                                    <p className="text-xs text-slate-500 uppercase tracking-widest mb-2">Safety Fingerprint</p>
+                                                    <div className="text-4xl mb-2">{fingerprint.emoji}</div>
+                                                    <div className="font-mono text-xl text-yellow-500 tracking-widest">{fingerprint.hex}</div>
+                                                    <p className="text-[10px] text-slate-500 mt-2 mx-auto max-w-[200px] leading-tight">
+                                                        Compare this visually with your partner. If they match, the channel is secure against MITM.
+                                                    </p>
+                                                </div>
+                                            )}
+                                           
+                                            {sessionKey && (
+                                                <button onClick={()=>setActiveTab('CHAT')} className="w-full bg-cyan-600 hover:bg-cyan-500 text-white font-bold py-3 rounded-xl transition-colors">
+                                                    Open Chat Channel
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+                                {/* TAB: CHAT */}
+                                {activeTab === 'CHAT' && (
+                                    <div className="anim-fade flex flex-col flex-1 min-h-0">
+                                        <div ref={chatContainerRef} className="flex-1 glass rounded-2xl p-4 overflow-y-auto touch-scroll space-y-3 mb-2 scrollbar-hide">
+                                            {chat.length === 0 && (
+                                                <div className="text-center text-slate-600 mt-10">
+                                                    <Icon p={icons.shield} size={48} className="mx-auto mb-2 opacity-20"/>
+                                                    <p className="text-sm">Channel Encrypted.</p>
+                                                    <p className="text-xs">HKDF-derived AES-GCM-256</p>
+                                                </div>
+                                            )}
+                                            {chat.map((c, i) => (
+                                                <div key={i} className={`flex ${c.from==='Me'?'justify-end':''}`}>
+                                                    <div className={`max-w-[80%] p-3 rounded-2xl text-sm ${c.from==='Me' ? 'bg-cyan-600 text-white rounded-br-none' : 'bg-slate-700 text-slate-200 rounded-bl-none'}`}>
+                                                        {c.text}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                            <div ref={chatEndRef} />
+                                        </div>
+                                       
+                                        <div className="flex gap-2 flex-shrink-0 pt-2">
+                                            <button onClick={()=>setScanner('QR')} className="bg-slate-700 hover:bg-slate-600 text-slate-300 p-3 rounded-xl transition-colors" title="Scan QR Message">
+                                                <Icon p={icons.eye} />
+                                            </button>
+                                            <button onClick={()=>setScanner('AUDIO')} className="bg-slate-700 hover:bg-slate-600 text-slate-300 p-3 rounded-xl transition-colors" title="Listen for Audio">
+                                                <Icon p={icons.mic} />
+                                            </button>
+                                            <input value={msg} onChange={e=>setMsg(e.target.value)}
+                                                className="flex-1 bg-slate-800 text-white px-4 rounded-xl border border-slate-700 focus:border-cyan-500 outline-none min-w-0"
+                                                placeholder="Message..."
+                                            />
+                                            <label className="bg-slate-700 hover:bg-slate-600 text-slate-300 p-3 rounded-xl cursor-pointer transition-colors flex-shrink-0">
+                                                <input type="file" className="hidden" onChange={handleFileSelect} />
+                                                <Icon p={icons.file} />
+                                            </label>
+                                            <button onClick={sendMessage} className="bg-cyan-600 hover:bg-cyan-500 text-white p-3 rounded-xl shadow-lg transition-transform active:scale-95 flex-shrink-0">
+                                                <Icon p={icons.send} />
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+                                {/* TAB: FILES */}
+                                {activeTab === 'FILES' && (
+                                    <div className="anim-fade flex flex-col flex-1 min-h-0">
+                                        <div className="glass p-4 rounded-2xl mb-2">
+                                            <h2 className="text-white font-bold text-sm mb-2">File Share Log</h2>
+                                            <p className="text-slate-400 text-xs">History of sent and received files</p>
+                                        </div>
+                                        <FileLog fileLog={fileLog.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp))} onDownload={handleDownload} />
+                                    </div>
+                                )}
+                                {/* MAIN SCAN FABs */}
+                                {!sessionKey && activeTab === 'CONNECT' && (
+                                    <div className="fixed bottom-6 right-6 flex flex-col gap-3">
+                                        <button onClick={()=>setScanner('AUDIO')} className="bg-purple-600 hover:bg-purple-500 text-white p-4 rounded-full shadow-[0_0_20px_rgba(147,51,234,0.4)] transition-transform hover:scale-110 active:scale-95">
+                                            <Icon p={icons.mic} size={32} />
+                                        </button>
+                                        <button onClick={()=>setScanner('QR')} className="bg-cyan-500 hover:bg-cyan-400 text-slate-900 p-4 rounded-full shadow-[0_0_30px_rgba(6,182,212,0.4)] transition-transform hover:scale-110 active:scale-95">
+                                            <Icon p={icons.eye} size={32} />
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                        {/* DARTH MODE UI */}
+                        {mode === 'DARTH' && (
+                            <div className="anim-fade max-w-md mx-auto space-y-6 p-4 overflow-y-auto touch-scroll flex-1 w-full min-h-0">
+                                <div className="darth-glass p-6 rounded-2xl text-red-100 border-l-4 border-red-600 relative overflow-hidden">
+                                    <div className="absolute top-0 right-0 p-4 opacity-10"><Icon p={icons.bug} size={100} /></div>
+                                    <h2 className="text-xl font-bold mb-1">Packet Interceptor</h2>
+                                    <p className="text-red-400 text-xs mb-6">Capture, Analyze, Corrupt</p>
+                                   
+                                    {!interceptedPacket ? (
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <button onClick={()=>setScanner('QR')} className="h-32 border-2 border-dashed border-red-500/50 rounded-xl flex flex-col items-center justify-center text-red-400 hover:bg-red-900/20 hover:border-red-400 transition-all cursor-pointer">
+                                                <Icon p={icons.eye} size={40} className="mb-2" />
+                                                <span className="font-mono text-sm">SCAN QR</span>
+                                            </button>
+                                            <button onClick={()=>setScanner('AUDIO')} className="h-32 border-2 border-dashed border-purple-500/50 rounded-xl flex flex-col items-center justify-center text-purple-400 hover:bg-purple-900/20 hover:border-purple-400 transition-all cursor-pointer">
+                                                <Icon p={icons.mic} size={40} className="mb-2" />
+                                                <span className="font-mono text-sm">LISTEN</span>
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-4">
+                                            <div className="bg-black/50 p-4 rounded-xl font-mono text-[10px] break-all border border-red-900/50 relative">
+                                                <div className="absolute top-2 right-2 text-red-500 text-[9px]">CAPTURED AT {interceptedPacket.time}</div>
+                                                {interceptedPacket.raw}
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <button onClick={()=>{alert("Brute Force Failed: AES-256 Entropy too high.\nKeyspace: 2^256");}} className="bg-red-900/50 hover:bg-red-900 border border-red-700 text-red-200 py-3 rounded-lg text-xs font-bold">
+                                                    ATTEMPT CRACK
+                                                </button>
+                                                <button onClick={darthTamper} className="bg-red-600 hover:bg-red-500 text-white py-3 rounded-lg text-xs font-bold shadow-[0_0_15px_rgba(220,38,38,0.4)]">
+                                                    TAMPER & REPLAY
+                                                </button>
+                                            </div>
+                                           
+                                            <button onClick={()=>setInterceptedPacket(null)} className="w-full py-2 text-xs text-red-400 hover:text-red-200">
+                                                DISCARD & SCAN NEW
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                               
+                                <div className="p-4 rounded-xl bg-slate-900/50 border border-slate-800 text-xs text-slate-500">
+                                    <strong className="text-slate-400 block mb-1">DARTH CONSOLE:</strong>
+                                    Use this mode to test the security of the Normal mode. Try to tamper with a packet and scan it on a receiving device. The receiver's integrity check (GCM Auth Tag) should fail.
+                                </div>
+                            </div>
+                        )}
+                    </main>
+                    {/* MODALS */}
+                    {scanner === 'QR' && (
+                        <QRScanner
+                            onScan={handleScan}
+                            onClose={()=>setScanner(null)}
+                            incomingFile={incomingFile}
+                            isDarth={mode==='DARTH'}
+                        />
+                    )}
+                    {scanner === 'AUDIO' && (
+                        <AudioListener
+                            onData={(d)=>{setScanner(null); handleScan(d);}}
+                            onClose={()=>setScanner(null)}
+                        />
+                    )}
+                    {fileTransfer && (
+                        <AnimatedQR
+                            chunks={fileTransfer.chunks}
+                            label={fileTransfer.label}
+                            theme={fileTransfer.theme}
+                            onClose={()=>setFileTransfer(null)}
+                        />
+                    )}
+                    {pendingDownload && (
+                        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+                            <div className="bg-white p-6 rounded-2xl text-center max-w-sm glass">
+                                <Icon p={icons.download} size={48} className="mx-auto text-green-500 mb-4" />
+                                <h3 className="text-lg font-bold text-slate-900 mb-2">File Received Securely!</h3>
+                                <p className="text-slate-600 mb-4">Ready to download: {pendingDownload.name}</p>
+                                <div className="space-y-3">
+                                    <button onClick={() => handleDownload(pendingDownload)} className="w-full bg-green-600 hover:bg-green-500 text-white py-3 rounded-xl font-bold transition-colors">
+                                        <Icon p={icons.download} size={16} className="inline mr-2" /> Download Now
+                                    </button>
+                                    <button onClick={() => {
+                                        URL.revokeObjectURL(pendingDownload.url);
+                                        setPendingDownload(null);
+                                    }} className="w-full text-slate-500 hover:text-slate-700 py-2 text-sm">
+                                        Cancel
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
