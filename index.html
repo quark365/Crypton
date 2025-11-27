@@ -30,6 +30,18 @@
         @keyframes lock { 0% { transform: scale(1.5); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
         .slide-in { animation: slide 0.3s ease-out; }
         @keyframes slide { 0% { transform: translateY(20px); opacity: 0; } 100% { transform: translateY(0); opacity: 1; } }
+        
+        /* Range Slider Styling */
+        input[type=range] {
+            -webkit-appearance: none; width: 100%; background: transparent;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none; height: 16px; width: 16px; border-radius: 50%;
+            background: #06b6d4; cursor: pointer; margin-top: -6px;
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%; height: 4px; cursor: pointer; background: #334155; border-radius: 2px;
+        }
     </style>
 </head>
 <body class="matrix-bg min-h-screen">
@@ -48,7 +60,7 @@
             HEADER_DURATION: 1.5,
             FFT_SIZE: 2048,
             THRESHOLD: 30,
-            QR_FRAME_RATE: 150, 
+            QR_FRAME_RATE: 800,  // SLOWER DEFAULT SPEED (was 150)
             QR_CHUNK_SIZE: 400 
         };
 
@@ -69,7 +81,11 @@
             skull: <path d="M12 22s4-2 4-7V9c0-5-8-5-8 0v6c0 5 4 7 4 7z"/>,
             refresh: <><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"/><path d="M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></>,
             file: <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />,
-            clip: <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+            clip: <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />,
+            play: <polygon points="5 3 19 12 5 21 5 3"></polygon>,
+            pause: <><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></>,
+            prev: <polygon points="19 20 9 12 19 4 19 20"></polygon>,
+            next: <polygon points="5 4 15 12 5 20 5 4"></polygon>
         };
 
         // --- CRYPTO HELPERS ---
@@ -136,33 +152,89 @@
 
         const AnimatedQR = ({ chunks, label, onClose }) => {
             const [index, setIndex] = useState(0);
+            const [isPaused, setIsPaused] = useState(false);
             
             useEffect(() => {
-                if (!chunks || chunks.length === 0) return;
+                if (!chunks || chunks.length === 0 || isPaused) return;
                 const interval = setInterval(() => {
                     setIndex(prev => (prev + 1) % chunks.length);
                 }, PROTOCOL.QR_FRAME_RATE);
                 return () => clearInterval(interval);
-            }, [chunks]);
+            }, [chunks, isPaused]);
+
+            const handleSlider = (e) => {
+                setIndex(parseInt(e.target.value));
+                setIsPaused(true); // Auto pause when user scrubs
+            };
+
+            const togglePause = () => setIsPaused(!isPaused);
+            const prevChunk = () => {
+                setIndex(prev => (prev - 1 + chunks.length) % chunks.length);
+                setIsPaused(true);
+            };
+            const nextChunk = () => {
+                setIndex(prev => (prev + 1) % chunks.length);
+                setIsPaused(true);
+            };
 
             return (
                 <div className="fixed inset-0 z-50 bg-black/95 flex flex-col items-center justify-center p-4">
-                    <div className="bg-white p-4 rounded-2xl flex flex-col items-center shadow-[0_0_50px_rgba(6,182,212,0.5)]">
-                        <QRDisplay data={chunks[index]} label={`${label} (${index + 1}/${chunks.length})`} />
-                        <div className="w-full bg-gray-200 h-2 mt-4 rounded-full overflow-hidden">
-                            <div className="bg-blue-600 h-full transition-all" style={{width: `${((index+1)/chunks.length)*100}%`}}></div>
+                    <div className="bg-white p-4 rounded-2xl flex flex-col items-center shadow-[0_0_50px_rgba(6,182,212,0.5)] w-full max-w-sm">
+                        <QRDisplay data={chunks[index]} label={`${label}`} />
+                        
+                        <div className="w-full mt-4 space-y-2">
+                            <div className="flex justify-between text-black font-bold text-sm">
+                                <span>Part {index + 1}</span>
+                                <span>Total {chunks.length}</span>
+                            </div>
+                            
+                            <input 
+                                type="range" 
+                                min="0" 
+                                max={chunks.length - 1} 
+                                value={index} 
+                                onChange={handleSlider}
+                                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                            />
+
+                            <div className="flex justify-center gap-4 mt-2">
+                                <button onClick={prevChunk} className="p-2 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-800"><Icon p={icons.prev} /></button>
+                                <button onClick={togglePause} className={`p-3 rounded-full text-white ${isPaused ? 'bg-green-500 hover:bg-green-600' : 'bg-slate-800 hover:bg-slate-700'}`}>
+                                    <Icon p={isPaused ? icons.play : icons.pause} />
+                                </button>
+                                <button onClick={nextChunk} className="p-2 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-800"><Icon p={icons.next} /></button>
+                            </div>
                         </div>
                     </div>
-                    <p className="text-cyan-400 mt-4 font-mono text-sm animate-pulse">Broadcasting Hybrid Stream...</p>
-                    <button onClick={onClose} className="mt-8 bg-slate-800 px-8 py-3 rounded-full text-white font-bold hover:bg-slate-700">Stop Broadcast</button>
+                    
+                    <p className="text-cyan-400 mt-4 font-mono text-sm text-center max-w-xs">
+                        {isPaused ? "Paused. Use slider to find missing part." : "Broadcasting... (Tap pause to control)"}
+                    </p>
+                    <button onClick={onClose} className="mt-8 bg-slate-800 px-8 py-3 rounded-full text-white font-bold hover:bg-slate-700 border border-slate-600">Stop Broadcast</button>
                 </div>
             );
         };
 
-        const QRScanner = ({ onScan, onClose, fileProgress }) => {
+        const QRScanner = ({ onScan, onClose, incomingFile }) => {
             const videoRef = useRef(null);
             const canvasRef = useRef(null);
             const [error, setError] = useState("");
+            
+            // Calculate missing parts
+            const getMissingParts = () => {
+                if (!incomingFile || incomingFile.total === 0) return "";
+                const missing = [];
+                for(let i=0; i<incomingFile.total; i++) {
+                    if(!incomingFile.chunks[i]) missing.push(i+1);
+                }
+                if(missing.length === 0) return "Completing...";
+                if(missing.length > 5) return `Missing ${missing.length} parts`;
+                return `Missing: ${missing.join(', ')}`;
+            };
+
+            const fileProgress = incomingFile && incomingFile.total > 0 
+                ? (Object.keys(incomingFile.chunks).length / incomingFile.total) * 100 
+                : 0;
 
             useEffect(() => {
                 let stream;
@@ -203,14 +275,17 @@
                         {error && <div className="absolute inset-0 flex items-center justify-center text-red-400 font-bold bg-black/80 text-center p-6">{error}</div>}
                         
                         {/* File Progress Overlay */}
-                        {fileProgress && (
+                        {incomingFile && incomingFile.total > 0 && (
                             <div className="absolute bottom-0 left-0 right-0 bg-black/80 p-4">
                                 <div className="flex justify-between text-xs text-white mb-1">
-                                    <span>Downloading...</span>
+                                    <span className="text-yellow-400 font-bold">{getMissingParts()}</span>
                                     <span>{Math.round(fileProgress)}%</span>
                                 </div>
-                                <div className="w-full bg-slate-700 h-2 rounded-full overflow-hidden">
+                                <div className="w-full bg-slate-700 h-2 rounded-full overflow-hidden mb-1">
                                     <div className="bg-emerald-500 h-full transition-all duration-100" style={{width: `${fileProgress}%`}}></div>
+                                </div>
+                                <div className="text-[10px] text-slate-400 text-center">
+                                    Total Parts: {incomingFile.total} | Received: {Object.keys(incomingFile.chunks).length}
                                 </div>
                             </div>
                         )}
@@ -763,7 +838,7 @@
                     </main>
 
                     {/* MODALS */}
-                    {scanner === 'QR' && <QRScanner onScan={d => { handleData(d); }} onClose={()=>setScanner(null)} fileProgress={incomingFile.total > 0 ? (Object.keys(incomingFile.chunks).length / incomingFile.total) * 100 : null} />}
+                    {scanner === 'QR' && <QRScanner onScan={d => { handleData(d); }} onClose={()=>setScanner(null)} incomingFile={incomingFile} />}
                     {scanner === 'AUDIO' && <AudioListener onClose={()=>setScanner(null)} onData={d => { setScanner(null); handleData(d); }} />}
                     {fileTransfer && <AnimatedQR chunks={fileTransfer.chunks} label="Broadcasting Hybrid Stream" onClose={()=>setFileTransfer(null)} />}
                 </div>
