@@ -58,6 +58,10 @@
         .anim-fade { animation: fadeIn 0.3s ease-in; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
+        /* Audio Visualizer */
+        .audio-viz { height: 128px; background: linear-gradient(to bottom, #0f172a, #1e293b); border-radius: 8px; overflow: hidden; }
+        .wave-bar { background: linear-gradient(to right, #06b6d4, #3b82f6); height: 100%; border-radius: 4px; }
+
         /* Hacking Animation Styles */
         .terminal { background: #000; color: #00ff00; font-family: 'Courier New', monospace; padding: 1rem; border-radius: 0.5rem; overflow-y: auto; max-height: 300px; }
         .typing { overflow: hidden; border-right: 2px solid #00ff00; white-space: nowrap; animation: typing 3s steps(40, end), blink-caret 0.75s step-end infinite; }
@@ -74,7 +78,7 @@
 <body class="matrix-bg selection:bg-cyan-500 selection:text-white">
     <div id="root"></div>
     <script type="text/babel">
-        const { useState, useEffect, useRef, useMemo, useCallback } = React;
+        const { useState, useEffect, useRef, useMemo } = React;
         // --- CONSTANTS & CONFIG ---
         const PROTOCOL = {
             VERSION: '2.1',
@@ -87,9 +91,9 @@
             START_SYM: 30,
             STOP_SYM: 29,
             QR_CHUNK_SIZE: 350,
+            AUDIO_CHUNK_SIZE: 200, // Smaller for audio to keep bursts short (~12s)
             DEFAULT_QR_FPS: 200,
-            AUDIO_CHUNK_SIZE: 350,
-            DEFAULT_AUDIO_INTERVAL: 1000
+            DEFAULT_AUDIO_DELAY: 500 // ms between chunks
         };
         const BASE32_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
         // --- ICONS ---
@@ -173,8 +177,8 @@
                 }
                 return buffer;
             },
-            buildSymbolStream: (jsonStr) => {
-                const bytes = GibberLink.utf8ToBytes(jsonStr);
+            buildSymbolStream: (payloadStr) => {
+                const bytes = GibberLink.utf8ToBytes(payloadStr);
                 const crc = GibberLink.crc32(bytes);
                 const fullBytes = new Uint8Array(bytes.length + 4);
                 fullBytes.set(bytes);
@@ -193,8 +197,8 @@
                 symbols.push(PROTOCOL.STOP_SYM);
                 return symbols;
             },
-            transmit: async (jsonStr) => {
-                const symbols = GibberLink.buildSymbolStream(jsonStr);
+            transmit: async (payloadStr) => {
+                const symbols = GibberLink.buildSymbolStream(payloadStr);
                 const ctx = new (window.AudioContext || window.webkitAudioContext)({sampleRate: PROTOCOL.SAMPLE_RATE});
                 const buffers = Array.from({length: 32}, (_,i) => GibberLink.makeSymbolBuffer(ctx, i));
                 let time = ctx.currentTime + 0.1;
@@ -281,101 +285,99 @@
                                 </button>
                                 <button onClick={()=>setIndex(prev=>(prev+1)%chunks.length)} className="p-2 rounded-full bg-slate-100 text-slate-800"><Icon p={icons.play}/></button>
                             </div>
+                            <div className="text-center text-xs text-slate-400">
+                                Tip: Use slider to jump to specific chunks if receiver reports missing ones.
+                            </div>
                         </div>
                     </div>
-                    <button onClick={onClose} className="mt-8 text-white/50 hover:text-white flex items-center gap-2">
+                    <button onClose={onClose} className="mt-8 text-white/50 hover:text-white flex items-center gap-2">
                         <Icon p={icons.x} /> Stop Broadcast
                     </button>
                 </div>
             );
         };
-        const AudioBroadcaster = ({ chunks, label, onClose, theme="cyan" }) => {
+        const AnimatedAudio = ({ chunks, label, onClose, theme="cyan" }) => {
             const [index, setIndex] = useState(0);
-            const [speed, setSpeed] = useState(PROTOCOL.DEFAULT_AUDIO_INTERVAL);
+            const [delay, setDelay] = useState(PROTOCOL.DEFAULT_AUDIO_DELAY);
+            const [isPaused, setIsPaused] = useState(true); // Start paused for audio
             const [isPlaying, setIsPlaying] = useState(false);
-            const [status, setStatus] = useState('');
-            const isPlayingRef = useRef(false);
-
-            const playFrom = useCallback(async (startIndex) => {
-                let i = startIndex;
-                while (isPlayingRef.current) {
-                    setIndex(i);
-                    setStatus(`Playing audio chunk ${i + 1}/${chunks.length}...`);
-                    try {
-                        await GibberLink.transmit(chunks[i]);
-                    } catch (e) {
-                        console.error('Audio transmit error:', e);
-                        setStatus('Transmit error');
-                    }
-                    setStatus('');
-                    i = (i + 1) % chunks.length;
-                    if (!isPlayingRef.current) break;
-                    await new Promise(resolve => setTimeout(resolve, speed));
-                }
-                isPlayingRef.current = false;
-                setIsPlaying(false);
-                setStatus('');
-            }, [speed, chunks.length, chunks]);
-
-            const togglePlay = useCallback(() => {
-                if (isPlayingRef.current) {
-                    isPlayingRef.current = false;
+            const playingRef = useRef(null);
+          
+            const playChunk = async (idx) => {
+                if (isPlaying) return;
+                setIsPlaying(true);
+                try {
+                    await GibberLink.transmit(chunks[idx]);
+                } finally {
                     setIsPlaying(false);
-                    setStatus('');
-                } else {
-                    isPlayingRef.current = true;
-                    setIsPlaying(true);
-                    playFrom(index).catch(console.error);
                 }
-            }, [index, playFrom]);
-
-            const handleSliderChange = useCallback((e) => {
-                const newIndex = parseInt(e.target.value);
+            };
+          
+            useEffect(() => {
+                if (isPaused || chunks.length === 0) return;
+                const playNext = async () => {
+                    await playChunk(index);
+                    if (isPaused) return;
+                    await new Promise(r => setTimeout(r, delay));
+                    if (isPaused) return;
+                    setIndex(prev => (prev + 1) % chunks.length);
+                };
+                playingRef.current = playNext();
+                return () => {
+                    if (playingRef.current) playingRef.current.then(() => {});
+                };
+            }, [index, isPaused, delay, chunks]);
+          
+            const handleIndexChange = (newIndex) => {
+                setIsPaused(true);
                 setIndex(newIndex);
-                isPlayingRef.current = false;
-                setIsPlaying(false);
-                setStatus('');
-            }, []);
-
+                playChunk(newIndex);
+            };
+          
             const btnClass = theme === "red" ? "bg-red-600 hover:bg-red-500" : "bg-cyan-600 hover:bg-cyan-500";
-            const iconColor = theme === "red" ? "text-red-500" : "text-blue-500";
-            const bgColor = theme === "red" ? "bg-red-100" : "bg-blue-100";
-
             return (
                 <div className="fixed inset-0 z-50 bg-black/95 flex flex-col items-center justify-center p-4">
-                    <div className="bg-white p-4 rounded-2xl w-full max-w-sm shadow-[0_0_50px_rgba(255,255,255,0.1)]">
-                        <div className="bg-white p-3 rounded-xl shadow-2xl flex flex-col items-center">
-                            <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-2 ${bgColor}`}>
-                                <Icon p={icons.mic} size={32} className={`${isPlaying ? `${iconColor} animate-pulse` : 'text-gray-400'}`} />
+                    <div className="glass p-4 rounded-2xl w-full max-w-sm shadow-[0_0_50px_rgba(255,255,255,0.1)] bg-slate-800">
+                        <div className="flex items-center justify-center mb-4">
+                            <Icon p={icons.mic} size={48} className={`text-${theme === 'red' ? 'red' : 'cyan'}-400 ${isPlaying ? 'animate-pulse' : ''}`} />
+                            <div className="ml-4">
+                                <p className="text-white font-bold text-sm">{label}</p>
+                                <p className="text-slate-400 text-xs font-mono">Chunk {index+1}/{chunks.length} {isPlaying && '(Playing...)'}</p>
                             </div>
-                            <p className="text-slate-900 font-bold text-sm text-center">{label}</p>
-                            <p className="text-xs text-slate-500 font-mono text-center">{status || `Chunk ${index + 1}/${chunks.length}`}</p>
                         </div>
-                        <div className="mt-6 space-y-4">
+                        <div className="audio-viz mb-4 flex items-end gap-1 p-2">
+                            {Array.from({length: 20}, (_, i) => (
+                                <div key={i} className="flex-1 wave-bar" style={{height: `${Math.random() * 80 + 20}%`}}></div>
+                            ))}
+                        </div>
+                        <div className="space-y-4">
                             <div className="flex items-center gap-2">
                                 <span className="text-xs font-bold text-slate-400 w-8">POS</span>
-                                <input type="range" min="0" max={chunks.length - 1} value={index}
-                                    onChange={handleSliderChange}
+                                <input type="range" min="0" max={chunks.length-1} value={index}
+                                    onChange={(e)=>{handleIndexChange(parseInt(e.target.value));}}
                                     className="accent-slate-800"
                                 />
                             </div>
                             <div className="flex items-center gap-2">
-                                <span className="text-xs font-bold text-slate-400 w-8">INT</span>
-                                <input type="range" min="500" max="5000" step="250" value={speed}
-                                    onChange={(e) => setSpeed(parseInt(e.target.value))}
+                                <span className="text-xs font-bold text-slate-400 w-8">DLY</span>
+                                <input type="range" min="0" max="2000" step="100" value={delay}
+                                    onChange={(e)=>setDelay(parseInt(e.target.value))}
                                     className="accent-slate-800"
                                 />
-                                <span className="text-xs font-mono text-slate-500 w-12 text-right">{speed}ms</span>
+                                <span className="text-xs font-mono text-slate-500 w-12 text-right">{delay}ms</span>
                             </div>
                             <div className="flex justify-center gap-4">
-                                <button onClick={() => { setIndex(prev => (prev - 1 + chunks.length) % chunks.length); isPlayingRef.current = false; setIsPlaying(false); }} className="p-2 rounded-full bg-slate-100 text-slate-800"><Icon p={icons.play} className="rotate-180" /></button>
-                                <button onClick={togglePlay} className={`p-4 rounded-full text-white shadow-lg transition-transform active:scale-95 ${btnClass}`}>
-                                    <Icon p={isPlaying ? icons.pause : icons.play} />
+                                <button onClick={()=>setIndex(prev=>(prev-1+chunks.length)%chunks.length)} className="p-2 rounded-full bg-slate-100 text-slate-800" disabled={isPlaying}><Icon p={icons.play} className="rotate-180"/></button>
+                                <button onClick={()=> {
+                                    setIsPaused(!isPaused);
+                                    if (!isPaused) setIsPlaying(false);
+                                }} className={`p-4 rounded-full text-white shadow-lg transition-transform active:scale-95 ${btnClass}`}>
+                                    <Icon p={isPaused ? icons.play : icons.pause} />
                                 </button>
-                                <button onClick={() => { setIndex(prev => (prev + 1) % chunks.length); isPlayingRef.current = false; setIsPlaying(false); }} className="p-2 rounded-full bg-slate-100 text-slate-800"><Icon p={icons.play} /></button>
+                                <button onClick={()=>setIndex(prev=>(prev+1)%chunks.length)} className="p-2 rounded-full bg-slate-100 text-slate-800" disabled={isPlaying}><Icon p={icons.play}/></button>
                             </div>
                             <div className="text-center text-xs text-slate-400">
-                                Tip: Use slider to jump to missing chunks reported by receiver.
+                                Tip: Slider jumps & plays chunk. Use for missing chunks from receiver.
                             </div>
                         </div>
                     </div>
@@ -389,6 +391,7 @@
             const videoRef = useRef(null);
             const canvasRef = useRef(null);
             const [error, setError] = useState(null);
+            const [copied, setCopied] = useState(false);
             useEffect(() => {
                 let stream;
                 let animFrame;
@@ -428,7 +431,6 @@
                 const received = new Set(Object.keys(incomingFile.chunks).map(Number));
                 return Array.from({length: incomingFile.total}, (_, i) => i).filter(i => !received.has(i));
             }, [incomingFile]);
-            const [copied, setCopied] = useState(false);
             const handleCopyMissing = () => {
                 navigator.clipboard.writeText(`Missing chunks: ${missingChunks.join(', ')}`);
                 setCopied(true);
@@ -481,7 +483,7 @@
                 </div>
             );
         };
-        const AudioListener = ({ onData, onClose, incomingFile, isDarth = false }) => {
+        const AudioListener = ({ onData, onClose, incomingAudio }) => {
             const [status, setStatus] = useState("Initializing Mic...");
             const [visuals, setVisuals] = useState(new Array(32).fill(0));
             const [copied, setCopied] = useState(false);
@@ -498,18 +500,6 @@
                 payload: [],
                 header: { len: 0 }
             });
-            const progress = incomingFile && incomingFile.total > 0
-                ? (Object.keys(incomingFile.chunks).length / incomingFile.total) * 100 : 0;
-            const missingChunks = useMemo(() => {
-                if (!incomingFile || incomingFile.total === 0) return [];
-                const received = new Set(Object.keys(incomingFile.chunks).map(Number));
-                return Array.from({length: incomingFile.total}, (_, i) => i).filter(i => !received.has(i));
-            }, [incomingFile]);
-            const handleCopyMissing = () => {
-                navigator.clipboard.writeText(`Missing audio chunks: ${missingChunks.join(', ')}`);
-                setCopied(true);
-                setTimeout(() => setCopied(false), 2000);
-            };
             useEffect(() => {
                 const initAudio = async () => {
                     try {
@@ -576,7 +566,10 @@
                             state.readIndex += symbolSamps;
                             if (bestSym === PROTOCOL.STOP_SYM) {
                                 finishDecode(state);
-                                state.mode = 'DONE';
+                                state.mode = 'WAIT_PREAMBLE'; // Reset for next chunk
+                                state.payload = [];
+                                state.buffer = [];
+                                setStatus("Listening for next...");
                                 return;
                             }
                             state.payload.push(bestSym);
@@ -610,8 +603,8 @@
                         const recvCrc = ((recvCrcVals[0] << 24) | (recvCrcVals[1] << 16) | (recvCrcVals[2] << 8) | recvCrcVals[3]) >>> 0;
                         const calcCrc = GibberLink.crc32(dataBytes) >>> 0;
                         if (calcCrc !== recvCrc) throw new Error("CRC Fail");
-                        const jsonStr = new TextDecoder().decode(dataBytes);
-                        onData(jsonStr);
+                        const payloadStr = new TextDecoder().decode(dataBytes);
+                        onData(payloadStr);
                     } catch(e) {
                         setStatus("Decode Error: " + e.message);
                         setTimeout(() => {
@@ -628,45 +621,55 @@
                     if(ctxRef.current) ctxRef.current.close();
                 };
             }, []);
+            const progress = incomingAudio && incomingAudio.total > 0
+                ? (Object.keys(incomingAudio.chunks).length / incomingAudio.total) * 100 : 0;
+            const missingChunks = useMemo(() => {
+                if (!incomingAudio || incomingAudio.total === 0) return [];
+                const received = new Set(Object.keys(incomingAudio.chunks).map(Number));
+                return Array.from({length: incomingAudio.total}, (_, i) => i).filter(i => !received.has(i));
+            }, [incomingAudio]);
+            const handleCopyMissing = () => {
+                navigator.clipboard.writeText(`Missing audio chunks: ${missingChunks.join(', ')}`);
+                setCopied(true);
+                setTimeout(() => setCopied(false), 2000);
+            };
             return (
                 <div className="fixed inset-0 z-50 bg-black/95 flex flex-col items-center justify-center p-6">
                     <div className="text-center mb-8">
                         <h2 className="text-2xl font-bold text-white mb-2">Sonic Receiver</h2>
                         <p className="font-mono text-cyan-400">{status}</p>
                     </div>
-                    <div className={`flex items-end gap-[2px] h-32 mb-4 bg-slate-900/50 p-4 rounded-xl border border-slate-700 w-full max-w-md`}>
+                    <div className="flex items-end gap-[2px] h-32 mb-4 bg-slate-900/50 p-4 rounded-xl border border-slate-700 w-full max-w-md">
                         {visuals.map((v, i) => (
-                            <div key={i} className={`flex-1 ${isDarth ? 'bg-red' : 'bg-cyan'}-500 rounded-t transition-all duration-75`} style={{height: `${Math.min(100, v*5)}%`, opacity: 0.5 + (v/200)}}></div>
+                            <div key={i} className="flex-1 bg-cyan-500 rounded-t transition-all duration-75" style={{height: `${Math.min(100, v*5)}%`, opacity: 0.5 + (v/200)}}></div>
                         ))}
                     </div>
-                    {incomingFile && incomingFile.total > 0 && (
-                        <div className="w-full max-w-md mt-4">
-                            <div className="bg-black/80 p-4 rounded-xl backdrop-blur-sm">
-                                <div className="flex justify-between text-xs font-mono text-white mb-2">
-                                    <span>AUDIO RECEIVING FILE...</span>
-                                    <span>{Math.round(progress)}%</span>
-                                </div>
-                                <div className="w-full bg-slate-700 h-1.5 rounded-full overflow-hidden mb-2">
-                                    <div className={`h-full transition-all duration-100 ${isDarth ? 'bg-red' : 'bg-cyan'}-400`} style={{width: `${progress}%`}}></div>
-                                </div>
-                                <div className="text-[10px] text-slate-400 mb-1">
-                                    Chunks: {Object.keys(incomingFile.chunks).length} / {incomingFile.total}
-                                </div>
-                                {missingChunks.length > 0 && (
-                                    <div className="space-y-1">
-                                        <div className="text-[10px] text-red-400 font-bold flex justify-between items-center">
-                                            Missing: {missingChunks.join(', ')}
-                                            <button onClick={handleCopyMissing} className="px-2 py-1 bg-red-600 text-white text-[8px] rounded hover:bg-red-500 transition-colors">
-                                                {copied ? 'Copied!' : 'Copy'}
-                                            </button>
-                                        </div>
-                                        <div className="text-[8px] text-red-300 italic">Tell sender to jump to these chunks</div>
-                                    </div>
-                                )}
+                    {incomingAudio && incomingAudio.total > 0 && (
+                        <div className="w-full max-w-md bg-black/80 p-4 rounded-xl mb-4 backdrop-blur-sm">
+                            <div className="flex justify-between text-xs font-mono text-white mb-2">
+                                <span>RECEIVING AUDIO CHUNKS...</span>
+                                <span>{Math.round(progress)}%</span>
                             </div>
+                            <div className="w-full bg-slate-700 h-1.5 rounded-full overflow-hidden mb-2">
+                                <div className="h-full transition-all duration-100 bg-cyan-400" style={{width: `${progress}%`}}></div>
+                            </div>
+                            <div className="text-[10px] text-slate-400 mb-1">
+                                Chunks: {Object.keys(incomingAudio.chunks).length} / {incomingAudio.total}
+                            </div>
+                            {missingChunks.length > 0 && (
+                                <div className="space-y-1">
+                                    <div className="text-[10px] text-red-400 font-bold flex justify-between items-center">
+                                        Missing: {missingChunks.join(', ')}
+                                        <button onClick={handleCopyMissing} className="px-2 py-1 bg-red-600 text-white text-[8px] rounded hover:bg-red-500 transition-colors">
+                                            {copied ? 'Copied!' : 'Copy'}
+                                        </button>
+                                    </div>
+                                    <div className="text-[8px] text-red-300 italic">Tell sender to jump to these chunks</div>
+                                </div>
+                            )}
                         </div>
                     )}
-                    <button onClick={onClose} className="mt-8 bg-slate-800 px-8 py-3 rounded-full text-white font-bold hover:bg-slate-700 border border-slate-600">Cancel</button>
+                    <button onClick={onClose} className="bg-slate-800 px-8 py-3 rounded-full text-white font-bold hover:bg-slate-700 border border-slate-600">Cancel</button>
                 </div>
             );
         };
@@ -775,7 +778,6 @@
         const App = () => {
             const [mode, setMode] = useState('NORMAL');
             const [activeTab, setActiveTab] = useState('CONNECT');
-            const [transferMode, setTransferMode] = useState('QR');
             const [keys, setKeys] = useState(null);
             const [identityPayload, setIdentityPayload] = useState(null);
             const [handshakeReply, setHandshakeReply] = useState(null);
@@ -785,10 +787,12 @@
             const [fileTransfer, setFileTransfer] = useState(null);
             const [audioTransfer, setAudioTransfer] = useState(null);
             const [incomingFile, setIncomingFile] = useState({ id: null, chunks: {}, total: 0, complete: false });
+            const [incomingAudio, setIncomingAudio] = useState({ id: null, chunks: {}, total: 0, complete: false });
             const [pendingDownload, setPendingDownload] = useState(null);
             const [fileLog, setFileLog] = useState([]);
             const [chat, setChat] = useState([]);
             const [msg, setMsg] = useState("");
+            const [audioPlaying, setAudioPlaying] = useState(false);
             const [hackingSim, setHackingSim] = useState(false);
             const chatEndRef = useRef(null);
             const chatContainerRef = useRef(null);
@@ -800,21 +804,25 @@
             }, [scanner]);
           
             useEffect(() => {
-                if (incomingFile.complete && incomingFile.total > 0) {
-                    assembleFileNoDownload(incomingFile).then(({url, filename}) => {
-                        const newLog = { type: 'received', name: filename, timestamp: new Date().toLocaleString(), url, downloaded: false };
-                        setFileLog(prev => [newLog, ...prev]);
-                        setChat(prev => [...prev, { from: 'Partner', text: `📎 Shared file: ${filename}` }]);
-                        setPendingDownload(newLog);
-                    }).catch(e => {
-                        console.error(e);
-                        alert("File assembly failed: " + e.message);
-                    }).finally(() => {
-                        setIncomingFile({ id: null, chunks: {}, total: 0, complete: false });
-                        setScanner(null);
-                    });
-                }
-            }, [incomingFile.complete]);
+                const checkComplete = (incoming, setter) => {
+                    if (incoming.complete && incoming.total > 0) {
+                        assembleFileNoDownload(incoming).then(({url, filename}) => {
+                            const newLog = { type: 'received', name: filename, timestamp: new Date().toLocaleString(), url, downloaded: false };
+                            setFileLog(prev => [newLog, ...prev]);
+                            setChat(prev => [...prev, { from: 'Partner', text: `📎 Shared file: ${filename}` }]);
+                            setPendingDownload(newLog);
+                        }).catch(e => {
+                            console.error(e);
+                            alert("File assembly failed: " + e.message);
+                        }).finally(() => {
+                            setter({ id: null, chunks: {}, total: 0, complete: false });
+                            setScanner(null);
+                        });
+                    }
+                };
+                checkComplete(incomingFile, setIncomingFile);
+                checkComplete(incomingAudio, setIncomingAudio);
+            }, [incomingFile.complete, incomingAudio.complete]);
             useEffect(() => {
                 if (chatContainerRef.current) {
                     chatContainerRef.current.scrollTo({
@@ -845,6 +853,12 @@
             };
             useEffect(() => { genKeys(); }, []);
           
+            const playAudioPayload = async (dataStr) => {
+                if(audioPlaying) return;
+                setAudioPlaying(true);
+                await GibberLink.transmit(dataStr);
+                setAudioPlaying(false);
+            };
             const handleScan = async (raw) => {
                 if (raw === lastScanRef.current) return;
                 lastScanRef.current = raw;
@@ -854,27 +868,36 @@
                     return;
                 }
                 try {
+                    let isChunk = false;
+                    let setter = null;
                     if (raw.startsWith("F|")) {
+                        isChunk = true;
+                        setter = setIncomingFile;
+                    } else if (raw.startsWith("A|")) {
+                        isChunk = true;
+                        setter = setIncomingAudio;
+                    }
+                    if (isChunk) {
                         if (!sessionKey) return;
                         const [_, id, idxStr, totStr, data] = raw.split("|");
                         const idx = parseInt(idxStr);
                         const tot = parseInt(totStr);
                       
-                        setIncomingFile(prev => {
+                        setter(prev => {
                             if (prev.complete) return prev;
-                            const isNewFile = prev.id !== id;
-                            let newChunks = isNewFile ? {} : { ...prev.chunks };
+                            const isNew = prev.id !== id;
+                            let newChunks = isNew ? {} : { ...prev.chunks };
                           
                             if (newChunks[idx]) return prev;
                             newChunks[idx] = data;
                           
-                            const isComplete = Object.keys(newChunks).length === tot;
+                            const complete = Object.keys(newChunks).length === tot;
                           
                             return {
                                 id: id,
                                 chunks: newChunks,
                                 total: tot,
-                                complete: isComplete
+                                complete: complete
                             };
                         });
                         return;
@@ -991,13 +1014,8 @@
                 );
                 const packet = { iv: buf2hex(iv), d: buf2hex(enc) };
                 const json = JSON.stringify(packet);
-                const chunks = [json];
-                const transferLabel = "Encrypted Message";
-                if (transferMode === 'AUDIO') {
-                    setAudioTransfer({ chunks, label: `${transferLabel} (Audio)` });
-                } else {
-                    setFileTransfer({ chunks: [json], label: transferLabel });
-                }
+                setFileTransfer({ chunks: [json], label: "Encrypted Message" });
+                setAudioTransfer({ chunks: [json], label: "Encrypted Message (Audio)" });
                 setChat(prev => [...prev, { from: 'Me', text: msg }]);
                 setMsg("");
             };
@@ -1024,18 +1042,22 @@
                 for(let i=0; i<finalPayload.length; i++) binary += String.fromCharCode(finalPayload[i]);
                 const b64 = btoa(binary);
                 const id = Math.floor(Math.random()*10000).toString(16);
-                const chunks = [];
-                const total = Math.ceil(b64.length / PROTOCOL.QR_CHUNK_SIZE);
-                for(let i=0; i<total; i++) {
+                // QR Chunks
+                const qrChunks = [];
+                const qrTotal = Math.ceil(b64.length / PROTOCOL.QR_CHUNK_SIZE);
+                for(let i=0; i<qrTotal; i++) {
                     const slice = b64.slice(i*PROTOCOL.QR_CHUNK_SIZE, (i+1)*PROTOCOL.QR_CHUNK_SIZE);
-                    chunks.push(`F|${id}|${i}|${total}|${slice}`);
+                    qrChunks.push(`F|${id}|${i}|${qrTotal}|${slice}`);
                 }
-                const transferLabel = `Sending ${file.name}`;
-                if (transferMode === 'AUDIO') {
-                    setAudioTransfer({ chunks, label: `${transferLabel} (Audio)` });
-                } else {
-                    setFileTransfer({ chunks, label: transferLabel });
+                setFileTransfer({ chunks: qrChunks, label: `Sending ${file.name} (QR)` });
+                // Audio Chunks
+                const audioChunks = [];
+                const audioTotal = Math.ceil(b64.length / PROTOCOL.AUDIO_CHUNK_SIZE);
+                for(let i=0; i<audioTotal; i++) {
+                    const slice = b64.slice(i*PROTOCOL.AUDIO_CHUNK_SIZE, (i+1)*PROTOCOL.AUDIO_CHUNK_SIZE);
+                    audioChunks.push(`A|${id}|${i}|${audioTotal}|${slice}`);
                 }
+                setAudioTransfer({ chunks: audioChunks, label: `Sending ${file.name} (Audio)` });
             };
             const darthTamper = () => {
                 if (!interceptedPacket) return;
@@ -1050,26 +1072,6 @@
             };
             const startHacking = () => {
                 setHackingSim(true);
-            };
-            const broadcastIdentity = () => {
-                if (!identityPayload) return;
-                const data = JSON.stringify(identityPayload);
-                const chunks = [data];
-                if (transferMode === 'AUDIO') {
-                    setAudioTransfer({ chunks, label: "MY IDENTITY", theme: "green" });
-                } else {
-                    setFileTransfer({ chunks, label: "MY IDENTITY", theme: "green" });
-                }
-            };
-            const broadcastHandshake = () => {
-                if (!handshakeReply) return;
-                const data = handshakeReply;
-                const chunks = [data];
-                if (transferMode === 'AUDIO') {
-                    setAudioTransfer({ chunks, label: "SESSION DATA", theme: "green" });
-                } else {
-                    setFileTransfer({ chunks, label: "SESSION DATA", theme: "green" });
-                }
             };
             return (
                 <div className={`h-full w-full flex flex-col transition-colors duration-500 ${mode === 'DARTH' ? 'bg-slate-950' : 'bg-slate-900'}`}>
@@ -1126,9 +1128,9 @@
                                                         />
                                                     )}
                                                     {identityPayload && (
-                                                        <button onClick={broadcastIdentity}
+                                                        <button onClick={()=>playAudioPayload(JSON.stringify(identityPayload))} disabled={audioPlaying}
                                                             className="w-full mt-3 bg-cyan-900/40 hover:bg-cyan-800 border border-cyan-700 text-cyan-200 text-xs py-2 rounded flex items-center justify-center gap-2 transition-colors">
-                                                            <Icon p={icons.sound} size={14} /> Broadcast via {transferMode}
+                                                            <Icon p={icons.sound} size={14} /> {audioPlaying ? 'Broadcasting...' : 'Broadcast via Audio'}
                                                         </button>
                                                     )}
                                                 </div>
@@ -1140,9 +1142,9 @@
                                                             <p className="text-green-200/50 text-xs">Reply generated from scan</p>
                                                         </div>
                                                         <QRDisplay data={handshakeReply} label="SESSION DATA" color="black" />
-                                                        <button onClick={broadcastHandshake}
+                                                        <button onClick={()=>playAudioPayload(handshakeReply)} disabled={audioPlaying}
                                                             className="w-full mt-3 bg-green-900/40 hover:bg-green-800 border border-green-700 text-green-200 text-xs py-2 rounded flex items-center justify-center gap-2 transition-colors">
-                                                            <Icon p={icons.sound} size={14} /> Broadcast via {transferMode}
+                                                            <Icon p={icons.sound} size={14} /> {audioPlaying ? 'Broadcasting...' : 'Broadcast via Audio'}
                                                         </button>
                                                     </div>
                                                 )}
@@ -1186,14 +1188,6 @@
                                 {/* TAB: CHAT */}
                                 {activeTab === 'CHAT' && (
                                     <div className="anim-fade flex flex-col flex-1 min-h-0">
-                                        {sessionKey && (
-                                            <div className="flex justify-center mb-2 p-2">
-                                                <button onClick={()=>setTransferMode(prev => prev === 'QR' ? 'AUDIO' : 'QR')} 
-                                                    className={`px-4 py-2 rounded-lg text-xs font-bold transition-colors ${transferMode === 'AUDIO' ? 'bg-purple-600 text-white shadow-lg' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}>
-                                                    Broadcast Mode: {transferMode}
-                                                </button>
-                                            </div>
-                                        )}
                                         <div ref={chatContainerRef} className="flex-1 glass rounded-2xl p-4 overflow-y-auto touch-scroll space-y-3 mb-2 scrollbar-hide">
                                             {chat.length === 0 && (
                                                 <div className="text-center text-slate-600 mt-10">
@@ -1227,7 +1221,7 @@
                                                 <input type="file" className="hidden" onChange={handleFileSelect} />
                                                 <Icon p={icons.file} />
                                             </label>
-                                            <button onClick={sendMessage} disabled={!sessionKey} className="bg-cyan-600 hover:bg-cyan-500 text-white p-3 rounded-xl shadow-lg transition-transform active:scale-95 flex-shrink-0 disabled:opacity-50">
+                                            <button onClick={sendMessage} className="bg-cyan-600 hover:bg-cyan-500 text-white p-3 rounded-xl shadow-lg transition-transform active:scale-95 flex-shrink-0">
                                                 <Icon p={icons.send} />
                                             </button>
                                         </div>
@@ -1317,20 +1311,19 @@
                         <AudioListener
                             onData={(d)=>{setScanner(null); handleScan(d);}}
                             onClose={()=>setScanner(null)}
-                            incomingFile={incomingFile}
-                            isDarth={mode==='DARTH'}
+                            incomingAudio={incomingAudio}
                         />
                     )}
                     {fileTransfer && (
                         <AnimatedQR
                             chunks={fileTransfer.chunks}
                             label={fileTransfer.label}
-                            theme={fileTransfer.theme || "cyan"}
+                            theme={fileTransfer.theme}
                             onClose={()=>setFileTransfer(null)}
                         />
                     )}
                     {audioTransfer && (
-                        <AudioBroadcaster
+                        <AnimatedAudio
                             chunks={audioTransfer.chunks}
                             label={audioTransfer.label}
                             theme={audioTransfer.theme || "cyan"}
