@@ -15,15 +15,14 @@
     <style>
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap');
         
-        /* FIX: Allow body to handle height correctly, prevent elastic bounce but allow internal scroll */
         body { 
             font-family: 'JetBrains Mono', monospace; 
             background-color: #0f172a; 
             color: #e2e8f0; 
-            overscroll-behavior-y: none; /* Prevents pull-to-refresh */
-            height: 100dvh; /* Use Dynamic Viewport Height for Mobile */
+            overscroll-behavior-y: none;
+            height: 100dvh;
             width: 100%;
-            overflow: hidden; /* Prevent body scroll, let React app handle it */
+            overflow: hidden;
         }
 
         #root {
@@ -54,11 +53,9 @@
         input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; height: 16px; width: 16px; border-radius: 50%; background: currentColor; cursor: pointer; margin-top: -6px; }
         input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 4px; cursor: pointer; background: #334155; border-radius: 2px; }
         
-        /* Custom Scrollbar for Chat */
         .scrollbar-hide::-webkit-scrollbar { display: none; }
         .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
         
-        /* FIX: Smooth scrolling for iOS */
         .touch-scroll { -webkit-overflow-scrolling: touch; }
 
         .anim-fade { animation: fadeIn 0.3s ease-in; }
@@ -95,7 +92,6 @@
             lock: <><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></>,
             unlock: <><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 9.9-1" /></>,
             eye: <><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></>,
-            refresh: <path d="M21.5 2v6h-6M2.5 22v-6h6M2 12c0-3.6 2-6.7 5-8.6M22 12c0 3.6-2 6.7-5 8.6"/>,
             send: <><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></>,
             file: <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></>,
             mic: <><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></>,
@@ -103,7 +99,6 @@
             play: <polygon points="5 3 19 12 5 21 5 3"/>,
             pause: <><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></>,
             bug: <><rect x="8" y="6" width="8" height="12" rx="4"/><path d="M12 12v.01"/><path d="M4 14h4"/><path d="M16 14h4"/><path d="M4 10h4"/><path d="M16 10h4"/><path d="M4 18h4"/><path d="M16 18h4"/></>,
-            check: <polyline points="20 6 9 17 4 12"/>,
             x: <><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>,
             sound: <><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></>
         };
@@ -116,7 +111,7 @@
             const emojis = ["🐶","🐱","🐭","🐹","🐰","🦊","🐻","🐼","🐨","🐯","🦁","🐮","🐷","🐸","🐵","🐔","🐧","🐦","🐤","🦆","🦅","🦉","🦇","🐺","🐗","🐴","🦄","🐝","🐛","🦋","🐌","🐞","🐜","🕷","🕸","🐢","🐍","🦎","🦂","🦀","🦑","🐙","🦐","🐠","🐟","🐡","🐬","🦈","🐳","🐋","🐊","🐆","🐅","🐃","🐂","🐄","🐪","🐫","🐘","🦏","🦍","🐎","🐖","🐐","🐏","🐑","🐕","🐩","🐈","🐓","🦃","🕊","🐇","🐁","🐀","🐿","🐾","🐉","🐲","🌵","🎄","🌲","🌳","🌴"];
             let em = "";
             for(let i=0; i<4; i++) em += emojis[arr[i] % emojis.length];
-            const hex = buf2hex(hash).substring(0, 8).toUpperCase(); // Short hex for strict check
+            const hex = buf2hex(hash).substring(0, 8).toUpperCase(); 
             return { emoji: em, hex: hex, full: buf2hex(hash) };
         };
         // --- GIBBERLINK CORE ---
@@ -514,7 +509,10 @@
             const [fingerprint, setFingerprint] = useState(null);
             const [scanner, setScanner] = useState(null);
             const [fileTransfer, setFileTransfer] = useState(null);
-            const [incomingFile, setIncomingFile] = useState({ id: null, chunks: {}, total: 0 });
+            
+            // --- FIX: Add 'complete' flag to incoming file state ---
+            const [incomingFile, setIncomingFile] = useState({ id: null, chunks: {}, total: 0, complete: false });
+            
             const [chat, setChat] = useState([]);
             const [msg, setMsg] = useState("");
             const [audioPlaying, setAudioPlaying] = useState(false);
@@ -527,6 +525,17 @@
                 if (scanner) lastScanRef.current = "";
             }, [scanner]);
             
+            // --- FIX: Use useEffect to trigger assembly when completion flag is set ---
+            // This prevents "side effects in state reducer" and race conditions
+            useEffect(() => {
+                if (incomingFile.complete) {
+                    assembleFile(incomingFile);
+                    // Reset after assembly attempt
+                    setIncomingFile({ id: null, chunks: {}, total: 0, complete: false });
+                    setScanner(null); // Close scanner on success
+                }
+            }, [incomingFile.complete]); // Only trigger when completion status changes
+
             useEffect(() => {
                 if (chatContainerRef.current) {
                     chatContainerRef.current.scrollTo({
@@ -579,14 +588,30 @@
                         const [_, id, idxStr, totStr, data] = raw.split("|");
                         const idx = parseInt(idxStr);
                         const tot = parseInt(totStr);
+                        
                         setIncomingFile(prev => {
-                            const newChunks = { ...prev.chunks, [idx]: data };
-                            const newFile = { id, chunks: newChunks, total: tot };
-                            if (Object.keys(newChunks).length === tot) {
-                                assembleFile(newFile);
-                                return { id: null, chunks: {}, total: 0 };
-                            }
-                            return newFile;
+                            // If we already marked complete, ignore subsequent identical scans
+                            if (prev.complete) return prev;
+
+                            // If new file ID detected, start fresh. Otherwise copy existing chunks.
+                            const isNewFile = prev.id !== id;
+                            let newChunks = isNewFile ? {} : { ...prev.chunks };
+                            
+                            // Optimization: Don't update state if we already have this specific chunk
+                            if (newChunks[idx]) return prev;
+
+                            // Add new chunk
+                            newChunks[idx] = data;
+                            
+                            // Check for completion
+                            const isComplete = Object.keys(newChunks).length === tot;
+                            
+                            return { 
+                                id: id, 
+                                chunks: newChunks, 
+                                total: tot, 
+                                complete: isComplete 
+                            };
                         });
                         return;
                     }
@@ -656,7 +681,7 @@
                     }
                 } catch (e) {
                     console.error(e);
-                    alert("Decryption Failed or Invalid Packet");
+                    // alert("Decryption Failed or Invalid Packet"); // Optional: Reduce noise
                 }
             };
 
@@ -680,13 +705,18 @@
                     const fileData = new Uint8Array(decrypted, 1 + mimeLen);
                     const blob = new Blob([fileData], { type: mime });
                     const url = URL.createObjectURL(blob);
+                    
                     const a = document.createElement('a');
+                    a.style.display = 'none';
                     a.href = url;
-                    a.download = `secure_recv.${mime.split('/')[1]}`;
+                    a.download = `secure_recv.${mime.split('/')[1] || 'bin'}`;
                     document.body.appendChild(a);
                     a.click();
-                    document.body.removeChild(a);
-                    alert("File Decrypted & Downloaded!");
+                    setTimeout(() => {
+                        document.body.removeChild(a);
+                        window.URL.revokeObjectURL(url);
+                        alert("File Decrypted & Downloaded!");
+                    }, 100);
                 } catch (e) {
                     console.error(e);
                     alert("File Integrity Check Failed (HMAC mismatch inside GCM)");
@@ -769,7 +799,7 @@
                              </button>
                         </div>
                     </header>
-                    {/* MAIN CONTENT - FIX: Added min-h-0 and correct flex properties for scrolling */}
+                    {/* MAIN CONTENT */}
                     <main className="flex-1 overflow-hidden relative flex flex-col min-h-0">
                         {mode === 'NORMAL' && (
                             <div className="flex-1 flex flex-col p-4 w-full mx-auto max-w-md md:max-w-4xl transition-all duration-300 min-h-0">
@@ -782,7 +812,7 @@
                                         </button>
                                     ))}
                                 </div>
-                                {/* TAB: CONNECT - FIX: Removed pb-20, added touch-scroll */}
+                                {/* TAB: CONNECT */}
                                 {activeTab === 'CONNECT' && (
                                     <div className="h-full flex flex-col min-h-0">
                                         <div className="flex-1 overflow-y-auto touch-scroll">
@@ -826,7 +856,7 @@
                                         </div>
                                     </div>
                                 )}
-                                {/* TAB: VERIFY - FIX: Added touch-scroll */}
+                                {/* TAB: VERIFY */}
                                 {activeTab === 'VERIFY' && (
                                     <div className="anim-fade space-y-4 overflow-y-auto touch-scroll flex-1 min-h-0">
                                         <div className="glass p-8 rounded-2xl text-center space-y-6">
@@ -859,7 +889,7 @@
                                         </div>
                                     </div>
                                 )}
-                                {/* TAB: CHAT - FIX: Proper flex shrinking and scrolling */}
+                                {/* TAB: CHAT */}
                                 {activeTab === 'CHAT' && (
                                     <div className="anim-fade flex flex-col flex-1 min-h-0">
                                         <div ref={chatContainerRef} className="flex-1 glass rounded-2xl p-4 overflow-y-auto touch-scroll space-y-3 mb-2 scrollbar-hide">
@@ -914,7 +944,7 @@
                                 )}
                             </div>
                         )}
-                        {/* DARTH MODE UI - FIX: Added min-h-0 for scrolling */}
+                        {/* DARTH MODE UI */}
                         {mode === 'DARTH' && (
                             <div className="anim-fade max-w-md mx-auto space-y-6 p-4 overflow-y-auto touch-scroll flex-1 w-full min-h-0">
                                 <div className="darth-glass p-6 rounded-2xl text-red-100 border-l-4 border-red-600 relative overflow-hidden">
