@@ -162,34 +162,52 @@
             const videoRef = useRef(null);
             const canvasRef = useRef(null);
             const [error, setError] = useState("");
+            const lastScanned = useRef(null); // Fix for double scanning
+
             useEffect(() => {
                 let stream;
+                let animationFrameId;
+                
                 navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
                     .then(s => {
                         stream = s;
                         if (videoRef.current) {
                             videoRef.current.srcObject = s;
                             videoRef.current.play();
-                            requestAnimationFrame(tick);
+                            tick(); // Start loop only after video is ready
                         }
                     })
                     .catch(() => setError("Camera Access Denied. Ensure HTTPS/Localhost."));
+
                 const tick = () => {
                     if (videoRef.current && videoRef.current.readyState === 4) {
                         const cvs = canvasRef.current;
                         const vid = videoRef.current;
-                        cvs.width = vid.videoWidth;
-                        cvs.height = vid.videoHeight;
-                        const ctx = cvs.getContext("2d");
-                        ctx.drawImage(vid, 0, 0);
-                        const img = ctx.getImageData(0, 0, cvs.width, cvs.height);
-                        const code = jsQR(img.data, img.width, img.height);
-                        if (code) { onScan(code.data); }
+                        if (cvs && vid) {
+                            cvs.width = vid.videoWidth;
+                            cvs.height = vid.videoHeight;
+                            const ctx = cvs.getContext("2d");
+                            ctx.drawImage(vid, 0, 0);
+                            const img = ctx.getImageData(0, 0, cvs.width, cvs.height);
+                            const code = jsQR(img.data, img.width, img.height);
+                            if (code) { 
+                                // Prevent double triggering for the same QR code
+                                if (code.data !== lastScanned.current) {
+                                    lastScanned.current = code.data;
+                                    onScan(code.data); 
+                                }
+                            }
+                        }
                     }
-                    requestAnimationFrame(tick);
+                    animationFrameId = requestAnimationFrame(tick);
                 };
-                return () => stream?.getTracks().forEach(t => t.stop());
+                
+                return () => {
+                    if(stream) stream.getTracks().forEach(t => t.stop());
+                    cancelAnimationFrame(animationFrameId);
+                };
             }, []);
+
             return (
                 <div className="fixed inset-0 z-50 bg-black/95 flex flex-col items-center justify-center p-4">
                     <div className="relative w-full max-w-sm aspect-square bg-slate-900 rounded-2xl overflow-hidden border-2 border-cyan-500 shadow-[0_0_30px_rgba(6,182,212,0.3)]">
@@ -885,3 +903,4 @@
     </script>
 </body>
 </html>
+```
