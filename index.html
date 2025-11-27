@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CryptoVis: SonicLink Auto-Stop</title>
+    <title>CryptoVis: Secure Air-Gap System</title>
     
     <!-- React & Tailwind -->
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
@@ -43,10 +43,10 @@
             END_FREQ: 3200,
             BASE_FREQ: 1000,
             STEP_FREQ: 100,  
-            CHAR_DURATION: 0.08, // Fast transmission
+            CHAR_DURATION: 0.15,
             HEADER_DURATION: 1.0,
             FFT_SIZE: 2048,
-            THRESHOLD: 30,
+            THRESHOLD: 25,
             QR_FRAME_RATE: 150, 
             QR_CHUNK_SIZE: 500  
         };
@@ -91,7 +91,6 @@
             play: async (textData, loop = false, stopCallbackRef = { current: null }) => {
                 const ctx = new (window.AudioContext || window.webkitAudioContext)();
                 
-                // Convert to Hex
                 let hexData = "";
                 for (let i = 0; i < textData.length; i++) hexData += textData.charCodeAt(i).toString(16).padStart(2, '0');
 
@@ -104,15 +103,13 @@
                     const gain = ctx.createGain();
                     osc.connect(gain);
                     gain.connect(ctx.destination);
-                    osc.type = 'sawtooth';
+                    osc.type = 'sine';
 
                     const now = ctx.currentTime;
                     
-                    // START TONE
                     osc.frequency.setValueAtTime(PROTOCOL.START_FREQ, now);
                     gain.gain.setValueAtTime(0.5, now);
 
-                    // DATA
                     let startTime = now + PROTOCOL.HEADER_DURATION;
                     for (let i = 0; i < hexData.length; i++) {
                         const nibble = parseInt(hexData[i], 16);
@@ -120,7 +117,6 @@
                         osc.frequency.setValueAtTime(freq, startTime + (i * PROTOCOL.CHAR_DURATION));
                     }
 
-                    // END TONE
                     const dataEndTime = startTime + (hexData.length * PROTOCOL.CHAR_DURATION);
                     osc.frequency.setValueAtTime(PROTOCOL.END_FREQ, dataEndTime);
                     
@@ -128,14 +124,13 @@
                     osc.stop(dataEndTime + 0.5);
 
                     osc.onended = () => {
-                        if (isPlaying && loop) setTimeout(playSequence, 1000); // Loop with 1s pause
+                        if (isPlaying && loop) setTimeout(playSequence, 1000); 
                         else if (!loop) ctx.close();
                     };
                 };
 
                 playSequence();
 
-                // Expose stop function
                 stopCallbackRef.current = () => { 
                     isPlaying = false; 
                     try { ctx.close(); } catch(e){} 
@@ -145,7 +140,7 @@
             }
         };
 
-        // --- AUDIO RECEIVER & ANALYZER ---
+        // --- AUDIO RECEIVER ---
         const AudioListener = ({ onData, expectedType = null, autoAckId = null, onClose }) => {
             const [status, setStatus] = useState("Initializing Mic...");
             const [visuals, setVisuals] = useState(new Array(16).fill(0));
@@ -212,7 +207,6 @@
                             const endE = getFreqEnergy(PROTOCOL.END_FREQ);
 
                             if (!startTimeRef.current) {
-                                // DETECT START TONE
                                 if (startE > (PROTOCOL.THRESHOLD * 3)) {
                                     startTimeRef.current = now;
                                     setRecording(true);
@@ -220,7 +214,6 @@
                                     setStatus("Receiving Signal... (Keep Quiet)");
                                 }
                             } else {
-                                // DETECT END TONE
                                 if (endE > (PROTOCOL.THRESHOLD * 3) && (now - startTimeRef.current > 1000)) {
                                     setStatus("End Detected. Decoding...");
                                     const success = decodeSignal();
@@ -233,7 +226,6 @@
                                     startTimeRef.current = 0;
                                     return; 
                                 }
-                                // RECORDING
                                 const currentNibble = findDominantNibble();
                                 bufferRef.current.push({ t: now, val: currentNibble });
                             }
@@ -290,17 +282,15 @@
                         const jsonStr = str.substring(first, last+1);
                         const payload = JSON.parse(jsonStr);
                         
-                        // FILTERING LOGIC
                         if (expectedType === 'ACK') {
                             if (payload.t === 'A' && payload.i === autoAckId) {
-                                onData(payload); // Success ACK
+                                onData(payload); 
                                 return true;
                             }
-                            console.log("Ignored packet (Expected ACK, got:", payload.t);
-                            return false; // Wrong packet, keep listening
+                            return false; 
                         } 
                         else if (payload.t === 'D') {
-                            onData(payload); // Valid Data
+                            onData(payload); 
                             return true;
                         }
                     } 
@@ -370,6 +360,7 @@
             const canvasRef = useRef(null);
             const [error, setError] = useState("");
             const lastScanned = useRef(null); 
+            const noSignalCount = useRef(0); // For resetting double-scan memory
 
             useEffect(() => {
                 let stream;
@@ -396,19 +387,23 @@
                             const img = ctx.getImageData(0, 0, cvs.width, cvs.height);
                             const code = jsQR(img.data, img.width, img.height);
                             if (code) { 
+                                noSignalCount.current = 0;
                                 if (code.data !== lastScanned.current) {
                                     lastScanned.current = code.data;
                                     onScan(code.data); 
+                                }
+                            } else {
+                                noSignalCount.current++;
+                                // If we don't see a QR for 60 frames (~1 sec), allow rescanning the same code
+                                if (noSignalCount.current > 60) {
+                                    lastScanned.current = null;
                                 }
                             }
                         }
                     }
                     requestAnimationFrame(tick);
                 };
-                
-                return () => {
-                    if(stream) stream.getTracks().forEach(t => t.stop());
-                };
+                return () => stream?.getTracks().forEach(t => t.stop());
             }, []);
 
             return (
@@ -425,7 +420,7 @@
                             </div>
                         )}
                     </div>
-                    <button onClick={onClose} className="mt-8 bg-slate-800 text-white px-8 py-3 rounded-full text-white font-bold hover:bg-slate-700 transition-colors">Cancel</button>
+                    <button onClick={onClose} className="mt-8 bg-slate-800 text-white px-8 py-3 rounded-full font-bold hover:bg-slate-700 transition-colors">Cancel</button>
                 </div>
             );
         };
@@ -668,7 +663,11 @@
                     } 
                     // B. Message
                     else if (content.iv) {
-                        if(!sharedKey) { alert("Connect First!"); return; }
+                        if(!sharedKey) { 
+                            alert("Connect First!"); 
+                            setScanner(null); 
+                            return; 
+                        }
                         const dec = await window.crypto.subtle.decrypt({name:"AES-GCM", iv:hex2buf(content.iv)}, sharedKey, hex2buf(content.d));
                         const txt = new TextDecoder().decode(dec);
                         setChat(prev => [...prev, {from:'Partner', text:txt}]);
@@ -684,6 +683,7 @@
 
                 } catch(e) { 
                     console.error(e);
+                    alert("Scan Failed: " + e.message);
                 }
             };
 
@@ -846,6 +846,11 @@
                                         <Icon p={icons.cam}/> Scan
                                     </button>
                                 </div>
+                                {bluetoothUnlocked && (
+                                    <button onClick={() => setScanner('IMPORT')} className="w-full bg-slate-800 hover:bg-slate-700 text-white py-3 rounded font-bold flex items-center justify-center gap-2 animate-in fade-in">
+                                        <Icon p={icons.import}/> Import / Paste Packet
+                                    </button>
+                                )}
                             </div>
                         )}
                     </main>
