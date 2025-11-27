@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CryptoVis: AirGap Transfer</title>
+    <title>CryptoVis: Authenticated RSA+AES</title>
     
     <!-- React & Tailwind -->
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
@@ -11,32 +11,25 @@
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <!-- QR Code Generation & Scanning -->
+    <!-- QR Libs -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
 
     <style>
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap');
-        body { font-family: 'JetBrains Mono', monospace; background-color: #0b1120; color: #e2e8f0; }
+        body { font-family: 'JetBrains Mono', monospace; background-color: #020617; color: #e2e8f0; }
         .glass { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(148, 163, 184, 0.1); }
         .scan-line {
-            width: 100%;
-            height: 2px;
-            background: #06b6d4;
-            position: absolute;
-            animation: scan 2s linear infinite;
-            box-shadow: 0 0 10px #06b6d4;
+            width: 100%; height: 2px; background: #22c55e; position: absolute;
+            animation: scan 2s linear infinite; box-shadow: 0 0 10px #22c55e;
         }
         @keyframes scan {
-            0% { top: 0%; opacity: 0; }
-            10% { opacity: 1; }
-            90% { opacity: 1; }
-            100% { top: 100%; opacity: 0; }
+            0% { top: 0%; opacity: 0; } 10% { opacity: 1; } 90% { opacity: 1; } 100% { top: 100%; opacity: 0; }
         }
         .matrix-bg {
-            background-image: linear-gradient(0deg, transparent 24%, rgba(6, 182, 212, .05) 25%, rgba(6, 182, 212, .05) 26%, transparent 27%, transparent 74%, rgba(6, 182, 212, .05) 75%, rgba(6, 182, 212, .05) 76%, transparent 77%, transparent), linear-gradient(90deg, transparent 24%, rgba(6, 182, 212, .05) 25%, rgba(6, 182, 212, .05) 26%, transparent 27%, transparent 74%, rgba(6, 182, 212, .05) 75%, rgba(6, 182, 212, .05) 76%, transparent 77%, transparent);
-            background-size: 50px 50px;
+            background-image: radial-gradient(#1e293b 1px, transparent 1px); background-size: 20px 20px;
         }
+        .fingerprint-box { font-size: 2rem; letter-spacing: 0.5rem; text-shadow: 0 0 10px rgba(255,255,255,0.5); }
     </style>
 </head>
 <body class="matrix-bg min-h-screen">
@@ -45,445 +38,364 @@
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
 
-        // --- INTERNAL ICONS (No external fetch dependencies) ---
-        const Icon = ({ path, color = "currentColor", size = 24, className="" }) => (
-            <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-                {path}
+        // --- ICONS ---
+        const Icon = ({ d, color="currentColor", size=24 }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                {d}
             </svg>
         );
         const icons = {
-            user: <><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></>,
-            key: <><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/><circle cx="7.5" cy="15.5" r="5.5"/></>,
+            shield: <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>,
+            key: <><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/></>,
             lock: <><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></>,
-            unlock: <><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></>,
-            qr: <><rect x="3" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><path d="M10 7h4"/><path d="M7 10v4"/><path d="M14 10h4"/></>,
+            qr: <><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><path d="M3 14h7v7H3z"/></>,
             camera: <><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></>,
-            sound: <><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></>,
-            send: <><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></>,
-            refresh: <><polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></>
+            check: <polyline points="20 6 9 17 4 12"/>,
+            skull: <path d="M12 22s4-2 4-7V9c0-5-8-5-8 0v6c0 5 4 7 4 7z" /> // Approximate skull
         };
 
-        // --- AUDIO SYNTHESIZER (Gibberlink Style) ---
-        const playDataSound = (dataString) => {
-            const AudioContext = window.AudioContext || window.webkitAudioContext;
-            if (!AudioContext) return;
-            const ctx = new AudioContext();
-            const oscillator = ctx.createOscillator();
-            const gainNode = ctx.createGain();
-            
-            oscillator.connect(gainNode);
-            gainNode.connect(ctx.destination);
-            
-            oscillator.type = 'square';
-            // Simple mapping: Char code to frequency
-            // This is "Sci-Fi Effect" audio, not industrial modem data (too complex for 1 file)
-            const now = ctx.currentTime;
-            
-            // Start Beep
-            oscillator.frequency.setValueAtTime(880, now);
-            
-            // Fast modulation for data effect
-            for(let i=0; i<Math.min(dataString.length, 50); i++) {
-                const charCode = dataString.charCodeAt(i);
-                const freq = 400 + (charCode * 5); 
-                oscillator.frequency.setValueAtTime(freq, now + 0.1 + (i * 0.05));
-            }
-            
-            // End Beep
-            oscillator.frequency.setValueAtTime(440, now + 0.1 + (Math.min(dataString.length, 50) * 0.05));
-            
-            gainNode.gain.setValueAtTime(0.1, now);
-            gainNode.gain.exponentialRampToValueAtTime(0.001, now + 3); // Fade out
-
-            oscillator.start(now);
-            oscillator.stop(now + 3);
-        };
-
-        // --- UTILS ---
+        // --- CRYPTO UTILS ---
         const buf2hex = (buffer) => [...new Uint8Array(buffer)].map(x => x.toString(16).padStart(2, '0')).join('');
         const hex2buf = (hex) => new Uint8Array(hex.match(/.{1,2}/g).map(byte => parseInt(byte, 16))).buffer;
 
-        // --- COMPONENTS ---
+        // Visual Fingerprint Generator (Authenticity Check)
+        // Hashes the Public Key and maps it to Emojis
+        const generateFingerprint = async (keyString) => {
+            const encoder = new TextEncoder();
+            const data = encoder.encode(keyString);
+            const hashBuffer = await window.crypto.subtle.digest('SHA-256', data);
+            const hashArray = new Uint8Array(hashBuffer);
+            
+            // Map first 4 bytes to emojis
+            const emojis = ["🐶","🐱","🐭","🐹","🐰","🦊","🐻","🐼","🐨","🐯","🦁","🐮","🐷","🐸","🐵","🐔","🐧","🐦","🐤","🦆","🦅","🦉","🦇","🐺","🐗","🐴","🦄","🐝","🐛","🦋","🐌","🐞","🐜","🕷","🕸","🐢","🐍","🦎","🦂","🦀","🦑","🐙","🦐","🐠","🐟","🐡","🐬","🦈","🐳","🐋","🐊","🐆","🐅","🐃","🐂","🐄","🐪","🐫","🐘","🦏","🦍","🐎","🐖","🐐","🐏","🐑","🐕","🐩","🐈","🐓","🦃","🕊","🐇","🐁","🐀","🐿","🐾","🐉","🐲","🌵","🎄","🌲","🌳","🌴","🌱","🌿","☘","🍀","🎍","🎋","🍃","🍂","🍁","🍄","🌾","💐","🌷","🌹","🥀","🌻","🌼","🌸","🌺"];
+            let fp = "";
+            for(let i=0; i<4; i++) {
+                fp += emojis[hashArray[i] % emojis.length];
+            }
+            return fp;
+        };
 
-        // 1. QR Generator
+        // --- COMPONENTS ---
         const QRDisplay = ({ data, label }) => {
             const canvasRef = useRef(null);
             useEffect(() => {
                 if (canvasRef.current && data) {
-                    new QRious({
-                        element: canvasRef.current,
-                        value: data,
-                        size: 256,
-                        level: 'L' // Low error correction for denser data
-                    });
+                    new QRious({ element: canvasRef.current, value: data, size: 200 });
                 }
             }, [data]);
-
             return (
-                <div className="flex flex-col items-center bg-white p-4 rounded-lg shadow-lg max-w-[300px] mx-auto">
+                <div className="bg-white p-3 rounded-xl flex flex-col items-center shadow-[0_0_20px_rgba(34,197,94,0.3)]">
                     <canvas ref={canvasRef} />
-                    <p className="text-black text-xs font-mono mt-2 text-center break-all">{label}</p>
+                    <p className="text-black text-[10px] font-mono mt-1 text-center max-w-[180px] break-all">{label}</p>
                 </div>
             );
         };
 
-        // 2. QR Scanner Camera
         const QRScanner = ({ onScan, onClose }) => {
             const videoRef = useRef(null);
             const canvasRef = useRef(null);
-            const [error, setError] = useState(null);
+            const [err, setErr] = useState("");
 
             useEffect(() => {
-                let stream = null;
-                const startCamera = async () => {
-                    try {
-                        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
-                        if (videoRef.current) {
-                            videoRef.current.srcObject = stream;
-                            videoRef.current.setAttribute("playsinline", true);
+                let stream;
+                navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+                    .then(s => {
+                        stream = s;
+                        if(videoRef.current) {
+                            videoRef.current.srcObject = s;
                             videoRef.current.play();
                             requestAnimationFrame(tick);
                         }
-                    } catch (err) {
-                        setError("Camera Error: HTTPS required or Permission Denied.");
-                    }
-                };
+                    })
+                    .catch(() => setErr("Camera blocked. Use HTTPS."));
 
                 const tick = () => {
-                    if (videoRef.current && videoRef.current.readyState === videoRef.current.HAVE_ENOUGH_DATA) {
-                        const canvas = canvasRef.current;
-                        const video = videoRef.current;
-                        if (!canvas) return;
-                        
-                        canvas.height = video.videoHeight;
-                        canvas.width = video.videoWidth;
-                        const ctx = canvas.getContext("2d");
-                        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                        
-                        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                        const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "dontInvert" });
-
-                        if (code) {
-                            onScan(code.data);
-                            return; // Stop scanning on success
-                        }
+                    if (videoRef.current && videoRef.current.readyState === 4) {
+                        const cvs = canvasRef.current;
+                        const vid = videoRef.current;
+                        cvs.width = vid.videoWidth;
+                        cvs.height = vid.videoHeight;
+                        const ctx = cvs.getContext("2d");
+                        ctx.drawImage(vid, 0, 0);
+                        const img = ctx.getImageData(0, 0, cvs.width, cvs.height);
+                        const code = jsQR(img.data, img.width, img.height);
+                        if (code) { onScan(code.data); return; }
                     }
                     requestAnimationFrame(tick);
                 };
-
-                startCamera();
-
-                return () => {
-                    if (stream) stream.getTracks().forEach(track => track.stop());
-                };
+                return () => stream?.getTracks().forEach(t => t.stop());
             }, []);
 
             return (
                 <div className="fixed inset-0 z-50 bg-black flex flex-col items-center justify-center p-4">
-                    <div className="relative w-full max-w-md aspect-square bg-slate-900 rounded-lg overflow-hidden border-2 border-cyan-500">
-                        <video ref={videoRef} className="absolute inset-0 w-full h-full object-cover opacity-80" />
+                    <div className="relative w-full max-w-sm aspect-square bg-slate-900 rounded-lg overflow-hidden border-2 border-emerald-500">
+                        <video ref={videoRef} className="absolute inset-0 w-full h-full object-cover" playsInline />
                         <canvas ref={canvasRef} className="hidden" />
                         <div className="scan-line"></div>
-                        {error && <div className="absolute inset-0 flex items-center justify-center text-red-500 font-bold bg-black/80 text-center p-4">{error}</div>}
+                        {err && <div className="absolute inset-0 flex items-center justify-center text-red-500 bg-black/90 p-4 text-center font-bold">{err}</div>}
                     </div>
-                    <button onClick={onClose} className="mt-8 bg-slate-700 px-6 py-3 rounded-full text-white font-bold">Close Camera</button>
+                    <button onClick={onClose} className="mt-6 bg-slate-700 px-8 py-3 rounded-full text-white font-bold">Cancel</button>
                 </div>
             );
         };
 
         // --- MAIN APP ---
         const App = () => {
-            const [role, setRole] = useState(null); // 'Alice' or 'Bob' or 'Darth'
+            // Identity
+            const [role, setRole] = useState(null); // 'Receiver' (Bob), 'Sender' (Alice), 'Attacker' (Darth)
+            
+            // RSA Keys (Identity)
             const [myKeys, setMyKeys] = useState(null);
-            const [partnerPublicKey, setPartnerPublicKey] = useState(null);
-            const [showScanner, setShowScanner] = useState(false);
-            const [scannedData, setScannedData] = useState(null);
+            const [myPublicString, setMyPublicString] = useState("");
+            const [myFingerprint, setMyFingerprint] = useState("");
+
+            // Partner Keys (The one we scanned)
+            const [scannedKey, setScannedKey] = useState(null); // The raw key string
+            const [scannedFingerprint, setScannedFingerprint] = useState(null);
+            const [isVerified, setIsVerified] = useState(false);
+
+            // Message State
             const [message, setMessage] = useState("");
             const [encryptedPacket, setEncryptedPacket] = useState(null);
             const [decryptedMessage, setDecryptedMessage] = useState(null);
             const [logs, setLogs] = useState([]);
 
-            const log = (msg) => setLogs(p => [msg, ...p]);
+            const [scannerMode, setScannerMode] = useState(null); // 'KEY', 'PACKET'
 
-            // 1. Generate RSA Keys (Identity)
+            const log = (m) => setLogs(p => [`> ${m}`, ...p]);
+
+            // 1. Generate RSA Identity
             const generateIdentity = async () => {
-                log("Generating RSA-2048 Key Pair...");
-                try {
-                    const keys = await window.crypto.subtle.generateKey(
-                        { name: "RSA-OAEP", modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: "SHA-256" },
-                        true, ["encrypt", "decrypt"]
-                    );
-                    
-                    // Export Public Key to send to others
-                    const exported = await window.crypto.subtle.exportKey("spki", keys.publicKey);
-                    const exportedAsBase64 = btoa(String.fromCharCode(...new Uint8Array(exported)));
-                    
-                    setMyKeys({ ...keys, publicString: exportedAsBase64 });
-                    log("Identity Created.");
-                } catch (e) { log("Error generating keys: " + e.message); }
+                log("Generating RSA-2048 Keypair...");
+                const keys = await window.crypto.subtle.generateKey(
+                    { name: "RSA-OAEP", modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: "SHA-256" },
+                    true, ["encrypt", "decrypt"]
+                );
+                
+                // Export Public Key
+                const exported = await window.crypto.subtle.exportKey("spki", keys.publicKey);
+                const str = btoa(String.fromCharCode(...new Uint8Array(exported)));
+                
+                // Generate Fingerprint
+                const fp = await generateFingerprint(str);
+
+                setMyKeys(keys);
+                setMyPublicString(str);
+                setMyFingerprint(fp);
+                log(`Identity Ready. Fingerprint: ${fp}`);
             };
 
-            // 2. Encrypt Logic (Bob)
-            const encryptMessage = async () => {
-                if (!partnerPublicKey) { log("Need Alice's Public Key first!"); return; }
-                log("Encrypting...");
+            // 2. Process Scanned Key (Verification Step)
+            const handleScannedKey = async (keyStr) => {
+                log("Public Key Scanned.");
+                const fp = await generateFingerprint(keyStr);
+                setScannedKey(keyStr);
+                setScannedFingerprint(fp);
+                log(`Calculated Fingerprint: ${fp}`);
+                log("WAITING FOR AUTHENTICITY CHECK...");
+            };
 
+            // 3. Encrypt (Hybrid RSA + AES)
+            const encryptData = async () => {
+                if (!scannedKey) return;
+                log("Starting Hybrid Encryption...");
+                
                 try {
-                    // Import partner's public key
-                    const binaryDer = Uint8Array.from(atob(partnerPublicKey), c => c.charCodeAt(0));
-                    const importedPubKey = await window.crypto.subtle.importKey(
+                    // Import Partner's RSA Key
+                    const binaryDer = Uint8Array.from(atob(scannedKey), c => c.charCodeAt(0));
+                    const rsaPubKey = await window.crypto.subtle.importKey(
                         "spki", binaryDer.buffer, { name: "RSA-OAEP", hash: "SHA-256" }, true, ["encrypt"]
                     );
 
-                    // Generate AES Session Key
+                    // A. Generate AES Session Key
                     const aesKey = await window.crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, true, ["encrypt"]);
                     
-                    // Encrypt Message with AES
+                    // B. Encrypt Message with AES
                     const iv = window.crypto.getRandomValues(new Uint8Array(12));
                     const enc = new TextEncoder();
-                    const encryptedContent = await window.crypto.subtle.encrypt({ name: "AES-GCM", iv }, aesKey, enc.encode(message));
+                    const encryptedContent = await window.crypto.subtle.encrypt(
+                        { name: "AES-GCM", iv }, aesKey, enc.encode(message)
+                    );
 
-                    // Encrypt AES Key with RSA
+                    // C. Encrypt AES Key with RSA
                     const rawAes = await window.crypto.subtle.exportKey("raw", aesKey);
-                    const encryptedAesKey = await window.crypto.subtle.encrypt({ name: "RSA-OAEP" }, importedPubKey, rawAes);
+                    const encryptedAesKey = await window.crypto.subtle.encrypt(
+                        { name: "RSA-OAEP" }, rsaPubKey, rawAes
+                    );
 
-                    // Create Packet JSON
+                    // D. Package it
                     const packet = JSON.stringify({
                         iv: buf2hex(iv),
-                        key: buf2hex(encryptedAesKey),
-                        data: buf2hex(encryptedContent)
+                        k: buf2hex(encryptedAesKey), // Encrypted AES Key
+                        d: buf2hex(encryptedContent) // Encrypted Data
                     });
 
                     setEncryptedPacket(packet);
-                    log("Message Encrypted into Packet.");
-                    playDataSound(packet); // Play cool sound
-                } catch (e) { log("Encryption Error: " + e.message); }
+                    log("HYBRID PACKET GENERATED.");
+                } catch (e) { log("Encrypt Error: " + e.message); }
             };
 
-            // 3. Decrypt Logic (Alice or Darth)
-            const handleScannedPacket = async (jsonString) => {
+            // 4. Decrypt
+            const decryptPacket = async (packetStr) => {
+                log("Packet Received. Decrypting...");
                 try {
-                    const packet = JSON.parse(jsonString);
+                    const pkt = JSON.parse(packetStr);
                     
-                    if (role === 'Darth') {
-                        // Darth simulation
-                        log("DARTH: Intercepted packet!");
-                        log("DARTH: Attempting decryption without Private Key...");
+                    if (role === 'Attacker') {
                         setTimeout(() => {
-                            log("DARTH ERROR: RSA Decryption Failed.");
-                            setDecryptedMessage("❌ ACCESS DENIED: Missing Private Key");
-                        }, 1500);
+                            setDecryptedMessage("❌ ACCESS DENIED. RSA Private Key Mismatch.");
+                            log("Decryption Failed: You are not the intended recipient.");
+                        }, 1000);
                         return;
                     }
 
-                    if (!myKeys) { log("I don't have a private key to decrypt this."); return; }
-
-                    log("Decrypting packet...");
-                    
-                    // Unwrap AES Key
-                    const rawAesKey = await window.crypto.subtle.decrypt(
-                        { name: "RSA-OAEP" },
-                        myKeys.privateKey,
-                        hex2buf(packet.key)
+                    // A. Decrypt AES Key using RSA Private Key
+                    const rawAes = await window.crypto.subtle.decrypt(
+                        { name: "RSA-OAEP" }, myKeys.privateKey, hex2buf(pkt.k)
                     );
 
-                    // Import AES Key
-                    const aesKey = await window.crypto.subtle.importKey("raw", rawAesKey, "AES-GCM", true, ["decrypt"]);
+                    // B. Import AES Key
+                    const aesKey = await window.crypto.subtle.importKey("raw", rawAes, "AES-GCM", true, ["decrypt"]);
 
-                    // Decrypt Content
-                    const decrypted = await window.crypto.subtle.decrypt(
-                        { name: "AES-GCM", iv: hex2buf(packet.iv) },
-                        aesKey,
-                        hex2buf(packet.data)
+                    // C. Decrypt Data
+                    const dec = await window.crypto.subtle.decrypt(
+                        { name: "AES-GCM", iv: hex2buf(pkt.iv) }, aesKey, hex2buf(pkt.d)
                     );
 
-                    const text = new TextDecoder().decode(decrypted);
-                    setDecryptedMessage(text);
-                    log("Decryption Successful!");
-                    playDataSound("Success");
-
+                    setDecryptedMessage(new TextDecoder().decode(dec));
+                    log("DECRYPTION SUCCESSFUL.");
                 } catch (e) {
-                    log("Decryption Failed. Are you using the correct Private Key?");
-                    setDecryptedMessage("❌ Decryption Error");
+                    setDecryptedMessage("❌ ERROR");
+                    log("Decryption failed. " + e.message);
                 }
             };
 
-            // 4. Scan Handler
             const onScan = (data) => {
-                setShowScanner(false);
-                // Check if it's a Key or a Packet
-                if (data.length < 500 && !data.includes("{")) {
-                    // Likely a Public Key (Base64)
-                    log("Scanned Public Key!");
-                    setPartnerPublicKey(data);
-                } else {
-                    // Likely a JSON Packet
-                    log("Scanned Data Packet!");
-                    handleScannedPacket(data);
-                }
+                setScannerMode(null);
+                // Simple heuristic to differentiate Key vs Packet
+                if (data.includes('"iv":')) decryptPacket(data);
+                else handleScannedKey(data);
             };
 
-            // --- RENDER ---
-            
-            // 0. Role Selection Screen
+            // RENDER: ROLE SELECT
             if (!role) return (
-                <div className="flex flex-col items-center justify-center min-h-screen p-4 space-y-8">
-                    <h1 className="text-4xl font-bold text-cyan-400 tracking-tighter text-center">CryptoVis <span className="text-white text-lg block font-normal">AirGap Transfer System</span></h1>
-                    
+                <div className="min-h-screen flex flex-col items-center justify-center p-4 gap-6">
+                    <h1 className="text-3xl font-bold text-emerald-400 text-center">RSA+AES Authenticated Transfer</h1>
+                    <p className="text-slate-400 text-center max-w-md text-sm">
+                        Demonstrates Hybrid Encryption with <strong>Visual Fingerprint Verification</strong> to prevent Man-in-the-Middle attacks.
+                    </p>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 w-full max-w-4xl">
-                        
-                        {/* Alice Card */}
-                        <div onClick={() => { setRole('Alice'); generateIdentity(); }} className="glass p-8 rounded-xl cursor-pointer hover:bg-slate-800 transition-all border-l-4 border-blue-500 group">
-                            <div className="bg-blue-500/20 w-16 h-16 rounded-full flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                                <Icon path={icons.user} color="#3b82f6" size={32} />
-                            </div>
-                            <h2 className="text-2xl font-bold text-white">I am Alice</h2>
-                            <p className="text-blue-300 font-bold mb-2">The Receiver (Laptop)</p>
-                            <p className="text-slate-400 text-sm">Use this device to generate keys and receive secrets.</p>
-                        </div>
-
-                        {/* Bob Card */}
-                        <div onClick={() => setRole('Bob')} className="glass p-8 rounded-xl cursor-pointer hover:bg-slate-800 transition-all border-l-4 border-orange-500 group">
-                            <div className="bg-orange-500/20 w-16 h-16 rounded-full flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                                <Icon path={icons.send} color="#f97316" size={32} />
-                            </div>
-                            <h2 className="text-2xl font-bold text-white">I am Bob</h2>
-                            <p className="text-orange-300 font-bold mb-2">The Sender (Phone)</p>
-                            <p className="text-slate-400 text-sm">Use this device to scan keys and send secrets.</p>
-                        </div>
-
-                        {/* Darth Card */}
-                        <div onClick={() => setRole('Darth')} className="glass p-8 rounded-xl cursor-pointer hover:bg-slate-800 transition-all border-l-4 border-red-600 group">
-                            <div className="bg-red-600/20 w-16 h-16 rounded-full flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                                <Icon path={icons.unlock} color="#dc2626" size={32} />
-                            </div>
-                            <h2 className="text-2xl font-bold text-white">I am Darth</h2>
-                            <p className="text-red-400 font-bold mb-2">The Hacker</p>
-                            <p className="text-slate-400 text-sm">Demonstrate that intercepting the data is useless without the key.</p>
-                        </div>
+                        <button onClick={()=>{setRole('Receiver'); generateIdentity();}} className="glass p-6 rounded-xl border-l-4 border-emerald-500 hover:bg-slate-800 text-left">
+                            <h2 className="text-xl font-bold text-white mb-2">I am Bob (Receiver)</h2>
+                            <p className="text-xs text-slate-400">Generates RSA Keys. Displays QR to receive file.</p>
+                        </button>
+                        <button onClick={()=>{setRole('Sender');}} className="glass p-6 rounded-xl border-l-4 border-blue-500 hover:bg-slate-800 text-left">
+                            <h2 className="text-xl font-bold text-white mb-2">I am Alice (Sender)</h2>
+                            <p className="text-xs text-slate-400">Scans Bob. Verifies Fingerprint. Sends Encrypted File.</p>
+                        </button>
+                        <button onClick={()=>{setRole('Attacker'); generateIdentity();}} className="glass p-6 rounded-xl border-l-4 border-red-500 hover:bg-slate-800 text-left">
+                            <h2 className="text-xl font-bold text-white mb-2">I am Darth (Attacker)</h2>
+                            <p className="text-xs text-slate-400">Impersonates Bob with different keys. Tries to intercept.</p>
+                        </button>
                     </div>
                 </div>
             );
 
-            // 1. Role View
+            // RENDER: MAIN UI
             return (
-                <div className="max-w-4xl mx-auto p-4 pb-20">
-                    <header className="flex justify-between items-center mb-6 border-b border-slate-700 pb-4">
-                        <div className="flex items-center gap-2">
-                            <button onClick={() => setRole(null)} className="text-slate-500 hover:text-white"><Icon path={icons.refresh} size={20}/></button>
-                            <h1 className="text-xl font-bold text-cyan-400">Identity: <span className="text-white">{role}</span></h1>
+                <div className="max-w-3xl mx-auto p-4 pb-20">
+                    <header className="flex justify-between items-center mb-6 pb-4 border-b border-slate-700">
+                        <div>
+                            <h1 className="text-lg font-bold text-white">Identity: <span className={role==='Attacker'?'text-red-500':'text-emerald-400'}>{role}</span></h1>
+                            {myFingerprint && <div className="text-xs text-slate-400">My Fingerprint: <span className="text-lg ml-1">{myFingerprint}</span></div>}
                         </div>
-                        {myKeys && <div className="text-xs bg-emerald-900 text-emerald-300 px-2 py-1 rounded border border-emerald-500">Secure (Keys Active)</div>}
+                        <button onClick={()=>window.location.reload()} className="text-xs bg-slate-800 px-3 py-1 rounded hover:bg-slate-700">Reset</button>
                     </header>
 
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                        
-                        {/* LEFT COLUMN: ACTIONS */}
-                        <div className="space-y-6">
-                            
-                            {/* ALICE: SHARE KEY */}
-                            {role === 'Alice' && myKeys && (
-                                <div className="glass p-6 rounded-xl border border-blue-500/30">
-                                    <h3 className="text-lg font-bold text-blue-400 mb-4 flex items-center gap-2"><Icon path={icons.key} size={20}/> 1. Share Public Key</h3>
-                                    <p className="text-sm text-slate-400 mb-4">Show this to Bob so he can encrypt messages for you.</p>
-                                    <QRDisplay data={myKeys.publicString} label="Alice's Public Key" />
-                                </div>
-                            )}
+                    <div className="space-y-6">
 
-                            {/* BOB/DARTH: SCANNER BUTTON */}
-                            {(role === 'Bob' || role === 'Darth') && (
-                                <div className="glass p-6 rounded-xl border border-orange-500/30">
-                                    <h3 className="text-lg font-bold text-orange-400 mb-4 flex items-center gap-2"><Icon path={icons.camera} size={20}/> Camera Scanner</h3>
-                                    <p className="text-sm text-slate-400 mb-4">
-                                        {role === 'Bob' ? "Scan Alice's Key first, then later scan nothing." : "Intercept Bob's packet."}
-                                    </p>
-                                    <button 
-                                        onClick={() => setShowScanner(true)}
-                                        className="w-full bg-slate-700 hover:bg-slate-600 text-white font-bold py-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg"
-                                    >
-                                        <Icon path={icons.camera} />
-                                        {role === 'Bob' && !partnerPublicKey ? "Scan Alice's Key" : "Scan QR Code"}
-                                    </button>
-                                </div>
-                            )}
-
-                            {/* BOB: COMPOSE */}
-                            {role === 'Bob' && partnerPublicKey && (
-                                <div className="glass p-6 rounded-xl border border-cyan-500/30">
-                                    <h3 className="text-lg font-bold text-cyan-400 mb-4 flex items-center gap-2"><Icon path={icons.lock} size={20}/> 2. Encrypt & Send</h3>
-                                    <div className="bg-slate-900 p-2 rounded mb-2 text-xs text-emerald-400 break-all">Linked to Alice: {partnerPublicKey.substring(0,20)}...</div>
-                                    <textarea 
-                                        value={message}
-                                        onChange={e => setMessage(e.target.value)}
-                                        placeholder="Type secret message..."
-                                        className="w-full bg-slate-800 border border-slate-600 rounded p-3 text-white mb-4 focus:border-cyan-500 outline-none"
-                                    />
-                                    <button onClick={encryptMessage} className="w-full bg-cyan-600 hover:bg-cyan-500 text-white font-bold py-3 rounded-lg">
-                                        Encrypt & Generate QR
-                                    </button>
-                                </div>
-                            )}
-
-                            {/* ALICE: SCAN RESULT (DECRYPT) */}
-                            {role === 'Alice' && (
-                                <div className="glass p-6 rounded-xl border border-emerald-500/30">
-                                    <h3 className="text-lg font-bold text-emerald-400 mb-4 flex items-center gap-2"><Icon path={icons.unlock} size={20}/> 2. Receive & Decrypt</h3>
-                                    <button 
-                                        onClick={() => setShowScanner(true)}
-                                        className="w-full bg-emerald-700 hover:bg-emerald-600 text-white font-bold py-3 rounded-lg mb-4 flex items-center justify-center gap-2"
-                                    >
-                                        <Icon path={icons.camera} /> Scan Bob's Message
-                                    </button>
-                                    
-                                    {decryptedMessage && (
-                                        <div className="bg-slate-900 border border-emerald-500 p-4 rounded-lg animate-pulse">
-                                            <p className="text-xs text-slate-500 uppercase">Decrypted Secret:</p>
-                                            <p className="text-xl font-bold text-white mt-1">{decryptedMessage}</p>
+                        {/* SECTION 1: KEY EXCHANGE */}
+                        {(role === 'Receiver' || role === 'Attacker') && (
+                            <div className="glass p-6 rounded-xl border border-emerald-500/30">
+                                <h3 className="font-bold text-emerald-400 mb-4 flex items-center gap-2"><Icon d={icons.key} size={18}/> 1. Share RSA Public Key</h3>
+                                <div className="flex flex-col md:flex-row gap-6 items-center">
+                                    <QRDisplay data={myPublicString} label="Public Key" />
+                                    <div className="flex-1 text-center md:text-left">
+                                        <p className="text-sm text-slate-400 mb-2">Show this to the sender.</p>
+                                        <div className="bg-slate-800 p-4 rounded-lg border border-slate-600 inline-block">
+                                            <p className="text-xs text-slate-500 uppercase mb-1">Authenticity Fingerprint</p>
+                                            <div className="fingerprint-box">{myFingerprint}</div>
                                         </div>
-                                    )}
-                                </div>
-                            )}
-                            
-                            {/* DARTH: RESULT */}
-                            {role === 'Darth' && decryptedMessage && (
-                                <div className="glass p-6 rounded-xl border border-red-500/30 bg-red-900/10">
-                                    <h3 className="text-lg font-bold text-red-400 mb-2">Hack Result</h3>
-                                    <p className="text-red-200 font-mono text-lg">{decryptedMessage}</p>
-                                </div>
-                            )}
-                        </div>
-
-                        {/* RIGHT COLUMN: OUTPUTS & LOGS */}
-                        <div className="space-y-6">
-                            
-                            {/* ENCRYPTED PACKET DISPLAY (For Bob) */}
-                            {encryptedPacket && (
-                                <div className="glass p-6 rounded-xl text-center">
-                                    <h3 className="text-lg font-bold text-white mb-2">Encrypted Packet Ready</h3>
-                                    <p className="text-xs text-slate-400 mb-4">Hybrid Encryption: AES(Data) + RSA(Key)</p>
-                                    <QRDisplay data={encryptedPacket} label="Scan with Alice's Device" />
-                                    
-                                    <div className="mt-4 flex gap-2 justify-center">
-                                        <button onClick={() => playDataSound(encryptedPacket)} className="bg-slate-700 hover:bg-pink-600 px-4 py-2 rounded text-sm text-white flex items-center gap-2 transition-colors">
-                                            <Icon path={icons.sound} size={16} /> Play Audio Burst
-                                        </button>
+                                        {role === 'Attacker' && <p className="text-red-400 text-xs mt-2 animate-pulse">Warning: This fingerprint is different from Bob's!</p>}
                                     </div>
                                 </div>
-                            )}
+                            </div>
+                        )}
 
-                            {/* LOGS */}
-                            <div className="glass p-4 rounded-xl h-64 flex flex-col">
-                                <h4 className="text-sm font-bold text-slate-500 mb-2 uppercase tracking-widest">System Log</h4>
-                                <div className="flex-1 overflow-y-auto font-mono text-xs space-y-1 text-slate-300">
-                                    {logs.map((l, i) => <div key={i} className="border-l-2 border-slate-600 pl-2">>{l}</div>)}
+                        {role === 'Sender' && !scannedKey && (
+                            <div className="glass p-6 rounded-xl border border-blue-500/30">
+                                <h3 className="font-bold text-blue-400 mb-4 flex items-center gap-2"><Icon d={icons.camera} size={18}/> 1. Scan Receiver</h3>
+                                <p className="text-sm text-slate-400 mb-4">Scan the QR code on the receiver's screen.</p>
+                                <button onClick={()=>setScannerMode('KEY')} className="w-full bg-blue-600 hover:bg-blue-500 py-3 rounded-lg font-bold text-white">Open Camera</button>
+                            </div>
+                        )}
+
+                        {/* SECTION 2: AUTHENTICITY CHECK (The "Twist") */}
+                        {role === 'Sender' && scannedKey && !isVerified && (
+                            <div className="glass p-6 rounded-xl border border-yellow-500 animate-pulse">
+                                <h3 className="font-bold text-yellow-400 mb-4 text-xl">⚠️ AUTHENTICITY CHECK</h3>
+                                <div className="text-center space-y-4">
+                                    <p className="text-slate-300">Look at the receiver's screen. Does their fingerprint match this?</p>
+                                    <div className="bg-slate-900 p-6 rounded-xl border-2 border-yellow-500 inline-block">
+                                        <div className="fingerprint-box">{scannedFingerprint}</div>
+                                    </div>
+                                    <div className="flex gap-4 justify-center">
+                                        <button onClick={()=>setIsVerified(true)} className="bg-emerald-600 hover:bg-emerald-500 px-6 py-2 rounded font-bold">YES - MATCH</button>
+                                        <button onClick={()=>{setScannedKey(null); alert("Security Alert: Potential Man-in-the-Middle Attack!");}} className="bg-red-600 hover:bg-red-500 px-6 py-2 rounded font-bold">NO - ATTACK</button>
+                                    </div>
                                 </div>
                             </div>
+                        )}
 
+                        {/* SECTION 3: ENCRYPT & SEND */}
+                        {role === 'Sender' && isVerified && (
+                            <div className="glass p-6 rounded-xl border border-emerald-500/30">
+                                <h3 className="font-bold text-emerald-400 mb-4 flex items-center gap-2"><Icon d={icons.lock} size={18}/> 2. Encrypt & Transfer</h3>
+                                {!encryptedPacket ? (
+                                    <div className="space-y-4">
+                                        <input value={message} onChange={e=>setMessage(e.target.value)} placeholder="Enter Secret Message..." className="w-full bg-slate-900 border border-slate-700 rounded p-3 text-white outline-none focus:border-emerald-500" />
+                                        <button onClick={encryptData} className="w-full bg-emerald-600 hover:bg-emerald-500 py-3 rounded-lg font-bold">Encrypt (Hybrid RSA+AES)</button>
+                                    </div>
+                                ) : (
+                                    <div className="text-center space-y-4">
+                                        <div className="bg-slate-800 p-2 rounded text-xs text-emerald-300">Hybrid Packet: AES-256 Data + RSA-2048 Key</div>
+                                        <div className="flex justify-center"><QRDisplay data={encryptedPacket} label="Scan on Receiver" /></div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* SECTION 4: DECRYPT */}
+                        {(role === 'Receiver' || role === 'Attacker') && (
+                            <div className="glass p-6 rounded-xl border border-blue-500/30">
+                                <h3 className="font-bold text-blue-400 mb-4 flex items-center gap-2"><Icon d={icons.check} size={18}/> 2. Receive Packet</h3>
+                                <button onClick={()=>setScannerMode('PACKET')} className="w-full bg-blue-600 hover:bg-blue-500 py-3 rounded-lg font-bold mb-4">Scan Incoming Packet</button>
+                                {decryptedMessage && (
+                                    <div className={`p-4 rounded-lg border-2 ${decryptedMessage.includes('❌') ? 'border-red-500 bg-red-900/20' : 'border-emerald-500 bg-emerald-900/20'}`}>
+                                        <p className="text-xs uppercase text-slate-400 mb-1">Result:</p>
+                                        <p className="text-xl font-bold text-white">{decryptedMessage}</p>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* LOGS */}
+                        <div className="glass p-4 rounded-xl h-40 overflow-y-auto font-mono text-[10px] text-slate-400 bg-black/40">
+                            {logs.map((l,i) => <div key={i}>{l}</div>)}
                         </div>
                     </div>
 
-                    {/* MODAL: CAMERA */}
-                    {showScanner && <QRScanner onScan={onScan} onClose={() => setShowScanner(false)} />}
+                    {scannerMode && <QRScanner onScan={onScan} onClose={()=>setScannerMode(null)} />}
                 </div>
             );
         };
