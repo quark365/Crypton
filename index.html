@@ -1,3 +1,4 @@
+```html
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -29,6 +30,8 @@
         }
         .fingerprint { font-size: 2.5rem; letter-spacing: 0.5rem; text-shadow: 0 0 15px rgba(255,255,255,0.3); }
         .spectrum-bar { transition: height 0.05s ease; }
+        .btn-primary { @apply px-4 py-3 rounded-lg font-bold transition-colors text-white; }
+        .btn-secondary { @apply px-4 py-3 rounded-lg font-bold transition-colors text-white border; }
     </style>
 </head>
 <body class="matrix-bg min-h-screen">
@@ -43,9 +46,9 @@
             END_FREQ: 3000,
             BASE_FREQ: 1200,
             STEP_FREQ: 80,  // 16 steps (0-F)
-            CHAR_DURATION: 0.20, // 200ms per nibble (Slow & Steady)
+            CHAR_DURATION: 0.15, // 150ms per nibble (Balanced speed/reliability)
             FFT_SIZE: 2048,
-            THRESHOLD: 40 // Lower threshold for better sensitivity
+            THRESHOLD: 50 // Adjusted for sensitivity
         };
 
         // --- ICONS ---
@@ -79,9 +82,9 @@
             return fp;
         };
 
-        // --- REAL FSK MODEM ---
+        // --- REAL FSK MODEM (Optimized for hex digit stream) ---
         const SonicTransmitter = {
-            play: async (textData) => {
+            play: async (hexData) => {
                 const ctx = new (window.AudioContext || window.webkitAudioContext)();
                 const osc = ctx.createOscillator();
                 const gain = ctx.createGain();
@@ -89,32 +92,26 @@
                 gain.connect(ctx.destination);
                 osc.type = 'sawtooth'; // Cuts through noise best
 
-                // Convert String to Hex
-                let hexData = "";
-                for (let i = 0; i < textData.length; i++) {
-                    hexData += textData.charCodeAt(i).toString(16).padStart(2, '0');
-                }
-
                 const now = ctx.currentTime;
                 
-                // 1. START TONE
+                // 1. START TONE (1s header)
                 osc.frequency.setValueAtTime(PROTOCOL.START_FREQ, now);
                 gain.gain.setValueAtTime(0.5, now);
 
-                // 2. DATA TONES
-                let startTime = now + 1.0; // 1.0s Header for easier lock
+                // 2. DATA TONES (each hex digit as nibble)
+                let startTime = now + 1.0;
                 for (let i = 0; i < hexData.length; i++) {
-                    const nibble = parseInt(hexData[i], 16);
+                    const nibble = parseInt(hexData.charAt(i), 16);
                     const freq = PROTOCOL.BASE_FREQ + (nibble * PROTOCOL.STEP_FREQ);
                     osc.frequency.setValueAtTime(freq, startTime + (i * PROTOCOL.CHAR_DURATION));
                 }
 
-                // 3. END TONE
+                // 3. END TONE (1s footer)
                 const endTime = startTime + (hexData.length * PROTOCOL.CHAR_DURATION);
                 osc.frequency.setValueAtTime(PROTOCOL.END_FREQ, endTime);
                 
                 osc.start(now);
-                osc.stop(endTime + 1.0); // 1.0s Footer
+                osc.stop(endTime + 1.0);
 
                 return new Promise(r => setTimeout(r, (endTime + 1.0 - now) * 1000));
             }
@@ -184,7 +181,7 @@
             );
         };
 
-        // --- REAL AUDIO RECEIVER (FSK DECODER) ---
+        // --- REAL AUDIO RECEIVER (Improved FSK DECODER with real-time processing) ---
         const AudioListener = ({ onData, onClose }) => {
             const [status, setStatus] = useState("Waiting for Audio...");
             const [bits, setBits] = useState("");
@@ -193,8 +190,8 @@
             
             const analyzerRef = useRef(null);
             const rafRef = useRef(null);
-            const stateRef = useRef("IDLE"); // IDLE, LISTENING, DONE
-            const bufferRef = useRef("");
+            const stateRef = useRef("IDLE"); // IDLE, WAIT_FOR_DATA, LISTENING, DONE
+            const bufferRef = useRef([]); // Array of hex chars (nibbles)
             const startTimeRef = useRef(0);
 
             useEffect(() => {
@@ -208,7 +205,7 @@
                         const source = audioContext.createMediaStreamSource(stream);
                         const analyzer = audioContext.createAnalyser();
                         analyzer.fftSize = PROTOCOL.FFT_SIZE;
-                        analyzer.smoothingTimeConstant = 0.5;
+                        analyzer.smoothingTimeConstant = 0.1; // Faster response
                         source.connect(analyzer);
                         analyzerRef.current = analyzer;
 
@@ -218,8 +215,13 @@
 
                         const getFreqEnergy = (freq) => {
                             const bin = Math.round(freq / binWidth);
+                            // Clamp bin index
+                            const clampedBin = Math.max(0, Math.min(bufferLength - 1, bin));
                             // Average surrounding bins for robustness
-                            return (dataArray[bin-1] + dataArray[bin] + dataArray[bin+1]) / 3;
+                            const b1 = Math.max(0, clampedBin - 1);
+                            const b2 = clampedBin;
+                            const b3 = Math.min(bufferLength - 1, clampedBin + 1);
+                            return (dataArray[b1] + dataArray[b2] + dataArray[b3]) / 3;
                         };
 
                         const loop = () => {
@@ -229,7 +231,7 @@
                             const startEnergy = getFreqEnergy(PROTOCOL.START_FREQ);
                             const endEnergy = getFreqEnergy(PROTOCOL.END_FREQ);
 
-                            // VISUALIZER
+                            // VISUALIZER (16 bars for nibbles 0-F)
                             const newVisuals = [];
                             for(let i=0; i<16; i++) {
                                 const freq = PROTOCOL.BASE_FREQ + (i * PROTOCOL.STEP_FREQ);
@@ -241,62 +243,63 @@
                             if (stateRef.current === "IDLE") {
                                 if (startEnergy > PROTOCOL.THRESHOLD * 1.2) {
                                     stateRef.current = "WAIT_FOR_DATA";
-                                    startTimeRef.current = now; // Mark when start tone detected
+                                    startTimeRef.current = now;
                                     setStatus("Start Tone Detected...");
-                                    bufferRef.current = "";
+                                    bufferRef.current = [];
                                     setBits("");
+                                    setProgress(0);
                                 }
                             } 
                             else if (stateRef.current === "WAIT_FOR_DATA") {
-                                // Wait for 1.0s header to finish
+                                // Wait approx 1s for header
                                 if (now > startTimeRef.current + 1000) {
                                     stateRef.current = "LISTENING";
-                                    startTimeRef.current = now; // Reset timer for data chunks
+                                    startTimeRef.current = now;
                                     setStatus("Receiving Data...");
                                 }
                             }
                             else if (stateRef.current === "LISTENING") {
-                                // Check for End Tone
-                                if (endEnergy > PROTOCOL.THRESHOLD * 1.5) {
-                                    stateRef.current = "DONE";
-                                    setStatus("End Tone Detected. Decoding...");
-                                    finalizeData();
-                                    return;
-                                }
-
-                                // Calculate which nibble slot we are in
                                 const timePassed = (now - startTimeRef.current) / 1000;
                                 const charIndex = Math.floor(timePassed / PROTOCOL.CHAR_DURATION);
                                 const charOffset = timePassed % PROTOCOL.CHAR_DURATION;
 
-                                // Sample in the MIDDLE of the window (e.g., at 50% of duration)
-                                if (charOffset > (PROTOCOL.CHAR_DURATION * 0.4) && charOffset < (PROTOCOL.CHAR_DURATION * 0.6)) {
-                                    // Check if we haven't processed this index yet
-                                    // (Simple check: is buffer length == charIndex?)
-                                    if (bufferRef.current.length === charIndex) {
-                                        let maxEnergy = 0;
-                                        let bestNibble = -1;
-                                        
-                                        for(let i=0; i<16; i++) {
-                                            const freq = PROTOCOL.BASE_FREQ + (i * PROTOCOL.STEP_FREQ);
-                                            const energy = getFreqEnergy(freq);
-                                            if (energy > maxEnergy) {
-                                                maxEnergy = energy;
-                                                bestNibble = i;
-                                            }
-                                        }
+                                // Check for End Tone or Timeout
+                                if (endEnergy > PROTOCOL.THRESHOLD * 1.5 || timePassed > 60) {
+                                    stateRef.current = "DONE";
+                                    setStatus("Decoding...");
+                                    finalizeData();
+                                    return;
+                                }
 
-                                        if (maxEnergy > PROTOCOL.THRESHOLD) {
-                                            const hexChar = bestNibble.toString(16);
-                                            bufferRef.current += hexChar;
-                                            setBits(prev => prev + hexChar);
-                                        } else {
-                                            // Silence/Noise in data slot -> Assume '0' or gap?
-                                            // For robustness we skip or append '?'
-                                            bufferRef.current += "?";
-                                            setBits(prev => prev + "?");
+                                // Sample in wider middle window for reliability (~50% of slot)
+                                if (charOffset > 0.25 && charOffset < 0.75) {
+                                    // Extend buffer if needed
+                                    while (bufferRef.current.length <= charIndex) {
+                                        bufferRef.current.push(null);
+                                    }
+
+                                    // Find best nibble
+                                    let maxEnergy = 0;
+                                    let bestNibble = 0; // Default to 0
+                                    for(let i=0; i<16; i++) {
+                                        const freq = PROTOCOL.BASE_FREQ + (i * PROTOCOL.STEP_FREQ);
+                                        const energy = getFreqEnergy(freq);
+                                        if (energy > maxEnergy) {
+                                            maxEnergy = energy;
+                                            bestNibble = i;
                                         }
                                     }
+
+                                    const candidate = bestNibble.toString(16);
+                                    // Set if null and above threshold
+                                    if (bufferRef.current[charIndex] === null && maxEnergy > PROTOCOL.THRESHOLD) {
+                                        bufferRef.current[charIndex] = candidate;
+                                    }
+
+                                    // Update display and progress (assume max ~200 nibbles)
+                                    const currentBits = bufferRef.current.map(b => b || '?').join('');
+                                    setBits(currentBits);
+                                    setProgress(Math.min(100, (bufferRef.current.length / 200) * 100));
                                 }
                             }
 
@@ -317,30 +320,13 @@
             }, []);
 
             const finalizeData = () => {
-                let hex = bufferRef.current.replace(/\?/g, '0'); // Basic repair
-                let str = "";
-                // Attempt to reconstruct string
-                for (let i = 0; i < hex.length; i += 2) {
-                    str += String.fromCharCode(parseInt(hex.substr(i, 2), 16));
-                }
-                
-                // Simple repair: Find JSON structure
-                try {
-                    const firstBrace = str.indexOf('{');
-                    const lastBrace = str.lastIndexOf('}');
-                    if (firstBrace > -1 && lastBrace > firstBrace) {
-                        const jsonStr = str.substring(firstBrace, lastBrace + 1);
-                        onData(jsonStr);
-                    } else {
-                        // Attempt fallback repair for single Key field if header/footer damaged
-                        throw new Error("Bad Framing");
-                    }
-                } catch(e) {
-                    // Show raw for debugging
-                    alert(`Data received but corrupted: ${str}\n\nRetrying with partial repair...`);
-                    // If we found at least part of the key, we might try to use it, but for security we fail safe
+                const hex = bufferRef.current.map(b => b || '0').join(''); // Default missing to '0'
+                if (hex.length < 2) {
+                    setStatus("Too short. Retrying...");
                     onClose();
+                    return;
                 }
+                onData(hex);
             };
 
             return (
@@ -348,6 +334,10 @@
                     <div className="text-center mb-8">
                         <h2 className="text-2xl font-bold text-white mb-2">SonicLink Listener</h2>
                         <p className="text-cyan-400 font-mono animate-pulse">{status}</p>
+                        <div className="w-24 bg-slate-700 rounded-full h-2 mt-2 mx-auto">
+                            <div className="bg-cyan-500 h-2 rounded-full transition-all" style={{width: `${progress}%`}}></div>
+                        </div>
+                        <p className="text-xs text-slate-400">{Math.round(progress)}%</p>
                     </div>
                     
                     {/* Spectrum Analyzer */}
@@ -363,7 +353,7 @@
 
                     <div className="mt-4 text-xs text-slate-500 max-w-xs text-center">
                         Keep device still. High volume required.<br/>
-                        Transmission time: ~20 seconds.
+                        Transmission time: ~25-40 seconds.
                     </div>
 
                     <button onClick={onClose} className="mt-8 bg-slate-800 px-8 py-3 rounded-full text-white font-bold hover:bg-slate-700">Cancel</button>
@@ -387,61 +377,79 @@
             const [msg, setMsg] = useState("");
             const [audioPlaying, setAudioPlaying] = useState(false);
 
-            // 1. IDENTITY
+            // 1. IDENTITY (Optimized binary prefix + SPKI)
             const genKeys = async () => {
                 const k = await window.crypto.subtle.generateKey({name:"ECDH", namedCurve:"P-256"}, true, ["deriveKey", "deriveBits"]);
                 const exp = await window.crypto.subtle.exportKey("spki", k.publicKey);
-                // Optimization: Send only the ECDH Key over Audio to save time
-                const str = btoa(String.fromCharCode(...new Uint8Array(exp)));
-                
-                // We wrap it in a minimal JSON for parsing safety
+                const prefix = new Uint8Array([1]); // Type 1: Identity
+                const payload = new Uint8Array(prefix.length + exp.byteLength);
+                payload.set(prefix);
+                payload.set(new Uint8Array(exp), prefix.length);
                 setMyKeyPair(k);
-                setMyIdentity(JSON.stringify({e:str})); 
+                setMyIdentity(buf2hex(payload.buffer)); 
                 setSharedKey(null);
                 setFingerprint("????");
             };
             useEffect(() => { genKeys(); }, []);
 
-            // 2. EXCHANGE
-            const handleData = async (dataStr) => {
+            // 2. EXCHANGE (Handle raw hex payload)
+            const handleData = async (hexStr) => {
                 try {
-                    // Message Packet
-                    if (dataStr.includes('"iv":')) {
-                        if(!sharedKey) { alert("Not Connected"); return; }
-                        const p = JSON.parse(dataStr);
-                        const dec = await window.crypto.subtle.decrypt({name:"AES-GCM", iv:hex2buf(p.iv)}, sharedKey, hex2buf(p.d));
+                    const pbuf = hex2buf(hexStr);
+                    if (pbuf.byteLength < 2) throw new Error("Payload too short");
+                    const type = new Uint8Array(pbuf)[0];
+                    const data = pbuf.slice(1);
+
+                    if (type === 1) { // Identity
+                        if (data.byteLength !== 91) throw new Error("Invalid key length");
+                        const pk = await window.crypto.subtle.importKey("spki", data, {name:"ECDH", namedCurve:"P-256"}, true, []);
+                        const sk = await window.crypto.subtle.deriveKey(
+                            {name:"ECDH", public: pk},
+                            myKeyPair.privateKey,
+                            {name:"AES-GCM", length: 256},
+                            true, ["encrypt", "decrypt"]
+                        );
+                        const raw = await window.crypto.subtle.exportKey("raw", sk);
+                        const fp = await generateFingerprint(raw);
+                        setSharedKey(sk);
+                        setFingerprint(fp);
+                        setActiveTab('VERIFY');
+                    } else if (type === 2) { // Message
+                        if (!sharedKey) { alert("Not Connected"); return; }
+                        if (data.byteLength < 28) throw new Error("Invalid message length");
+                        const ivb = data.slice(0, 12);
+                        const encb = data.slice(12);
+                        const dec = await window.crypto.subtle.decrypt(
+                            {name: "AES-GCM", iv: ivb},
+                            sharedKey,
+                            encb
+                        );
                         const txt = new TextDecoder().decode(dec);
-                        setChat(prev => [...prev, {from:'Partner', text:txt}]);
-                        alert("Message Received: " + txt);
-                        return;
+                        setChat(prev => [...prev, {from: 'Partner', text: txt}]);
+                    } else {
+                        throw new Error("Unknown payload type");
                     }
-
-                    // Identity Packet
-                    const payload = JSON.parse(dataStr);
-                    if (!payload.e) throw new Error("Missing Key");
-                    
-                    const ab = Uint8Array.from(atob(payload.e), c => c.charCodeAt(0)).buffer;
-                    const pk = await window.crypto.subtle.importKey("spki", ab, {name:"ECDH", namedCurve:"P-256"}, true, []);
-                    const sk = await window.crypto.subtle.deriveKey({name:"ECDH", public:pk}, myKeyPair.privateKey, {name:"AES-GCM", length:256}, true, ["encrypt","decrypt"]);
-                    const raw = await window.crypto.subtle.exportKey("raw", sk);
-                    const fp = await generateFingerprint(raw);
-                    setSharedKey(sk);
-                    setFingerprint(fp);
-                    setActiveTab('VERIFY');
-                    alert("Handshake Complete!");
-
-                } catch(e) { 
+                } catch (e) { 
                     console.error(e);
-                    alert("Data Packet Corrupted/Invalid"); 
+                    alert("Data Corrupted/Invalid: " + e.message); 
                 }
             };
 
-            // 3. SEND
+            // 3. SEND (Optimized binary prefix + IV + ciphertext)
             const send = async () => {
                 if(!sharedKey || !msg) return;
                 const iv = window.crypto.getRandomValues(new Uint8Array(12));
-                const enc = await window.crypto.subtle.encrypt({name:"AES-GCM", iv}, sharedKey, new TextEncoder().encode(msg));
-                const pkt = JSON.stringify({iv:buf2hex(iv), d:buf2hex(enc)});
+                const enc = await window.crypto.subtle.encrypt(
+                    {name:"AES-GCM", iv},
+                    sharedKey,
+                    new TextEncoder().encode(msg)
+                );
+                const prefix = new Uint8Array([2]); // Type 2: Message
+                const payload = new Uint8Array(prefix.length + iv.length + enc.byteLength);
+                payload.set(prefix);
+                payload.set(iv, prefix.length);
+                payload.set(new Uint8Array(enc), prefix.length + iv.length);
+                const pkt = buf2hex(payload.buffer);
                 setPacket(pkt);
                 setChat(prev => [...prev, {from:'Me', text:msg}]);
                 setMsg("");
@@ -547,7 +555,7 @@
                                 )}
 
                                 <div className="grid grid-cols-2 gap-2">
-                                    <button onClick={() => setScanner('AUDIO')} className="bg-purple-900/50 hover:bg-purple-900 text-purple-200 py-3 rounded font-bold flex items-center justify-center gap-2 border border-purple-500">
+                                    <button onClick={() => setScanner('AUDIO')} className="btn-secondary bg-purple-900/50 hover:bg-purple-900 text-purple-200 py-3 rounded font-bold flex items-center justify-center gap-2 border border-purple-500">
                                         <Icon p={icons.mic}/> Listen
                                     </button>
                                     <button onClick={() => setScanner('QR')} className="bg-slate-700 hover:bg-slate-600 text-white py-3 rounded font-bold flex items-center justify-center gap-2">
@@ -569,3 +577,4 @@
     </script>
 </body>
 </html>
+```
