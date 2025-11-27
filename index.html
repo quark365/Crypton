@@ -5,13 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CryptoVis: SonicLink + Video QR Transfer</title>
     
-    <!-- React & Tailwind -->
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <!-- QR Libs -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
 
@@ -406,6 +404,9 @@
             const [incomingFile, setIncomingFile] = useState({ id: null, chunks: {}, total: 0 });
             const [audioPlaying, setAudioPlaying] = useState(false);
 
+            // PREVENT DUPLICATE SCANS
+            const lastProcessedRef = useRef(""); 
+
             // 1. IDENTITY
             const genKeys = async () => {
                 const k = await window.crypto.subtle.generateKey({name:"ECDH", namedCurve:"P-256"}, true, ["deriveKey", "deriveBits"]);
@@ -418,15 +419,20 @@
                 setSharedKey(null);
                 setFingerprint("????");
                 setIncomingFile({ id: null, chunks: {}, total: 0 });
+                lastProcessedRef.current = ""; // Reset scan history on new ID
             };
             useEffect(() => { genKeys(); }, []);
 
             // 2. EXCHANGE
             const handleData = async (dataStr) => {
+                // Deduplicate scans
+                if (dataStr === lastProcessedRef.current) return;
+                lastProcessedRef.current = dataStr;
+
                 try {
                     // FILE CHUNK (F|ID|IDX|TOT|DATA)
                     if (dataStr.startsWith('F|')) {
-                        if (!sharedKey) return; // Silent ignore if not connected
+                        if (!sharedKey) return; 
                         const [_, id, idx, tot, payload] = dataStr.split('|');
                         const index = parseInt(idx);
                         const total = parseInt(tot);
@@ -445,7 +451,7 @@
                         const dec = await window.crypto.subtle.decrypt({name:"AES-GCM", iv:hex2buf(p.iv)}, sharedKey, hex2buf(p.d));
                         const txt = new TextDecoder().decode(dec);
                         setChat(prev => [...prev, {from:'Partner', text:txt}]);
-                        setScanner(null); // Close scanner on single msg
+                        setScanner(null); 
                         alert("Received: " + txt);
                         return;
                     }
@@ -453,11 +459,15 @@
                     // Identity
                     const payload = JSON.parse(dataStr);
                     if (!payload.e) throw new Error("Missing Key");
+                    
+                    if (sharedKey) return; // Already connected
+
                     const ab = Uint8Array.from(atob(payload.e), c => c.charCodeAt(0)).buffer;
                     const pk = await window.crypto.subtle.importKey("spki", ab, {name:"ECDH", namedCurve:"P-256"}, true, []);
                     const sk = await window.crypto.subtle.deriveKey({name:"ECDH", public:pk}, myKeyPair.privateKey, {name:"AES-GCM", length:256}, true, ["encrypt","decrypt"]);
                     const raw = await window.crypto.subtle.exportKey("raw", sk);
                     const fp = await generateFingerprint(raw);
+                    
                     setSharedKey(sk);
                     setFingerprint(fp);
                     setActiveTab('VERIFY');
@@ -465,7 +475,8 @@
                     alert("Handshake Successful!");
 
                 } catch(e) { 
-                    // Ignore transient QR errors during stream
+                    // Reset ref on error so user can retry scanning if it was just a glitch
+                    lastProcessedRef.current = "";
                 }
             };
 
@@ -539,7 +550,7 @@
                     payload.set(mimeBytes, 13);
                     payload.set(new Uint8Array(enc), 13 + mimeBytes.length);
                     
-                    // Safe Base64 Conversion using FileReader (Avoids Stack Overflow)
+                    // Safe Base64 Conversion
                     const base64Full = await new Promise((resolve) => {
                         const reader = new FileReader();
                         reader.onload = () => {
@@ -604,16 +615,16 @@
                                 <div className="flex justify-center"><QRDisplay data={myIdentity} label="My Identity" /></div>
                                 
                                 <div className="grid grid-cols-2 gap-2">
-                                    <button onClick={() => playAudio(myIdentity)} disabled={audioPlaying} className="btn-primary bg-purple-600 hover:bg-purple-500">
-                                        <Icon p={icons.sound} /> {audioPlaying ? 'Sending (20s)...' : 'SonicLink'}
+                                    <button onClick={() => playAudio(myIdentity)} disabled={audioPlaying} className="btn-primary bg-purple-600 hover:bg-purple-500 text-white font-bold py-2 rounded flex items-center justify-center gap-2">
+                                        <Icon p={icons.sound} /> {audioPlaying ? 'Sending...' : 'SonicLink'}
                                     </button>
-                                    <button onClick={() => setScanner('QR')} className="btn-primary">
+                                    <button onClick={() => setScanner('QR')} className="btn-primary bg-cyan-600 hover:bg-cyan-500 text-white font-bold py-2 rounded flex items-center justify-center gap-2">
                                         <Icon p={icons.cam} /> Scan QR
                                     </button>
                                 </div>
                                 {isDarth && <div className="text-red-400 text-xs border border-red-500 p-2 rounded">Darth: Use SonicLink to broadcast fake identity signals.</div>}
                                 <div className="grid grid-cols-1 gap-2 mt-2">
-                                     <button onClick={() => setScanner('AUDIO')} className="btn-secondary bg-purple-900/50 hover:bg-purple-900 border border-purple-500">
+                                     <button onClick={() => setScanner('AUDIO')} className="btn-secondary bg-purple-900/50 hover:bg-purple-900 text-purple-200 border border-purple-500 font-bold py-2 rounded flex items-center justify-center gap-2">
                                         <Icon p={icons.mic}/> Receive SonicLink (Listen)
                                     </button>
                                 </div>
@@ -684,7 +695,7 @@
                     </main>
 
                     {/* MODALS */}
-                    {scanner === 'QR' && <QRScanner onScan={d => { /* Don't close immediately if chunking */ handleData(d); }} onClose={()=>setScanner(null)} fileProgress={incomingFile.total > 0 ? (Object.keys(incomingFile.chunks).length / incomingFile.total) * 100 : null} />}
+                    {scanner === 'QR' && <QRScanner onScan={d => { handleData(d); }} onClose={()=>setScanner(null)} fileProgress={incomingFile.total > 0 ? (Object.keys(incomingFile.chunks).length / incomingFile.total) * 100 : null} />}
                     {scanner === 'AUDIO' && <AudioListener onClose={()=>setScanner(null)} onData={d => { setScanner(null); handleData(d); }} />}
                     {fileTransfer && <AnimatedQR chunks={fileTransfer.chunks} label="Broadcasting File" onClose={()=>setFileTransfer(null)} />}
                 </div>
