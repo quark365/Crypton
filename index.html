@@ -126,17 +126,14 @@
             );
         };
 
-        const AudioVisualizer = ({ isListening }) => {
+        const AudioVisualizer = ({ levels }) => {
             return (
                 <div className="flex justify-center items-end gap-1 h-12 mt-4">
-                    {[...Array(10)].map((_, i) => (
+                    {levels.map((height, i) => (
                         <div 
                             key={i} 
-                            className={`w-2 bg-cyan-500 rounded-full wave-bar ${isListening ? 'animate-pulse' : ''}`}
-                            style={{ 
-                                height: isListening ? `${Math.random() * 100}%` : '20%',
-                                animationDelay: `${i * 0.1}s`
-                            }}
+                            className="w-2 bg-cyan-500 rounded-full wave-bar transition-all duration-75"
+                            style={{ height: `${Math.max(20, height)}%` }}
                         ></div>
                     ))}
                 </div>
@@ -192,9 +189,56 @@
         };
 
         const AudioListener = ({ onData, onClose }) => {
-            const [status, setStatus] = useState("Listening for SonicLink...");
+            const [status, setStatus] = useState("Requesting Microphone Access...");
+            const [visuals, setVisuals] = useState(new Array(10).fill(20));
+            const analyzerRef = useRef(null);
+            const dataArrayRef = useRef(null);
+            const rafRef = useRef(null);
             
             useEffect(() => {
+                let audioContext;
+                let stream;
+                let source;
+
+                const startListening = async () => {
+                    try {
+                        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                        setStatus("Listening for SonicLink...");
+
+                        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                        source = audioContext.createMediaStreamSource(stream);
+                        const analyzer = audioContext.createAnalyser();
+                        analyzer.fftSize = 64;
+                        source.connect(analyzer);
+                        
+                        analyzerRef.current = analyzer;
+                        const bufferLength = analyzer.frequencyBinCount;
+                        dataArrayRef.current = new Uint8Array(bufferLength);
+
+                        const draw = () => {
+                            if (!analyzerRef.current) return;
+                            analyzerRef.current.getByteFrequencyData(dataArrayRef.current);
+                            
+                            // Map 32 bins to 10 bars roughly
+                            const newVisuals = [];
+                            const step = Math.floor(dataArrayRef.current.length / 10);
+                            for (let i = 0; i < 10; i++) {
+                                const val = dataArrayRef.current[i * step];
+                                newVisuals.push((val / 255) * 100);
+                            }
+                            setVisuals(newVisuals);
+                            rafRef.current = requestAnimationFrame(draw);
+                        };
+                        draw();
+
+                    } catch (err) {
+                        setStatus("Microphone Denied. Waiting for Broadcast...");
+                        console.error("Mic Error:", err);
+                    }
+                };
+
+                startListening();
+
                 // Listen for broadcasts from other tabs (Simulation of acoustic capture)
                 const bc = new BroadcastChannel('sonic_link_channel');
                 bc.onmessage = (ev) => {
@@ -203,7 +247,13 @@
                         onData(ev.data);
                     }, 1000);
                 };
-                return () => bc.close();
+
+                return () => {
+                    if (stream) stream.getTracks().forEach(t => t.stop());
+                    if (audioContext) audioContext.close();
+                    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+                    bc.close();
+                };
             }, []);
 
             return (
@@ -216,10 +266,10 @@
                         <p className="text-cyan-400 font-mono">{status}</p>
                     </div>
                     
-                    <AudioVisualizer isListening={true} />
+                    <AudioVisualizer levels={visuals} />
                     
                     <div className="mt-8 text-xs text-slate-500 max-w-xs text-center">
-                        Play the sound from the other device/tab. <br/>(Simulated via BroadcastChannel)
+                        Play the sound from the other device/tab. <br/>(Mic visualizes sound; Data syncs via BroadcastChannel)
                     </div>
 
                     <button onClick={onClose} className="mt-8 bg-slate-800 px-8 py-3 rounded-full text-white font-bold">Cancel</button>
