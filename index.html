@@ -4,60 +4,57 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>CryptoVis: GibberLink v2.1 (Audio + Secure)</title>
-    
+   
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
-    
+   
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap');
-        
-        body { 
-            font-family: 'JetBrains Mono', monospace; 
-            background-color: #0f172a; 
-            color: #e2e8f0; 
+       
+        body {
+            font-family: 'JetBrains Mono', monospace;
+            background-color: #0f172a;
+            color: #e2e8f0;
             overscroll-behavior-y: none;
             height: 100dvh;
             width: 100%;
             overflow: hidden;
         }
-
         #root {
             height: 100dvh;
             width: 100%;
             overflow: hidden;
         }
-
         .glass { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(12px); border: 1px solid rgba(148, 163, 184, 0.1); }
         .darth-glass { background: rgba(69, 10, 10, 0.85); backdrop-filter: blur(12px); border: 1px solid rgba(239, 68, 68, 0.3); }
-        
+       
         .scan-line {
             width: 100%; height: 2px; background: #06b6d4; position: absolute;
             animation: scan 2s linear infinite; box-shadow: 0 0 10px #06b6d4;
         }
         .darth-scan-line { background: #ef4444; box-shadow: 0 0 10px #ef4444; }
-        
+       
         @keyframes scan { 0% { top: 0%; opacity: 0; } 50% { opacity: 1; } 100% { top: 100%; opacity: 0; } }
-        
+       
         .matrix-bg {
             background-image: radial-gradient(#1e293b 1px, transparent 1px), radial-gradient(#1e293b 1px, transparent 1px);
             background-size: 20px 20px;
             background-position: 0 0, 10px 10px;
             background-color: #020617;
         }
-        
+       
         input[type=range] { -webkit-appearance: none; width: 100%; background: transparent; }
         input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; height: 16px; width: 16px; border-radius: 50%; background: currentColor; cursor: pointer; margin-top: -6px; }
         input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 4px; cursor: pointer; background: #334155; border-radius: 2px; }
-        
+       
         .scrollbar-hide::-webkit-scrollbar { display: none; }
         .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
-        
+       
         .touch-scroll { -webkit-overflow-scrolling: touch; }
-
         .anim-fade { animation: fadeIn 0.3s ease-in; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
     </style>
@@ -71,8 +68,8 @@
             VERSION: '2.1',
             SAMPLE_RATE: 48000,
             BASE_FREQ: 1400,
-            FREQ_SPACING: 120, 
-            SYMBOL_MS: 60, 
+            FREQ_SPACING: 120,
+            SYMBOL_MS: 60,
             FADE_MS: 6,
             PREAMBLE_SYM: 31,
             START_SYM: 30,
@@ -100,7 +97,8 @@
             pause: <><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></>,
             bug: <><rect x="8" y="6" width="8" height="12" rx="4"/><path d="M12 12v.01"/><path d="M4 14h4"/><path d="M16 14h4"/><path d="M4 10h4"/><path d="M16 10h4"/><path d="M4 18h4"/><path d="M16 18h4"/></>,
             x: <><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>,
-            sound: <><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></>
+            sound: <><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></>,
+            download: <><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></>
         };
         // --- CRYPTO UTILS ---
         const buf2hex = (buf) => [...new Uint8Array(buf)].map(x => x.toString(16).padStart(2, '0')).join('');
@@ -111,7 +109,7 @@
             const emojis = ["🐶","🐱","🐭","🐹","🐰","🦊","🐻","🐼","🐨","🐯","🦁","🐮","🐷","🐸","🐵","🐔","🐧","🐦","🐤","🦆","🦅","🦉","🦇","🐺","🐗","🐴","🦄","🐝","🐛","🦋","🐌","🐞","🐜","🕷","🕸","🐢","🐍","🦎","🦂","🦀","🦑","🐙","🦐","🐠","🐟","🐡","🐬","🦈","🐳","🐋","🐊","🐆","🐅","🐃","🐂","🐄","🐪","🐫","🐘","🦏","🦍","🐎","🐖","🐐","🐏","🐑","🐕","🐩","🐈","🐓","🦃","🕊","🐇","🐁","🐀","🐿","🐾","🐉","🐲","🌵","🎄","🌲","🌳","🌴"];
             let em = "";
             for(let i=0; i<4; i++) em += emojis[arr[i] % emojis.length];
-            const hex = buf2hex(hash).substring(0, 8).toUpperCase(); 
+            const hex = buf2hex(hash).substring(0, 8).toUpperCase();
             return { emoji: em, hex: hex, full: buf2hex(hash) };
         };
         // --- GIBBERLINK CORE ---
@@ -145,7 +143,7 @@
                 const f = PROTOCOL.BASE_FREQ + symbolIndex * PROTOCOL.FREQ_SPACING;
                 const symbolSamples = Math.floor(PROTOCOL.SAMPLE_RATE * (PROTOCOL.SYMBOL_MS/1000));
                 const fadeSamples = Math.floor(PROTOCOL.SAMPLE_RATE * (PROTOCOL.FADE_MS/1000));
-                
+               
                 const buffer = ctx.createBuffer(1, symbolSamples, PROTOCOL.SAMPLE_RATE);
                 const arr = buffer.getChannelData(0);
                 for(let n=0; n<symbolSamples; n++) {
@@ -231,7 +229,7 @@
             const [index, setIndex] = useState(0);
             const [speed, setSpeed] = useState(PROTOCOL.DEFAULT_QR_FPS);
             const [isPaused, setIsPaused] = useState(false);
-            
+           
             useEffect(() => {
                 if (isPaused) return;
                 const interval = setInterval(() => {
@@ -356,7 +354,7 @@
             const processorRef = useRef(null);
             const ctxRef = useRef(null);
             const streamRef = useRef(null);
-            
+           
             const stateRef = useRef({
                 mode: 'WAIT_PREAMBLE',
                 samplesProcessed: 0,
@@ -370,7 +368,7 @@
                     try {
                         const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
                         streamRef.current = stream;
-                        
+                       
                         const ctx = new (window.AudioContext || window.webkitAudioContext)({sampleRate: PROTOCOL.SAMPLE_RATE});
                         ctxRef.current = ctx;
                         const src = ctx.createMediaStreamSource(stream);
@@ -509,10 +507,8 @@
             const [fingerprint, setFingerprint] = useState(null);
             const [scanner, setScanner] = useState(null);
             const [fileTransfer, setFileTransfer] = useState(null);
-            
-            // --- FIX: Add 'complete' flag to incoming file state ---
             const [incomingFile, setIncomingFile] = useState({ id: null, chunks: {}, total: 0, complete: false });
-            
+            const [pendingDownload, setPendingDownload] = useState(null);
             const [chat, setChat] = useState([]);
             const [msg, setMsg] = useState("");
             const [audioPlaying, setAudioPlaying] = useState(false);
@@ -520,22 +516,24 @@
             const chatContainerRef = useRef(null);
             const [interceptedPacket, setInterceptedPacket] = useState(null);
             const lastScanRef = useRef("");
-            
+           
             useEffect(() => {
                 if (scanner) lastScanRef.current = "";
             }, [scanner]);
-            
-            // --- FIX: Use useEffect to trigger assembly when completion flag is set ---
-            // This prevents "side effects in state reducer" and race conditions
+           
             useEffect(() => {
-                if (incomingFile.complete) {
-                    assembleFile(incomingFile);
-                    // Reset after assembly attempt
-                    setIncomingFile({ id: null, chunks: {}, total: 0, complete: false });
-                    setScanner(null); // Close scanner on success
+                if (incomingFile.complete && incomingFile.total > 0) {
+                    assembleFileNoDownload(incomingFile).then(({url, filename}) => {
+                        setPendingDownload({url, filename});
+                    }).catch(e => {
+                        console.error(e);
+                        alert("File assembly failed: " + e.message);
+                    }).finally(() => {
+                        setIncomingFile({ id: null, chunks: {}, total: 0, complete: false });
+                        setScanner(null);
+                    });
                 }
-            }, [incomingFile.complete]); // Only trigger when completion status changes
-
+            }, [incomingFile.complete]);
             useEffect(() => {
                 if (chatContainerRef.current) {
                     chatContainerRef.current.scrollTo({
@@ -544,7 +542,6 @@
                     });
                 }
             }, [chat]);
-
             const genKeys = async () => {
                 setKeys(null); setSessionKey(null); setFingerprint(null); setChat([]);
                 const rsa = await window.crypto.subtle.generateKey(
@@ -566,14 +563,13 @@
                 });
             };
             useEffect(() => { genKeys(); }, []);
-            
+           
             const playAudioPayload = async (dataStr) => {
                 if(audioPlaying) return;
                 setAudioPlaying(true);
                 await GibberLink.transmit(dataStr);
                 setAudioPlaying(false);
             };
-
             const handleScan = async (raw) => {
                 if (raw === lastScanRef.current) return;
                 lastScanRef.current = raw;
@@ -588,29 +584,22 @@
                         const [_, id, idxStr, totStr, data] = raw.split("|");
                         const idx = parseInt(idxStr);
                         const tot = parseInt(totStr);
-                        
+                       
                         setIncomingFile(prev => {
-                            // If we already marked complete, ignore subsequent identical scans
                             if (prev.complete) return prev;
-
-                            // If new file ID detected, start fresh. Otherwise copy existing chunks.
                             const isNewFile = prev.id !== id;
                             let newChunks = isNewFile ? {} : { ...prev.chunks };
-                            
-                            // Optimization: Don't update state if we already have this specific chunk
+                           
                             if (newChunks[idx]) return prev;
-
-                            // Add new chunk
                             newChunks[idx] = data;
-                            
-                            // Check for completion
+                           
                             const isComplete = Object.keys(newChunks).length === tot;
-                            
-                            return { 
-                                id: id, 
-                                chunks: newChunks, 
-                                total: tot, 
-                                complete: isComplete 
+                           
+                            return {
+                                id: id,
+                                chunks: newChunks,
+                                total: tot,
+                                complete: isComplete
                             };
                         });
                         return;
@@ -681,48 +670,44 @@
                     }
                 } catch (e) {
                     console.error(e);
-                    // alert("Decryption Failed or Invalid Packet"); // Optional: Reduce noise
                 }
             };
-
-            const assembleFile = async (fileObj) => {
-                try {
-                    const orderedData = [];
-                    for(let i=0; i<fileObj.total; i++) orderedData.push(fileObj.chunks[i]);
-                    const blobBase64 = orderedData.join('');
-                    const binStr = atob(blobBase64);
-                    const encBytes = new Uint8Array(binStr.length);
-                    for(let i=0; i<binStr.length; i++) encBytes[i] = binStr.charCodeAt(i);
-                    const iv = encBytes.slice(0, 12);
-                    const data = encBytes.slice(12);
-                    const decrypted = await window.crypto.subtle.decrypt(
-                        { name: "AES-GCM", iv }, sessionKey, data
-                    );
-                    const view = new DataView(decrypted);
-                    const mimeLen = view.getUint8(0);
-                    const mimeBytes = new Uint8Array(decrypted, 1, mimeLen);
-                    const mime = new TextDecoder().decode(mimeBytes);
-                    const fileData = new Uint8Array(decrypted, 1 + mimeLen);
-                    const blob = new Blob([fileData], { type: mime });
-                    const url = URL.createObjectURL(blob);
-                    
-                    const a = document.createElement('a');
-                    a.style.display = 'none';
-                    a.href = url;
-                    a.download = `secure_recv.${mime.split('/')[1] || 'bin'}`;
-                    document.body.appendChild(a);
-                    a.click();
-                    setTimeout(() => {
-                        document.body.removeChild(a);
-                        window.URL.revokeObjectURL(url);
-                        alert("File Decrypted & Downloaded!");
-                    }, 100);
-                } catch (e) {
-                    console.error(e);
-                    alert("File Integrity Check Failed (HMAC mismatch inside GCM)");
-                }
+            const assembleFileNoDownload = async (fileObj) => {
+                const orderedData = [];
+                for(let i=0; i<fileObj.total; i++) orderedData.push(fileObj.chunks[i]);
+                const blobBase64 = orderedData.join('');
+                const binStr = atob(blobBase64);
+                const encBytes = new Uint8Array(binStr.length);
+                for(let i=0; i<binStr.length; i++) encBytes[i] = binStr.charCodeAt(i);
+                const iv = encBytes.slice(0, 12);
+                const data = encBytes.slice(12);
+                const decrypted = await window.crypto.subtle.decrypt(
+                    { name: "AES-GCM", iv }, sessionKey, data
+                );
+                const view = new DataView(decrypted);
+                const mimeLen = view.getUint8(0);
+                const mimeBytes = new Uint8Array(decrypted, 1, mimeLen);
+                const mime = new TextDecoder().decode(mimeBytes);
+                const fileData = new Uint8Array(decrypted, 1 + mimeLen);
+                const blob = new Blob([fileData], { type: mime });
+                const url = URL.createObjectURL(blob);
+                const ext = mime.split('/')[1] || 'bin';
+                const filename = `secure_recv.${ext}`;
+                return { url, filename };
             };
-
+            const handleDownload = () => {
+                if (!pendingDownload) return;
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = pendingDownload.url;
+                a.download = pendingDownload.filename;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(pendingDownload.url);
+                setPendingDownload(null);
+                alert("File Decrypted & Downloaded!");
+            };
             const sendMessage = async () => {
                 if (!msg || !sessionKey) return;
                 const iv = window.crypto.getRandomValues(new Uint8Array(12));
@@ -735,7 +720,6 @@
                 setChat(prev => [...prev, { from: 'Me', text: msg }]);
                 setMsg("");
             };
-
             const handleFileSelect = async (e) => {
                 const file = e.target.files[0];
                 if (!file || !sessionKey) return;
@@ -764,19 +748,17 @@
                 }
                 setFileTransfer({ chunks, label: `Sending ${file.name}` });
             };
-
             const darthTamper = () => {
                 if (!interceptedPacket) return;
                 let badRaw = interceptedPacket.raw.replace(/[a-fA-F0-9]/, "X");
                 try {
                     const p = JSON.parse(interceptedPacket.raw);
-                    if (p.d) p.d = p.d.replace(/^../, "FF"); 
+                    if (p.d) p.d = p.d.replace(/^../, "FF");
                     badRaw = JSON.stringify(p);
                 } catch(e) {}
                 const id = Math.random().toString(36).substr(2,5);
                 setFileTransfer({ chunks: [badRaw], label: `Tampered Packet #${id}`, theme: "red" });
             };
-
             return (
                 <div className={`h-full w-full flex flex-col transition-colors duration-500 ${mode === 'DARTH' ? 'bg-slate-950' : 'bg-slate-900'}`}>
                     {/* Header */}
@@ -793,7 +775,7 @@
                             </div>
                         </div>
                         <div className="flex gap-2">
-                             <button onClick={()=>{setMode(mode==='NORMAL'?'DARTH':'NORMAL'); setScanner(null); setInterceptedPacket(null);}} 
+                             <button onClick={()=>{setMode(mode==='NORMAL'?'DARTH':'NORMAL'); setScanner(null); setInterceptedPacket(null);}}
                                 className={`px-3 py-1 rounded border text-xs font-bold transition-all ${mode==='NORMAL' ? 'border-red-900 text-red-900 hover:bg-red-900 hover:text-white opacity-30 hover:opacity-100' : 'bg-cyan-500 text-black border-cyan-500'}`}>
                                 {mode==='NORMAL' ? 'ACTIVATE DARTH' : 'EXIT DARTH'}
                              </button>
@@ -824,9 +806,9 @@
                                                         <p className="text-slate-400 text-xs">Show this to partner</p>
                                                     </div>
                                                     {identityPayload && (
-                                                        <QRDisplay 
-                                                            data={JSON.stringify(identityPayload)} 
-                                                            label="MY IDENTITY" 
+                                                        <QRDisplay
+                                                            data={JSON.stringify(identityPayload)}
+                                                            label="MY IDENTITY"
                                                             subLabel={`FP: ${identityPayload.fp}`}
                                                             color="black"
                                                         />
@@ -869,7 +851,7 @@
                                                     {sessionKey ? "SECURE (AES-GCM-256)" : "NOT CONNECTED"}
                                                 </p>
                                             </div>
-                                            
+                                           
                                             {sessionKey && fingerprint && (
                                                 <div className="bg-slate-950 p-4 rounded-xl border border-slate-800">
                                                     <p className="text-xs text-slate-500 uppercase tracking-widest mb-2">Safety Fingerprint</p>
@@ -880,7 +862,7 @@
                                                     </p>
                                                 </div>
                                             )}
-                                            
+                                           
                                             {sessionKey && (
                                                 <button onClick={()=>setActiveTab('CHAT')} className="w-full bg-cyan-600 hover:bg-cyan-500 text-white font-bold py-3 rounded-xl transition-colors">
                                                     Open Chat Channel
@@ -909,7 +891,7 @@
                                             ))}
                                             <div ref={chatEndRef} />
                                         </div>
-                                        
+                                       
                                         <div className="flex gap-2 flex-shrink-0 pt-2">
                                             <button onClick={()=>setScanner('QR')} className="bg-slate-700 hover:bg-slate-600 text-slate-300 p-3 rounded-xl transition-colors" title="Scan QR Message">
                                                 <Icon p={icons.eye} />
@@ -917,7 +899,7 @@
                                             <button onClick={()=>setScanner('AUDIO')} className="bg-slate-700 hover:bg-slate-600 text-slate-300 p-3 rounded-xl transition-colors" title="Listen for Audio">
                                                 <Icon p={icons.mic} />
                                             </button>
-                                            <input value={msg} onChange={e=>setMsg(e.target.value)} 
+                                            <input value={msg} onChange={e=>setMsg(e.target.value)}
                                                 className="flex-1 bg-slate-800 text-white px-4 rounded-xl border border-slate-700 focus:border-cyan-500 outline-none min-w-0"
                                                 placeholder="Message..."
                                             />
@@ -951,7 +933,7 @@
                                     <div className="absolute top-0 right-0 p-4 opacity-10"><Icon p={icons.bug} size={100} /></div>
                                     <h2 className="text-xl font-bold mb-1">Packet Interceptor</h2>
                                     <p className="text-red-400 text-xs mb-6">Capture, Analyze, Corrupt</p>
-                                    
+                                   
                                     {!interceptedPacket ? (
                                         <div className="grid grid-cols-2 gap-2">
                                             <button onClick={()=>setScanner('QR')} className="h-32 border-2 border-dashed border-red-500/50 rounded-xl flex flex-col items-center justify-center text-red-400 hover:bg-red-900/20 hover:border-red-400 transition-all cursor-pointer">
@@ -977,14 +959,14 @@
                                                     TAMPER & REPLAY
                                                 </button>
                                             </div>
-                                            
+                                           
                                             <button onClick={()=>setInterceptedPacket(null)} className="w-full py-2 text-xs text-red-400 hover:text-red-200">
                                                 DISCARD & SCAN NEW
                                             </button>
                                         </div>
                                     )}
                                 </div>
-                                
+                               
                                 <div className="p-4 rounded-xl bg-slate-900/50 border border-slate-800 text-xs text-slate-500">
                                     <strong className="text-slate-400 block mb-1">DARTH CONSOLE:</strong>
                                     Use this mode to test the security of the Normal mode. Try to tamper with a packet and scan it on a receiving device. The receiver's integrity check (GCM Auth Tag) should fail.
@@ -994,26 +976,46 @@
                     </main>
                     {/* MODALS */}
                     {scanner === 'QR' && (
-                        <QRScanner 
-                            onScan={handleScan} 
-                            onClose={()=>setScanner(null)} 
+                        <QRScanner
+                            onScan={handleScan}
+                            onClose={()=>setScanner(null)}
                             incomingFile={incomingFile}
                             isDarth={mode==='DARTH'}
                         />
                     )}
                     {scanner === 'AUDIO' && (
-                        <AudioListener 
-                            onData={(d)=>{setScanner(null); handleScan(d);}} 
+                        <AudioListener
+                            onData={(d)=>{setScanner(null); handleScan(d);}}
                             onClose={()=>setScanner(null)}
                         />
                     )}
                     {fileTransfer && (
-                        <AnimatedQR 
-                            chunks={fileTransfer.chunks} 
+                        <AnimatedQR
+                            chunks={fileTransfer.chunks}
                             label={fileTransfer.label}
                             theme={fileTransfer.theme}
                             onClose={()=>setFileTransfer(null)}
                         />
+                    )}
+                    {pendingDownload && (
+                        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+                            <div className="bg-white p-6 rounded-2xl text-center max-w-sm glass">
+                                <Icon p={icons.download} size={48} className="mx-auto text-green-500 mb-4" />
+                                <h3 className="text-lg font-bold text-slate-900 mb-2">File Received Securely!</h3>
+                                <p className="text-slate-600 mb-4">Ready to download: {pendingDownload.filename}</p>
+                                <div className="space-y-3">
+                                    <button onClick={handleDownload} className="w-full bg-green-600 hover:bg-green-500 text-white py-3 rounded-xl font-bold transition-colors">
+                                        <Icon p={icons.download} size={16} className="inline mr-2" /> Download Now
+                                    </button>
+                                    <button onClick={() => {
+                                        URL.revokeObjectURL(pendingDownload.url);
+                                        setPendingDownload(null);
+                                    }} className="w-full text-slate-500 hover:text-slate-700 py-2 text-sm">
+                                        Cancel
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
                     )}
                 </div>
             );
