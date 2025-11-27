@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CryptoVis: AirGap Transfer</title>
+    
+    <!-- React & Tailwind -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- QR Code Generation & Scanning -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap');
+        body { font-family: 'JetBrains Mono', monospace; background-color: #0b1120; color: #e2e8f0; }
+        .glass { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(148, 163, 184, 0.1); }
+        .scan-line {
+            width: 100%;
+            height: 2px;
+            background: #06b6d4;
+            position: absolute;
+            animation: scan 2s linear infinite;
+            box-shadow: 0 0 10px #06b6d4;
+        }
+        @keyframes scan {
+            0% { top: 0%; opacity: 0; }
+            10% { opacity: 1; }
+            90% { opacity: 1; }
+            100% { top: 100%; opacity: 0; }
+        }
+        .matrix-bg {
+            background-image: linear-gradient(0deg, transparent 24%, rgba(6, 182, 212, .05) 25%, rgba(6, 182, 212, .05) 26%, transparent 27%, transparent 74%, rgba(6, 182, 212, .05) 75%, rgba(6, 182, 212, .05) 76%, transparent 77%, transparent), linear-gradient(90deg, transparent 24%, rgba(6, 182, 212, .05) 25%, rgba(6, 182, 212, .05) 26%, transparent 27%, transparent 74%, rgba(6, 182, 212, .05) 75%, rgba(6, 182, 212, .05) 76%, transparent 77%, transparent);
+            background-size: 50px 50px;
+        }
+    </style>
+</head>
+<body class="matrix-bg min-h-screen">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        // --- INTERNAL ICONS (No external fetch dependencies) ---
+        const Icon = ({ path, color = "currentColor", size = 24, className="" }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+                {path}
+            </svg>
+        );
+        const icons = {
+            user: <><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></>,
+            key: <><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/><circle cx="7.5" cy="15.5" r="5.5"/></>,
+            lock: <><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></>,
+            unlock: <><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></>,
+            qr: <><rect x="3" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><path d="M10 7h4"/><path d="M7 10v4"/><path d="M14 10h4"/></>,
+            camera: <><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></>,
+            sound: <><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></>,
+            send: <><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></>,
+            refresh: <><polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></>
+        };
+
+        // --- AUDIO SYNTHESIZER (Gibberlink Style) ---
+        const playDataSound = (dataString) => {
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            if (!AudioContext) return;
+            const ctx = new AudioContext();
+            const oscillator = ctx.createOscillator();
+            const gainNode = ctx.createGain();
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(ctx.destination);
+            
+            oscillator.type = 'square';
+            // Simple mapping: Char code to frequency
+            // This is "Sci-Fi Effect" audio, not industrial modem data (too complex for 1 file)
+            const now = ctx.currentTime;
+            
+            // Start Beep
+            oscillator.frequency.setValueAtTime(880, now);
+            
+            // Fast modulation for data effect
+            for(let i=0; i<Math.min(dataString.length, 50); i++) {
+                const charCode = dataString.charCodeAt(i);
+                const freq = 400 + (charCode * 5); 
+                oscillator.frequency.setValueAtTime(freq, now + 0.1 + (i * 0.05));
+            }
+            
+            // End Beep
+            oscillator.frequency.setValueAtTime(440, now + 0.1 + (Math.min(dataString.length, 50) * 0.05));
+            
+            gainNode.gain.setValueAtTime(0.1, now);
+            gainNode.gain.exponentialRampToValueAtTime(0.001, now + 3); // Fade out
+
+            oscillator.start(now);
+            oscillator.stop(now + 3);
+        };
+
+        // --- UTILS ---
+        const buf2hex = (buffer) => [...new Uint8Array(buffer)].map(x => x.toString(16).padStart(2, '0')).join('');
+        const hex2buf = (hex) => new Uint8Array(hex.match(/.{1,2}/g).map(byte => parseInt(byte, 16))).buffer;
+
+        // --- COMPONENTS ---
+
+        // 1. QR Generator
+        const QRDisplay = ({ data, label }) => {
+            const canvasRef = useRef(null);
+            useEffect(() => {
+                if (canvasRef.current && data) {
+                    new QRious({
+                        element: canvasRef.current,
+                        value: data,
+                        size: 256,
+                        level: 'L' // Low error correction for denser data
+                    });
+                }
+            }, [data]);
+
+            return (
+                <div className="flex flex-col items-center bg-white p-4 rounded-lg shadow-lg max-w-[300px] mx-auto">
+                    <canvas ref={canvasRef} />
+                    <p className="text-black text-xs font-mono mt-2 text-center break-all">{label}</p>
+                </div>
+            );
+        };
+
+        // 2. QR Scanner Camera
+        const QRScanner = ({ onScan, onClose }) => {
+            const videoRef = useRef(null);
+            const canvasRef = useRef(null);
+            const [error, setError] = useState(null);
+
+            useEffect(() => {
+                let stream = null;
+                const startCamera = async () => {
+                    try {
+                        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+                        if (videoRef.current) {
+                            videoRef.current.srcObject = stream;
+                            videoRef.current.setAttribute("playsinline", true);
+                            videoRef.current.play();
+                            requestAnimationFrame(tick);
+                        }
+                    } catch (err) {
+                        setError("Camera Error: HTTPS required or Permission Denied.");
+                    }
+                };
+
+                const tick = () => {
+                    if (videoRef.current && videoRef.current.readyState === videoRef.current.HAVE_ENOUGH_DATA) {
+                        const canvas = canvasRef.current;
+                        const video = videoRef.current;
+                        if (!canvas) return;
+                        
+                        canvas.height = video.videoHeight;
+                        canvas.width = video.videoWidth;
+                        const ctx = canvas.getContext("2d");
+                        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                        
+                        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                        const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "dontInvert" });
+
+                        if (code) {
+                            onScan(code.data);
+                            return; // Stop scanning on success
+                        }
+                    }
+                    requestAnimationFrame(tick);
+                };
+
+                startCamera();
+
+                return () => {
+                    if (stream) stream.getTracks().forEach(track => track.stop());
+                };
+            }, []);
+
+            return (
+                <div className="fixed inset-0 z-50 bg-black flex flex-col items-center justify-center p-4">
+                    <div className="relative w-full max-w-md aspect-square bg-slate-900 rounded-lg overflow-hidden border-2 border-cyan-500">
+                        <video ref={videoRef} className="absolute inset-0 w-full h-full object-cover opacity-80" />
+                        <canvas ref={canvasRef} className="hidden" />
+                        <div className="scan-line"></div>
+                        {error && <div className="absolute inset-0 flex items-center justify-center text-red-500 font-bold bg-black/80 text-center p-4">{error}</div>}
+                    </div>
+                    <button onClick={onClose} className="mt-8 bg-slate-700 px-6 py-3 rounded-full text-white font-bold">Close Camera</button>
+                </div>
+            );
+        };
+
+        // --- MAIN APP ---
+        const App = () => {
+            const [role, setRole] = useState(null); // 'Alice' or 'Bob' or 'Darth'
+            const [myKeys, setMyKeys] = useState(null);
+            const [partnerPublicKey, setPartnerPublicKey] = useState(null);
+            const [showScanner, setShowScanner] = useState(false);
+            const [scannedData, setScannedData] = useState(null);
+            const [message, setMessage] = useState("");
+            const [encryptedPacket, setEncryptedPacket] = useState(null);
+            const [decryptedMessage, setDecryptedMessage] = useState(null);
+            const [logs, setLogs] = useState([]);
+
+            const log = (msg) => setLogs(p => [msg, ...p]);
+
+            // 1. Generate RSA Keys (Identity)
+            const generateIdentity = async () => {
+                log("Generating RSA-2048 Key Pair...");
+                try {
+                    const keys = await window.crypto.subtle.generateKey(
+                        { name: "RSA-OAEP", modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: "SHA-256" },
+                        true, ["encrypt", "decrypt"]
+                    );
+                    
+                    // Export Public Key to send to others
+                    const exported = await window.crypto.subtle.exportKey("spki", keys.publicKey);
+                    const exportedAsBase64 = btoa(String.fromCharCode(...new Uint8Array(exported)));
+                    
+                    setMyKeys({ ...keys, publicString: exportedAsBase64 });
+                    log("Identity Created.");
+                } catch (e) { log("Error generating keys: " + e.message); }
+            };
+
+            // 2. Encrypt Logic (Bob)
+            const encryptMessage = async () => {
+                if (!partnerPublicKey) { log("Need Alice's Public Key first!"); return; }
+                log("Encrypting...");
+
+                try {
+                    // Import partner's public key
+                    const binaryDer = Uint8Array.from(atob(partnerPublicKey), c => c.charCodeAt(0));
+                    const importedPubKey = await window.crypto.subtle.importKey(
+                        "spki", binaryDer.buffer, { name: "RSA-OAEP", hash: "SHA-256" }, true, ["encrypt"]
+                    );
+
+                    // Generate AES Session Key
+                    const aesKey = await window.crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, true, ["encrypt"]);
+                    
+                    // Encrypt Message with AES
+                    const iv = window.crypto.getRandomValues(new Uint8Array(12));
+                    const enc = new TextEncoder();
+                    const encryptedContent = await window.crypto.subtle.encrypt({ name: "AES-GCM", iv }, aesKey, enc.encode(message));
+
+                    // Encrypt AES Key with RSA
+                    const rawAes = await window.crypto.subtle.exportKey("raw", aesKey);
+                    const encryptedAesKey = await window.crypto.subtle.encrypt({ name: "RSA-OAEP" }, importedPubKey, rawAes);
+
+                    // Create Packet JSON
+                    const packet = JSON.stringify({
+                        iv: buf2hex(iv),
+                        key: buf2hex(encryptedAesKey),
+                        data: buf2hex(encryptedContent)
+                    });
+
+                    setEncryptedPacket(packet);
+                    log("Message Encrypted into Packet.");
+                    playDataSound(packet); // Play cool sound
+                } catch (e) { log("Encryption Error: " + e.message); }
+            };
+
+            // 3. Decrypt Logic (Alice or Darth)
+            const handleScannedPacket = async (jsonString) => {
+                try {
+                    const packet = JSON.parse(jsonString);
+                    
+                    if (role === 'Darth') {
+                        // Darth simulation
+                        log("DARTH: Intercepted packet!");
+                        log("DARTH: Attempting decryption without Private Key...");
+                        setTimeout(() => {
+                            log("DARTH ERROR: RSA Decryption Failed.");
+                            setDecryptedMessage("❌ ACCESS DENIED: Missing Private Key");
+                        }, 1500);
+                        return;
+                    }
+
+                    if (!myKeys) { log("I don't have a private key to decrypt this."); return; }
+
+                    log("Decrypting packet...");
+                    
+                    // Unwrap AES Key
+                    const rawAesKey = await window.crypto.subtle.decrypt(
+                        { name: "RSA-OAEP" },
+                        myKeys.privateKey,
+                        hex2buf(packet.key)
+                    );
+
+                    // Import AES Key
+                    const aesKey = await window.crypto.subtle.importKey("raw", rawAesKey, "AES-GCM", true, ["decrypt"]);
+
+                    // Decrypt Content
+                    const decrypted = await window.crypto.subtle.decrypt(
+                        { name: "AES-GCM", iv: hex2buf(packet.iv) },
+                        aesKey,
+                        hex2buf(packet.data)
+                    );
+
+                    const text = new TextDecoder().decode(decrypted);
+                    setDecryptedMessage(text);
+                    log("Decryption Successful!");
+                    playDataSound("Success");
+
+                } catch (e) {
+                    log("Decryption Failed. Are you using the correct Private Key?");
+                    setDecryptedMessage("❌ Decryption Error");
+                }
+            };
+
+            // 4. Scan Handler
+            const onScan = (data) => {
+                setShowScanner(false);
+                // Check if it's a Key or a Packet
+                if (data.length < 500 && !data.includes("{")) {
+                    // Likely a Public Key (Base64)
+                    log("Scanned Public Key!");
+                    setPartnerPublicKey(data);
+                } else {
+                    // Likely a JSON Packet
+                    log("Scanned Data Packet!");
+                    handleScannedPacket(data);
+                }
+            };
+
+            // --- RENDER ---
+            
+            // 0. Role Selection Screen
+            if (!role) return (
+                <div className="flex flex-col items-center justify-center min-h-screen p-4 space-y-8">
+                    <h1 className="text-4xl font-bold text-cyan-400 tracking-tighter text-center">CryptoVis <span className="text-white text-lg block font-normal">AirGap Transfer System</span></h1>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 w-full max-w-4xl">
+                        
+                        {/* Alice Card */}
+                        <div onClick={() => { setRole('Alice'); generateIdentity(); }} className="glass p-8 rounded-xl cursor-pointer hover:bg-slate-800 transition-all border-l-4 border-blue-500 group">
+                            <div className="bg-blue-500/20 w-16 h-16 rounded-full flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                                <Icon path={icons.user} color="#3b82f6" size={32} />
+                            </div>
+                            <h2 className="text-2xl font-bold text-white">I am Alice</h2>
+                            <p className="text-blue-300 font-bold mb-2">The Receiver (Laptop)</p>
+                            <p className="text-slate-400 text-sm">Use this device to generate keys and receive secrets.</p>
+                        </div>
+
+                        {/* Bob Card */}
+                        <div onClick={() => setRole('Bob')} className="glass p-8 rounded-xl cursor-pointer hover:bg-slate-800 transition-all border-l-4 border-orange-500 group">
+                            <div className="bg-orange-500/20 w-16 h-16 rounded-full flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                                <Icon path={icons.send} color="#f97316" size={32} />
+                            </div>
+                            <h2 className="text-2xl font-bold text-white">I am Bob</h2>
+                            <p className="text-orange-300 font-bold mb-2">The Sender (Phone)</p>
+                            <p className="text-slate-400 text-sm">Use this device to scan keys and send secrets.</p>
+                        </div>
+
+                        {/* Darth Card */}
+                        <div onClick={() => setRole('Darth')} className="glass p-8 rounded-xl cursor-pointer hover:bg-slate-800 transition-all border-l-4 border-red-600 group">
+                            <div className="bg-red-600/20 w-16 h-16 rounded-full flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                                <Icon path={icons.unlock} color="#dc2626" size={32} />
+                            </div>
+                            <h2 className="text-2xl font-bold text-white">I am Darth</h2>
+                            <p className="text-red-400 font-bold mb-2">The Hacker</p>
+                            <p className="text-slate-400 text-sm">Demonstrate that intercepting the data is useless without the key.</p>
+                        </div>
+                    </div>
+                </div>
+            );
+
+            // 1. Role View
+            return (
+                <div className="max-w-4xl mx-auto p-4 pb-20">
+                    <header className="flex justify-between items-center mb-6 border-b border-slate-700 pb-4">
+                        <div className="flex items-center gap-2">
+                            <button onClick={() => setRole(null)} className="text-slate-500 hover:text-white"><Icon path={icons.refresh} size={20}/></button>
+                            <h1 className="text-xl font-bold text-cyan-400">Identity: <span className="text-white">{role}</span></h1>
+                        </div>
+                        {myKeys && <div className="text-xs bg-emerald-900 text-emerald-300 px-2 py-1 rounded border border-emerald-500">Secure (Keys Active)</div>}
+                    </header>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        
+                        {/* LEFT COLUMN: ACTIONS */}
+                        <div className="space-y-6">
+                            
+                            {/* ALICE: SHARE KEY */}
+                            {role === 'Alice' && myKeys && (
+                                <div className="glass p-6 rounded-xl border border-blue-500/30">
+                                    <h3 className="text-lg font-bold text-blue-400 mb-4 flex items-center gap-2"><Icon path={icons.key} size={20}/> 1. Share Public Key</h3>
+                                    <p className="text-sm text-slate-400 mb-4">Show this to Bob so he can encrypt messages for you.</p>
+                                    <QRDisplay data={myKeys.publicString} label="Alice's Public Key" />
+                                </div>
+                            )}
+
+                            {/* BOB/DARTH: SCANNER BUTTON */}
+                            {(role === 'Bob' || role === 'Darth') && (
+                                <div className="glass p-6 rounded-xl border border-orange-500/30">
+                                    <h3 className="text-lg font-bold text-orange-400 mb-4 flex items-center gap-2"><Icon path={icons.camera} size={20}/> Camera Scanner</h3>
+                                    <p className="text-sm text-slate-400 mb-4">
+                                        {role === 'Bob' ? "Scan Alice's Key first, then later scan nothing." : "Intercept Bob's packet."}
+                                    </p>
+                                    <button 
+                                        onClick={() => setShowScanner(true)}
+                                        className="w-full bg-slate-700 hover:bg-slate-600 text-white font-bold py-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg"
+                                    >
+                                        <Icon path={icons.camera} />
+                                        {role === 'Bob' && !partnerPublicKey ? "Scan Alice's Key" : "Scan QR Code"}
+                                    </button>
+                                </div>
+                            )}
+
+                            {/* BOB: COMPOSE */}
+                            {role === 'Bob' && partnerPublicKey && (
+                                <div className="glass p-6 rounded-xl border border-cyan-500/30">
+                                    <h3 className="text-lg font-bold text-cyan-400 mb-4 flex items-center gap-2"><Icon path={icons.lock} size={20}/> 2. Encrypt & Send</h3>
+                                    <div className="bg-slate-900 p-2 rounded mb-2 text-xs text-emerald-400 break-all">Linked to Alice: {partnerPublicKey.substring(0,20)}...</div>
+                                    <textarea 
+                                        value={message}
+                                        onChange={e => setMessage(e.target.value)}
+                                        placeholder="Type secret message..."
+                                        className="w-full bg-slate-800 border border-slate-600 rounded p-3 text-white mb-4 focus:border-cyan-500 outline-none"
+                                    />
+                                    <button onClick={encryptMessage} className="w-full bg-cyan-600 hover:bg-cyan-500 text-white font-bold py-3 rounded-lg">
+                                        Encrypt & Generate QR
+                                    </button>
+                                </div>
+                            )}
+
+                            {/* ALICE: SCAN RESULT (DECRYPT) */}
+                            {role === 'Alice' && (
+                                <div className="glass p-6 rounded-xl border border-emerald-500/30">
+                                    <h3 className="text-lg font-bold text-emerald-400 mb-4 flex items-center gap-2"><Icon path={icons.unlock} size={20}/> 2. Receive & Decrypt</h3>
+                                    <button 
+                                        onClick={() => setShowScanner(true)}
+                                        className="w-full bg-emerald-700 hover:bg-emerald-600 text-white font-bold py-3 rounded-lg mb-4 flex items-center justify-center gap-2"
+                                    >
+                                        <Icon path={icons.camera} /> Scan Bob's Message
+                                    </button>
+                                    
+                                    {decryptedMessage && (
+                                        <div className="bg-slate-900 border border-emerald-500 p-4 rounded-lg animate-pulse">
+                                            <p className="text-xs text-slate-500 uppercase">Decrypted Secret:</p>
+                                            <p className="text-xl font-bold text-white mt-1">{decryptedMessage}</p>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                            
+                            {/* DARTH: RESULT */}
+                            {role === 'Darth' && decryptedMessage && (
+                                <div className="glass p-6 rounded-xl border border-red-500/30 bg-red-900/10">
+                                    <h3 className="text-lg font-bold text-red-400 mb-2">Hack Result</h3>
+                                    <p className="text-red-200 font-mono text-lg">{decryptedMessage}</p>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* RIGHT COLUMN: OUTPUTS & LOGS */}
+                        <div className="space-y-6">
+                            
+                            {/* ENCRYPTED PACKET DISPLAY (For Bob) */}
+                            {encryptedPacket && (
+                                <div className="glass p-6 rounded-xl text-center">
+                                    <h3 className="text-lg font-bold text-white mb-2">Encrypted Packet Ready</h3>
+                                    <p className="text-xs text-slate-400 mb-4">Hybrid Encryption: AES(Data) + RSA(Key)</p>
+                                    <QRDisplay data={encryptedPacket} label="Scan with Alice's Device" />
+                                    
+                                    <div className="mt-4 flex gap-2 justify-center">
+                                        <button onClick={() => playDataSound(encryptedPacket)} className="bg-slate-700 hover:bg-pink-600 px-4 py-2 rounded text-sm text-white flex items-center gap-2 transition-colors">
+                                            <Icon path={icons.sound} size={16} /> Play Audio Burst
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* LOGS */}
+                            <div className="glass p-4 rounded-xl h-64 flex flex-col">
+                                <h4 className="text-sm font-bold text-slate-500 mb-2 uppercase tracking-widest">System Log</h4>
+                                <div className="flex-1 overflow-y-auto font-mono text-xs space-y-1 text-slate-300">
+                                    {logs.map((l, i) => <div key={i} className="border-l-2 border-slate-600 pl-2">>{l}</div>)}
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+
+                    {/* MODAL: CAMERA */}
+                    {showScanner && <QRScanner onScan={onScan} onClose={() => setShowScanner(false)} />}
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
