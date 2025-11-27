@@ -4,17 +4,17 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>CryptoVis: GibberLink v2.1 (Audio + Secure)</title>
-  
+   
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
-  
+   
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap');
-      
+       
         body {
             font-family: 'JetBrains Mono', monospace;
             background-color: #0f172a;
@@ -31,48 +31,32 @@
         }
         .glass { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(12px); border: 1px solid rgba(148, 163, 184, 0.1); }
         .darth-glass { background: rgba(69, 10, 10, 0.85); backdrop-filter: blur(12px); border: 1px solid rgba(239, 68, 68, 0.3); }
-      
+       
         .scan-line {
             width: 100%; height: 2px; background: #06b6d4; position: absolute;
             animation: scan 2s linear infinite; box-shadow: 0 0 10px #06b6d4;
         }
         .darth-scan-line { background: #ef4444; box-shadow: 0 0 10px #ef4444; }
-      
+       
         @keyframes scan { 0% { top: 0%; opacity: 0; } 50% { opacity: 1; } 100% { top: 100%; opacity: 0; } }
-      
+       
         .matrix-bg {
             background-image: radial-gradient(#1e293b 1px, transparent 1px), radial-gradient(#1e293b 1px, transparent 1px);
             background-size: 20px 20px;
             background-position: 0 0, 10px 10px;
             background-color: #020617;
         }
-      
+       
         input[type=range] { -webkit-appearance: none; width: 100%; background: transparent; }
         input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; height: 16px; width: 16px; border-radius: 50%; background: currentColor; cursor: pointer; margin-top: -6px; }
         input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 4px; cursor: pointer; background: #334155; border-radius: 2px; }
-      
+       
         .scrollbar-hide::-webkit-scrollbar { display: none; }
         .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
-      
+       
         .touch-scroll { -webkit-overflow-scrolling: touch; }
         .anim-fade { animation: fadeIn 0.3s ease-in; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-
-        /* Audio Visualizer */
-        .audio-viz { height: 128px; background: linear-gradient(to bottom, #0f172a, #1e293b); border-radius: 8px; overflow: hidden; }
-        .wave-bar { background: linear-gradient(to right, #06b6d4, #3b82f6); height: 100%; border-radius: 4px; }
-
-        /* Hacking Animation Styles */
-        .terminal { background: #000; color: #00ff00; font-family: 'Courier New', monospace; padding: 1rem; border-radius: 0.5rem; overflow-y: auto; max-height: 300px; }
-        .typing { overflow: hidden; border-right: 2px solid #00ff00; white-space: nowrap; animation: typing 3s steps(40, end), blink-caret 0.75s step-end infinite; }
-        @keyframes typing { from { width: 0; } to { width: 100%; } }
-        @keyframes blink-caret { from, to { border-color: transparent; } 50% { border-color: #00ff00; } }
-        .progress-bar { background: #333; height: 4px; border-radius: 2px; overflow: hidden; margin: 0.5rem 0; }
-        .progress-fill { background: linear-gradient(90deg, #ff0000, #ffff00, #00ff00); height: 100%; transition: width 0.1s; }
-        .spin { animation: spin 1s linear infinite; }
-        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-        .glitch { animation: glitch 0.3s infinite; }
-        @keyframes glitch { 0%, 100% { transform: translate(0); } 20% { transform: translate(-2px, 2px); } 40% { transform: translate(-2px, -2px); } 60% { transform: translate(2px, 2px); } 80% { transform: translate(2px, -2px); } }
     </style>
 </head>
 <body class="matrix-bg selection:bg-cyan-500 selection:text-white">
@@ -91,9 +75,7 @@
             START_SYM: 30,
             STOP_SYM: 29,
             QR_CHUNK_SIZE: 350,
-            AUDIO_CHUNK_SIZE: 200, // Smaller for audio to keep bursts short (~12s)
-            DEFAULT_QR_FPS: 200,
-            DEFAULT_AUDIO_DELAY: 500 // ms between chunks
+            DEFAULT_QR_FPS: 200
         };
         const BASE32_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
         // --- ICONS ---
@@ -163,7 +145,7 @@
                 const f = PROTOCOL.BASE_FREQ + symbolIndex * PROTOCOL.FREQ_SPACING;
                 const symbolSamples = Math.floor(PROTOCOL.SAMPLE_RATE * (PROTOCOL.SYMBOL_MS/1000));
                 const fadeSamples = Math.floor(PROTOCOL.SAMPLE_RATE * (PROTOCOL.FADE_MS/1000));
-              
+               
                 const buffer = ctx.createBuffer(1, symbolSamples, PROTOCOL.SAMPLE_RATE);
                 const arr = buffer.getChannelData(0);
                 for(let n=0; n<symbolSamples; n++) {
@@ -177,8 +159,8 @@
                 }
                 return buffer;
             },
-            buildSymbolStream: (payloadStr) => {
-                const bytes = GibberLink.utf8ToBytes(payloadStr);
+            buildSymbolStream: (jsonStr) => {
+                const bytes = GibberLink.utf8ToBytes(jsonStr);
                 const crc = GibberLink.crc32(bytes);
                 const fullBytes = new Uint8Array(bytes.length + 4);
                 fullBytes.set(bytes);
@@ -197,8 +179,8 @@
                 symbols.push(PROTOCOL.STOP_SYM);
                 return symbols;
             },
-            transmit: async (payloadStr) => {
-                const symbols = GibberLink.buildSymbolStream(payloadStr);
+            transmit: async (jsonStr) => {
+                const symbols = GibberLink.buildSymbolStream(jsonStr);
                 const ctx = new (window.AudioContext || window.webkitAudioContext)({sampleRate: PROTOCOL.SAMPLE_RATE});
                 const buffers = Array.from({length: 32}, (_,i) => GibberLink.makeSymbolBuffer(ctx, i));
                 let time = ctx.currentTime + 0.1;
@@ -249,7 +231,7 @@
             const [index, setIndex] = useState(0);
             const [speed, setSpeed] = useState(PROTOCOL.DEFAULT_QR_FPS);
             const [isPaused, setIsPaused] = useState(false);
-          
+           
             useEffect(() => {
                 if (isPaused) return;
                 const interval = setInterval(() => {
@@ -285,100 +267,6 @@
                                 </button>
                                 <button onClick={()=>setIndex(prev=>(prev+1)%chunks.length)} className="p-2 rounded-full bg-slate-100 text-slate-800"><Icon p={icons.play}/></button>
                             </div>
-                            <div className="text-center text-xs text-slate-400">
-                                Tip: Use slider to jump to specific chunks if receiver reports missing ones.
-                            </div>
-                        </div>
-                    </div>
-                    <button onClose={onClose} className="mt-8 text-white/50 hover:text-white flex items-center gap-2">
-                        <Icon p={icons.x} /> Stop Broadcast
-                    </button>
-                </div>
-            );
-        };
-        const AnimatedAudio = ({ chunks, label, onClose, theme="cyan" }) => {
-            const [index, setIndex] = useState(0);
-            const [delay, setDelay] = useState(PROTOCOL.DEFAULT_AUDIO_DELAY);
-            const [isPaused, setIsPaused] = useState(true); // Start paused for audio
-            const [isPlaying, setIsPlaying] = useState(false);
-            const playingRef = useRef(null);
-          
-            const playChunk = async (idx) => {
-                if (isPlaying) return;
-                setIsPlaying(true);
-                try {
-                    await GibberLink.transmit(chunks[idx]);
-                } finally {
-                    setIsPlaying(false);
-                }
-            };
-          
-            useEffect(() => {
-                if (isPaused || chunks.length === 0) return;
-                const playNext = async () => {
-                    await playChunk(index);
-                    if (isPaused) return;
-                    await new Promise(r => setTimeout(r, delay));
-                    if (isPaused) return;
-                    setIndex(prev => (prev + 1) % chunks.length);
-                };
-                playingRef.current = playNext();
-                return () => {
-                    if (playingRef.current) playingRef.current.then(() => {});
-                };
-            }, [index, isPaused, delay, chunks]);
-          
-            const handleIndexChange = (newIndex) => {
-                setIsPaused(true);
-                setIndex(newIndex);
-                playChunk(newIndex);
-            };
-          
-            const btnClass = theme === "red" ? "bg-red-600 hover:bg-red-500" : "bg-cyan-600 hover:bg-cyan-500";
-            return (
-                <div className="fixed inset-0 z-50 bg-black/95 flex flex-col items-center justify-center p-4">
-                    <div className="glass p-4 rounded-2xl w-full max-w-sm shadow-[0_0_50px_rgba(255,255,255,0.1)] bg-slate-800">
-                        <div className="flex items-center justify-center mb-4">
-                            <Icon p={icons.mic} size={48} className={`text-${theme === 'red' ? 'red' : 'cyan'}-400 ${isPlaying ? 'animate-pulse' : ''}`} />
-                            <div className="ml-4">
-                                <p className="text-white font-bold text-sm">{label}</p>
-                                <p className="text-slate-400 text-xs font-mono">Chunk {index+1}/{chunks.length} {isPlaying && '(Playing...)'}</p>
-                            </div>
-                        </div>
-                        <div className="audio-viz mb-4 flex items-end gap-1 p-2">
-                            {Array.from({length: 20}, (_, i) => (
-                                <div key={i} className="flex-1 wave-bar" style={{height: `${Math.random() * 80 + 20}%`}}></div>
-                            ))}
-                        </div>
-                        <div className="space-y-4">
-                            <div className="flex items-center gap-2">
-                                <span className="text-xs font-bold text-slate-400 w-8">POS</span>
-                                <input type="range" min="0" max={chunks.length-1} value={index}
-                                    onChange={(e)=>{handleIndexChange(parseInt(e.target.value));}}
-                                    className="accent-slate-800"
-                                />
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <span className="text-xs font-bold text-slate-400 w-8">DLY</span>
-                                <input type="range" min="0" max="2000" step="100" value={delay}
-                                    onChange={(e)=>setDelay(parseInt(e.target.value))}
-                                    className="accent-slate-800"
-                                />
-                                <span className="text-xs font-mono text-slate-500 w-12 text-right">{delay}ms</span>
-                            </div>
-                            <div className="flex justify-center gap-4">
-                                <button onClick={()=>setIndex(prev=>(prev-1+chunks.length)%chunks.length)} className="p-2 rounded-full bg-slate-100 text-slate-800" disabled={isPlaying}><Icon p={icons.play} className="rotate-180"/></button>
-                                <button onClick={()=> {
-                                    setIsPaused(!isPaused);
-                                    if (!isPaused) setIsPlaying(false);
-                                }} className={`p-4 rounded-full text-white shadow-lg transition-transform active:scale-95 ${btnClass}`}>
-                                    <Icon p={isPaused ? icons.play : icons.pause} />
-                                </button>
-                                <button onClick={()=>setIndex(prev=>(prev+1)%chunks.length)} className="p-2 rounded-full bg-slate-100 text-slate-800" disabled={isPlaying}><Icon p={icons.play}/></button>
-                            </div>
-                            <div className="text-center text-xs text-slate-400">
-                                Tip: Slider jumps & plays chunk. Use for missing chunks from receiver.
-                            </div>
                         </div>
                     </div>
                     <button onClick={onClose} className="mt-8 text-white/50 hover:text-white flex items-center gap-2">
@@ -391,7 +279,6 @@
             const videoRef = useRef(null);
             const canvasRef = useRef(null);
             const [error, setError] = useState(null);
-            const [copied, setCopied] = useState(false);
             useEffect(() => {
                 let stream;
                 let animFrame;
@@ -431,11 +318,6 @@
                 const received = new Set(Object.keys(incomingFile.chunks).map(Number));
                 return Array.from({length: incomingFile.total}, (_, i) => i).filter(i => !received.has(i));
             }, [incomingFile]);
-            const handleCopyMissing = () => {
-                navigator.clipboard.writeText(`Missing chunks: ${missingChunks.join(', ')}`);
-                setCopied(true);
-                setTimeout(() => setCopied(false), 2000);
-            };
             return (
                 <div className="fixed inset-0 z-50 bg-black flex flex-col items-center justify-center p-4">
                     {error ? (
@@ -463,14 +345,8 @@
                                         Chunks: {Object.keys(incomingFile.chunks).length} / {incomingFile.total}
                                     </div>
                                     {missingChunks.length > 0 && (
-                                        <div className="space-y-1">
-                                            <div className="text-[10px] text-red-400 font-bold flex justify-between items-center">
-                                                Missing: {missingChunks.join(', ')}
-                                                <button onClick={handleCopyMissing} className="px-2 py-1 bg-red-600 text-white text-[8px] rounded hover:bg-red-500 transition-colors">
-                                                    {copied ? 'Copied!' : 'Copy'}
-                                                </button>
-                                            </div>
-                                            <div className="text-[8px] text-red-300 italic">Tell sender to jump to these chunks</div>
+                                        <div className="text-[10px] text-red-400 font-bold">
+                                            Missing: {missingChunks.join(', ')}
                                         </div>
                                     )}
                                 </div>
@@ -483,15 +359,14 @@
                 </div>
             );
         };
-        const AudioListener = ({ onData, onClose, incomingAudio }) => {
+        const AudioListener = ({ onData, onClose }) => {
             const [status, setStatus] = useState("Initializing Mic...");
             const [visuals, setVisuals] = useState(new Array(32).fill(0));
-            const [copied, setCopied] = useState(false);
             const analyzerRef = useRef(null);
             const processorRef = useRef(null);
             const ctxRef = useRef(null);
             const streamRef = useRef(null);
-          
+           
             const stateRef = useRef({
                 mode: 'WAIT_PREAMBLE',
                 samplesProcessed: 0,
@@ -505,7 +380,7 @@
                     try {
                         const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
                         streamRef.current = stream;
-                      
+                       
                         const ctx = new (window.AudioContext || window.webkitAudioContext)({sampleRate: PROTOCOL.SAMPLE_RATE});
                         ctxRef.current = ctx;
                         const src = ctx.createMediaStreamSource(stream);
@@ -566,10 +441,7 @@
                             state.readIndex += symbolSamps;
                             if (bestSym === PROTOCOL.STOP_SYM) {
                                 finishDecode(state);
-                                state.mode = 'WAIT_PREAMBLE'; // Reset for next chunk
-                                state.payload = [];
-                                state.buffer = [];
-                                setStatus("Listening for next...");
+                                state.mode = 'DONE';
                                 return;
                             }
                             state.payload.push(bestSym);
@@ -603,8 +475,8 @@
                         const recvCrc = ((recvCrcVals[0] << 24) | (recvCrcVals[1] << 16) | (recvCrcVals[2] << 8) | recvCrcVals[3]) >>> 0;
                         const calcCrc = GibberLink.crc32(dataBytes) >>> 0;
                         if (calcCrc !== recvCrc) throw new Error("CRC Fail");
-                        const payloadStr = new TextDecoder().decode(dataBytes);
-                        onData(payloadStr);
+                        const jsonStr = new TextDecoder().decode(dataBytes);
+                        onData(jsonStr);
                     } catch(e) {
                         setStatus("Decode Error: " + e.message);
                         setTimeout(() => {
@@ -621,18 +493,6 @@
                     if(ctxRef.current) ctxRef.current.close();
                 };
             }, []);
-            const progress = incomingAudio && incomingAudio.total > 0
-                ? (Object.keys(incomingAudio.chunks).length / incomingAudio.total) * 100 : 0;
-            const missingChunks = useMemo(() => {
-                if (!incomingAudio || incomingAudio.total === 0) return [];
-                const received = new Set(Object.keys(incomingAudio.chunks).map(Number));
-                return Array.from({length: incomingAudio.total}, (_, i) => i).filter(i => !received.has(i));
-            }, [incomingAudio]);
-            const handleCopyMissing = () => {
-                navigator.clipboard.writeText(`Missing audio chunks: ${missingChunks.join(', ')}`);
-                setCopied(true);
-                setTimeout(() => setCopied(false), 2000);
-            };
             return (
                 <div className="fixed inset-0 z-50 bg-black/95 flex flex-col items-center justify-center p-6">
                     <div className="text-center mb-8">
@@ -644,99 +504,7 @@
                             <div key={i} className="flex-1 bg-cyan-500 rounded-t transition-all duration-75" style={{height: `${Math.min(100, v*5)}%`, opacity: 0.5 + (v/200)}}></div>
                         ))}
                     </div>
-                    {incomingAudio && incomingAudio.total > 0 && (
-                        <div className="w-full max-w-md bg-black/80 p-4 rounded-xl mb-4 backdrop-blur-sm">
-                            <div className="flex justify-between text-xs font-mono text-white mb-2">
-                                <span>RECEIVING AUDIO CHUNKS...</span>
-                                <span>{Math.round(progress)}%</span>
-                            </div>
-                            <div className="w-full bg-slate-700 h-1.5 rounded-full overflow-hidden mb-2">
-                                <div className="h-full transition-all duration-100 bg-cyan-400" style={{width: `${progress}%`}}></div>
-                            </div>
-                            <div className="text-[10px] text-slate-400 mb-1">
-                                Chunks: {Object.keys(incomingAudio.chunks).length} / {incomingAudio.total}
-                            </div>
-                            {missingChunks.length > 0 && (
-                                <div className="space-y-1">
-                                    <div className="text-[10px] text-red-400 font-bold flex justify-between items-center">
-                                        Missing: {missingChunks.join(', ')}
-                                        <button onClick={handleCopyMissing} className="px-2 py-1 bg-red-600 text-white text-[8px] rounded hover:bg-red-500 transition-colors">
-                                            {copied ? 'Copied!' : 'Copy'}
-                                        </button>
-                                    </div>
-                                    <div className="text-[8px] text-red-300 italic">Tell sender to jump to these chunks</div>
-                                </div>
-                            )}
-                        </div>
-                    )}
-                    <button onClick={onClose} className="bg-slate-800 px-8 py-3 rounded-full text-white font-bold hover:bg-slate-700 border border-slate-600">Cancel</button>
-                </div>
-            );
-        };
-        const HackingSim = ({ onClose, packet }) => {
-            const [step, setStep] = useState(0);
-            const [progress, setProgress] = useState(0);
-            const [terminalOutput, setTerminalOutput] = useState([]);
-            const steps = [
-                { title: "Packet Analysis", desc: "Detecting structure... JSON payload with hex-encoded ciphertext.", duration: 2000 },
-                { title: "Encryption Detection", desc: "AES-GCM-256 identified. IV: 12 bytes, Tag: 16 bytes.", duration: 2500 },
-                { title: "Brute Force Attempt", desc: "Keyspace: 2^256 attempts. Simulating 10^12/sec GPU cluster...", duration: 5000, animateProgress: true },
-                { title: "Dictionary Attack", desc: "Rainbow tables & common keys: No match. Entropy too high.", duration: 3000 },
-                { title: "Frequency Analysis", desc: "Ciphertext uniform. No patterns detectable.", duration: 2000 },
-                { title: "Side-Channel Probe", desc: "Timing/Power analysis simulation: Requires physical access. Failed.", duration: 4000 },
-                { title: "Conclusion", desc: "Attack vectors exhausted. Modern crypto unbreakable without key. MITM detected only via fingerprint mismatch.", duration: 3000 }
-            ];
-
-            useEffect(() => {
-                const interval = setInterval(() => {
-                    setTerminalOutput(prev => [...prev, `> ${steps[step].title.toLowerCase().replace(/\s+/g, '-')}...`]);
-                    if (steps[step].animateProgress) {
-                        const progInt = setInterval(() => {
-                            setProgress(p => {
-                                if (p >= 99.9) {
-                                    clearInterval(progInt);
-                                    return p;
-                                }
-                                return p + Math.random() * 2;
-                            });
-                        }, 50);
-                    }
-                    setTimeout(() => {
-                        setStep(s => {
-                            if (s >= steps.length - 1) {
-                                clearInterval(interval);
-                                setTimeout(onClose, 2000);
-                                return s;
-                            }
-                            return s + 1;
-                        });
-                    }, steps[step].duration);
-                }, steps[step].duration / 2); // Stagger output
-
-                return () => clearInterval(interval);
-            }, [step]);
-
-            return (
-                <div className="fixed inset-0 z-50 bg-black/95 flex flex-col items-center justify-center p-4 overflow-y-auto">
-                    <div className="darth-glass p-6 rounded-2xl w-full max-w-lg max-h-[80vh] flex flex-col">
-                        <div className="flex justify-between items-center mb-4">
-                            <h3 className="text-red-300 font-bold">CRYPTO CRACK SIMULATOR</h3>
-                            <button onClick={onClose} className="text-red-400 hover:text-red-200"><Icon p={icons.x} size={16} /></button>
-                        </div>
-                        <div className="mb-4">
-                            <div className="progress-bar">
-                                <div className="progress-fill" style={{width: `${progress}%`}}></div>
-                            </div>
-                            <p className="text-xs text-red-400 text-center">{steps[step].title} <span className="spin inline ml-2">🔧</span></p>
-                        </div>
-                        <div className="terminal mb-4">
-                            {terminalOutput.map((line, i) => <div key={i} className="mb-1">{line}</div>)}
-                            <div className="typing">{steps[step].desc}</div>
-                        </div>
-                        <div className="text-xs text-red-500 italic text-center">
-                            Visualizing why AES-256 resists: Brute force would take billions of years.
-                        </div>
-                    </div>
+                    <button onClick={onClose} className="mt-8 bg-slate-800 px-8 py-3 rounded-full text-white font-bold hover:bg-slate-700 border border-slate-600">Cancel</button>
                 </div>
             );
         };
@@ -785,44 +553,37 @@
             const [fingerprint, setFingerprint] = useState(null);
             const [scanner, setScanner] = useState(null);
             const [fileTransfer, setFileTransfer] = useState(null);
-            const [audioTransfer, setAudioTransfer] = useState(null);
             const [incomingFile, setIncomingFile] = useState({ id: null, chunks: {}, total: 0, complete: false });
-            const [incomingAudio, setIncomingAudio] = useState({ id: null, chunks: {}, total: 0, complete: false });
             const [pendingDownload, setPendingDownload] = useState(null);
             const [fileLog, setFileLog] = useState([]);
             const [chat, setChat] = useState([]);
             const [msg, setMsg] = useState("");
             const [audioPlaying, setAudioPlaying] = useState(false);
-            const [hackingSim, setHackingSim] = useState(false);
             const chatEndRef = useRef(null);
             const chatContainerRef = useRef(null);
             const [interceptedPacket, setInterceptedPacket] = useState(null);
             const lastScanRef = useRef("");
-          
+           
             useEffect(() => {
                 if (scanner) lastScanRef.current = "";
             }, [scanner]);
-          
+           
             useEffect(() => {
-                const checkComplete = (incoming, setter) => {
-                    if (incoming.complete && incoming.total > 0) {
-                        assembleFileNoDownload(incoming).then(({url, filename}) => {
-                            const newLog = { type: 'received', name: filename, timestamp: new Date().toLocaleString(), url, downloaded: false };
-                            setFileLog(prev => [newLog, ...prev]);
-                            setChat(prev => [...prev, { from: 'Partner', text: `📎 Shared file: ${filename}` }]);
-                            setPendingDownload(newLog);
-                        }).catch(e => {
-                            console.error(e);
-                            alert("File assembly failed: " + e.message);
-                        }).finally(() => {
-                            setter({ id: null, chunks: {}, total: 0, complete: false });
-                            setScanner(null);
-                        });
-                    }
-                };
-                checkComplete(incomingFile, setIncomingFile);
-                checkComplete(incomingAudio, setIncomingAudio);
-            }, [incomingFile.complete, incomingAudio.complete]);
+                if (incomingFile.complete && incomingFile.total > 0) {
+                    assembleFileNoDownload(incomingFile).then(({url, filename}) => {
+                        const newLog = { type: 'received', name: filename, timestamp: new Date().toLocaleString(), url, downloaded: false };
+                        setFileLog(prev => [newLog, ...prev]);
+                        setChat(prev => [...prev, { from: 'Partner', text: `📎 Shared file: ${filename}` }]);
+                        setPendingDownload(newLog);
+                    }).catch(e => {
+                        console.error(e);
+                        alert("File assembly failed: " + e.message);
+                    }).finally(() => {
+                        setIncomingFile({ id: null, chunks: {}, total: 0, complete: false });
+                        setScanner(null);
+                    });
+                }
+            }, [incomingFile.complete]);
             useEffect(() => {
                 if (chatContainerRef.current) {
                     chatContainerRef.current.scrollTo({
@@ -852,7 +613,7 @@
                 });
             };
             useEffect(() => { genKeys(); }, []);
-          
+           
             const playAudioPayload = async (dataStr) => {
                 if(audioPlaying) return;
                 setAudioPlaying(true);
@@ -868,36 +629,27 @@
                     return;
                 }
                 try {
-                    let isChunk = false;
-                    let setter = null;
                     if (raw.startsWith("F|")) {
-                        isChunk = true;
-                        setter = setIncomingFile;
-                    } else if (raw.startsWith("A|")) {
-                        isChunk = true;
-                        setter = setIncomingAudio;
-                    }
-                    if (isChunk) {
                         if (!sessionKey) return;
                         const [_, id, idxStr, totStr, data] = raw.split("|");
                         const idx = parseInt(idxStr);
                         const tot = parseInt(totStr);
-                      
-                        setter(prev => {
+                       
+                        setIncomingFile(prev => {
                             if (prev.complete) return prev;
-                            const isNew = prev.id !== id;
-                            let newChunks = isNew ? {} : { ...prev.chunks };
-                          
+                            const isNewFile = prev.id !== id;
+                            let newChunks = isNewFile ? {} : { ...prev.chunks };
+                           
                             if (newChunks[idx]) return prev;
                             newChunks[idx] = data;
-                          
-                            const complete = Object.keys(newChunks).length === tot;
-                          
+                           
+                            const isComplete = Object.keys(newChunks).length === tot;
+                           
                             return {
                                 id: id,
                                 chunks: newChunks,
                                 total: tot,
-                                complete: complete
+                                complete: isComplete
                             };
                         });
                         return;
@@ -1015,7 +767,6 @@
                 const packet = { iv: buf2hex(iv), d: buf2hex(enc) };
                 const json = JSON.stringify(packet);
                 setFileTransfer({ chunks: [json], label: "Encrypted Message" });
-                setAudioTransfer({ chunks: [json], label: "Encrypted Message (Audio)" });
                 setChat(prev => [...prev, { from: 'Me', text: msg }]);
                 setMsg("");
             };
@@ -1042,22 +793,13 @@
                 for(let i=0; i<finalPayload.length; i++) binary += String.fromCharCode(finalPayload[i]);
                 const b64 = btoa(binary);
                 const id = Math.floor(Math.random()*10000).toString(16);
-                // QR Chunks
-                const qrChunks = [];
-                const qrTotal = Math.ceil(b64.length / PROTOCOL.QR_CHUNK_SIZE);
-                for(let i=0; i<qrTotal; i++) {
+                const chunks = [];
+                const total = Math.ceil(b64.length / PROTOCOL.QR_CHUNK_SIZE);
+                for(let i=0; i<total; i++) {
                     const slice = b64.slice(i*PROTOCOL.QR_CHUNK_SIZE, (i+1)*PROTOCOL.QR_CHUNK_SIZE);
-                    qrChunks.push(`F|${id}|${i}|${qrTotal}|${slice}`);
+                    chunks.push(`F|${id}|${i}|${total}|${slice}`);
                 }
-                setFileTransfer({ chunks: qrChunks, label: `Sending ${file.name} (QR)` });
-                // Audio Chunks
-                const audioChunks = [];
-                const audioTotal = Math.ceil(b64.length / PROTOCOL.AUDIO_CHUNK_SIZE);
-                for(let i=0; i<audioTotal; i++) {
-                    const slice = b64.slice(i*PROTOCOL.AUDIO_CHUNK_SIZE, (i+1)*PROTOCOL.AUDIO_CHUNK_SIZE);
-                    audioChunks.push(`A|${id}|${i}|${audioTotal}|${slice}`);
-                }
-                setAudioTransfer({ chunks: audioChunks, label: `Sending ${file.name} (Audio)` });
+                setFileTransfer({ chunks, label: `Sending ${file.name}` });
             };
             const darthTamper = () => {
                 if (!interceptedPacket) return;
@@ -1069,9 +811,6 @@
                 } catch(e) {}
                 const id = Math.random().toString(36).substr(2,5);
                 setFileTransfer({ chunks: [badRaw], label: `Tampered Packet #${id}`, theme: "red" });
-            };
-            const startHacking = () => {
-                setHackingSim(true);
             };
             return (
                 <div className={`h-full w-full flex flex-col transition-colors duration-500 ${mode === 'DARTH' ? 'bg-slate-950' : 'bg-slate-900'}`}>
@@ -1165,7 +904,7 @@
                                                     {sessionKey ? "SECURE (AES-GCM-256)" : "NOT CONNECTED"}
                                                 </p>
                                             </div>
-                                          
+                                           
                                             {sessionKey && fingerprint && (
                                                 <div className="bg-slate-950 p-4 rounded-xl border border-slate-800">
                                                     <p className="text-xs text-slate-500 uppercase tracking-widest mb-2">Safety Fingerprint</p>
@@ -1176,7 +915,7 @@
                                                     </p>
                                                 </div>
                                             )}
-                                          
+                                           
                                             {sessionKey && (
                                                 <button onClick={()=>setActiveTab('CHAT')} className="w-full bg-cyan-600 hover:bg-cyan-500 text-white font-bold py-3 rounded-xl transition-colors">
                                                     Open Chat Channel
@@ -1205,7 +944,7 @@
                                             ))}
                                             <div ref={chatEndRef} />
                                         </div>
-                                      
+                                       
                                         <div className="flex gap-2 flex-shrink-0 pt-2">
                                             <button onClick={()=>setScanner('QR')} className="bg-slate-700 hover:bg-slate-600 text-slate-300 p-3 rounded-xl transition-colors" title="Scan QR Message">
                                                 <Icon p={icons.eye} />
@@ -1257,7 +996,7 @@
                                     <div className="absolute top-0 right-0 p-4 opacity-10"><Icon p={icons.bug} size={100} /></div>
                                     <h2 className="text-xl font-bold mb-1">Packet Interceptor</h2>
                                     <p className="text-red-400 text-xs mb-6">Capture, Analyze, Corrupt</p>
-                                  
+                                   
                                     {!interceptedPacket ? (
                                         <div className="grid grid-cols-2 gap-2">
                                             <button onClick={()=>setScanner('QR')} className="h-32 border-2 border-dashed border-red-500/50 rounded-xl flex flex-col items-center justify-center text-red-400 hover:bg-red-900/20 hover:border-red-400 transition-all cursor-pointer">
@@ -1276,21 +1015,21 @@
                                                 {interceptedPacket.raw}
                                             </div>
                                             <div className="grid grid-cols-2 gap-3">
-                                                <button onClick={startHacking} className="bg-red-900/50 hover:bg-red-900 border border-red-700 text-red-200 py-3 rounded-lg text-xs font-bold glitch">
-                                                    ATTEMPT CRACK <span className="spin inline ml-1">⚡</span>
+                                                <button onClick={()=>{alert("Brute Force Failed: AES-256 Entropy too high.\nKeyspace: 2^256");}} className="bg-red-900/50 hover:bg-red-900 border border-red-700 text-red-200 py-3 rounded-lg text-xs font-bold">
+                                                    ATTEMPT CRACK
                                                 </button>
                                                 <button onClick={darthTamper} className="bg-red-600 hover:bg-red-500 text-white py-3 rounded-lg text-xs font-bold shadow-[0_0_15px_rgba(220,38,38,0.4)]">
                                                     TAMPER & REPLAY
                                                 </button>
                                             </div>
-                                          
+                                           
                                             <button onClick={()=>setInterceptedPacket(null)} className="w-full py-2 text-xs text-red-400 hover:text-red-200">
                                                 DISCARD & SCAN NEW
                                             </button>
                                         </div>
                                     )}
                                 </div>
-                              
+                               
                                 <div className="p-4 rounded-xl bg-slate-900/50 border border-slate-800 text-xs text-slate-500">
                                     <strong className="text-slate-400 block mb-1">DARTH CONSOLE:</strong>
                                     Use this mode to test the security of the Normal mode. Try to tamper with a packet and scan it on a receiving device. The receiver's integrity check (GCM Auth Tag) should fail.
@@ -1311,7 +1050,6 @@
                         <AudioListener
                             onData={(d)=>{setScanner(null); handleScan(d);}}
                             onClose={()=>setScanner(null)}
-                            incomingAudio={incomingAudio}
                         />
                     )}
                     {fileTransfer && (
@@ -1321,17 +1059,6 @@
                             theme={fileTransfer.theme}
                             onClose={()=>setFileTransfer(null)}
                         />
-                    )}
-                    {audioTransfer && (
-                        <AnimatedAudio
-                            chunks={audioTransfer.chunks}
-                            label={audioTransfer.label}
-                            theme={audioTransfer.theme || "cyan"}
-                            onClose={()=>setAudioTransfer(null)}
-                        />
-                    )}
-                    {hackingSim && interceptedPacket && (
-                        <HackingSim onClose={() => setHackingSim(false)} packet={interceptedPacket} />
                     )}
                     {pendingDownload && (
                         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
