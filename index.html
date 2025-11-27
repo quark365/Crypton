@@ -38,6 +38,7 @@
             4%, 60% { transform: translate(-2px,0) skew(0deg); }
             62% { transform: translate(0,0) skew(5deg); }
         }
+        .terminal-text { font-family: 'Courier New', monospace; }
     </style>
 </head>
 <body class="matrix-bg min-h-screen">
@@ -60,34 +61,13 @@
             send: <><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></>,
             sound: <><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></>,
             user: <><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></>,
-            skull: <path d="M12 22s4-2 4-7V9c0-5-8-5-8 0v6c0 5 4 7 4 7z"/>
+            skull: <path d="M12 22s4-2 4-7V9c0-5-8-5-8 0v6c0 5 4 7 4 7z"/>,
+            bomb: <><circle cx="12" cy="13" r="9"/><path d="M12 4V2"/><path d="M20 13h2"/><path d="M12 22v2"/><path d="M4 13H2"/></>
         };
 
         // --- CRYPTO HELPERS ---
         const buf2hex = (buf) => [...new Uint8Array(buf)].map(x => x.toString(16).padStart(2, '0')).join('');
         const hex2buf = (hex) => new Uint8Array(hex.match(/.{1,2}/g).map(byte => parseInt(byte, 16))).buffer;
-
-        // --- AUDIO MODEM ---
-        const playModemSound = () => {
-            const ctx = new (window.AudioContext || window.webkitAudioContext)();
-            const osc = ctx.createOscillator();
-            const gain = ctx.createGain();
-            osc.connect(gain);
-            gain.connect(ctx.destination);
-            osc.type = 'square';
-            
-            const now = ctx.currentTime;
-            osc.frequency.setValueAtTime(1200, now);
-            osc.frequency.linearRampToValueAtTime(400, now + 0.1);
-            osc.frequency.linearRampToValueAtTime(2000, now + 0.2);
-            osc.frequency.linearRampToValueAtTime(800, now + 0.3);
-            
-            gain.gain.setValueAtTime(0.1, now);
-            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
-            
-            osc.start(now);
-            osc.stop(now + 0.5);
-        };
 
         // --- FINGERPRINT GENERATOR ---
         const generateFingerprint = async (buffer) => {
@@ -100,17 +80,17 @@
         };
 
         // --- COMPONENTS ---
-        const QRDisplay = ({ data, label, subLabel }) => {
+        const QRDisplay = ({ data, label, subLabel, isToxic }) => {
             const canvasRef = useRef(null);
             useEffect(() => {
                 if (canvasRef.current && data) {
-                    new QRious({ element: canvasRef.current, value: data, size: 220, level: 'L' });
+                    new QRious({ element: canvasRef.current, value: data, size: 220, level: 'L', foreground: isToxic ? '#ef4444' : 'black' });
                 }
-            }, [data]);
+            }, [data, isToxic]);
             return (
-                <div className="bg-white p-4 rounded-2xl flex flex-col items-center shadow-xl">
+                <div className={`bg-white p-4 rounded-2xl flex flex-col items-center shadow-xl ${isToxic ? 'border-4 border-red-600' : ''}`}>
                     <canvas ref={canvasRef} />
-                    <p className="text-black font-bold text-sm mt-2">{label}</p>
+                    <p className={`font-bold text-sm mt-2 ${isToxic ? 'text-red-600 uppercase' : 'text-black'}`}>{label}</p>
                     {subLabel && <p className="text-slate-500 text-[10px] font-mono mt-1 text-center max-w-[200px] break-all">{subLabel}</p>}
                 </div>
             );
@@ -165,7 +145,7 @@
         };
 
         const HackingTerminal = ({ targetType, onClose }) => {
-            const [logs, setLogs] = useState(["> INITIALIZING ATTACK VECTOR..."]);
+            const [logs, setLogs] = useState(["> INITIALIZING INTERCEPTION..."]);
             const [progress, setProgress] = useState(0);
             const [cracking, setCracking] = useState(true);
             const [hexDump, setHexDump] = useState("");
@@ -183,25 +163,24 @@
             useEffect(() => {
                 const steps = targetType === 'IDENTITY' 
                     ? [
-                        "Intercepted Public Key Block...",
-                        "Analyzing Elliptic Curve (P-256)...",
-                        "Attempting to solve Discrete Logarithm Problem...",
-                        "Running Pollard's rho algorithm...",
+                        "Captured Public Key Block...",
+                        "Calculating Elliptic Curve Order...",
+                        "Running Pollard's Rho Algorithm...",
+                        "Attempting Discrete Logarithm Attack...",
                         "Brute forcing Private Scalar...",
-                        "Estimating time to crack: 10^24 years...",
-                        "ERROR: Curve order too large.",
-                        "FAILED to derive Private Key."
+                        "Complexity: 2^128 operations required...",
+                        "Estimated time: 4 Billion Years...",
+                        "FAILED: Key is mathematically secure."
                       ]
                     : [
-                        "Intercepted AES-256 Packet...",
-                        "Extracting IV and Ciphertext...",
-                        "Scanning for weak RSA Prime factors...",
-                        "Attempting Padding Oracle Attack...",
-                        "Brute forcing AES-256 Key space...",
-                        "Keys tested: 4,000,000,000...",
-                        "Progress: 0.00000000001%...",
-                        "ERROR: Encryption too strong.",
-                        "FAILED to decrypt payload."
+                        "Captured Encrypted Packet...",
+                        "Analyzing Header: AES-256-GCM...",
+                        "Extracting IV and Auth Tag...",
+                        "Attempting Dictionary Attack on Key...",
+                        "Checking for Weak Randomness...",
+                        "Brute Forcing Key Space (2^256)...",
+                        "Progress: 0.0000000000001%...",
+                        "FAILED: Missing Private Key."
                       ];
 
                 let stepIndex = 0;
@@ -223,29 +202,25 @@
                 <div className="fixed inset-0 z-50 bg-black/95 flex flex-col items-center justify-center p-4 font-mono">
                     <div className="w-full max-w-lg bg-slate-900 border-2 border-red-600 rounded-xl overflow-hidden shadow-[0_0_50px_rgba(220,38,38,0.5)]">
                         <div className="bg-red-900/30 p-3 border-b border-red-600 flex justify-between items-center">
-                            <span className="text-red-500 font-bold animate-pulse">☠️ DARTH ATTACK CONSOLE v1.0</span>
-                            <span className="text-xs text-red-400">{targetType} CRACKER</span>
+                            <span className="text-red-500 font-bold animate-pulse">☠️ CRYPTANALYSIS SUITE</span>
+                            <span className="text-xs text-red-400">{targetType} TARGET</span>
                         </div>
                         <div className="h-64 p-4 overflow-y-auto space-y-2 font-mono text-xs text-green-400 bg-black">
                             {logs.map((l, i) => <div key={i}>{l}</div>)}
                             {cracking && <div className="animate-pulse">_</div>}
                         </div>
                         <div className="h-20 bg-slate-800 p-2 text-[10px] text-slate-500 font-mono overflow-hidden opacity-50 break-all">
-                            MEM_DUMP: {hexDump}
+                            RAW_STREAM: {hexDump}
                         </div>
                         <div className="p-4 bg-slate-900 border-t border-red-900/50">
-                            <div className="flex justify-between text-xs text-red-400 mb-1">
-                                <span>ATTACK PROGRESS</span>
-                                <span>{cracking ? Math.round(progress)+'%' : 'FAILED'}</span>
-                            </div>
-                            <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
-                                <div className={`h-full transition-all duration-300 ${cracking ? 'bg-red-600' : 'bg-slate-600'}`} style={{width: `${progress}%`}}></div>
-                            </div>
-                            
                             {!cracking && (
-                                <button onClick={() => onClose(targetType === 'IDENTITY')} className="mt-4 w-full bg-red-600 hover:bg-red-500 text-white font-bold py-3 rounded-lg animate-bounce">
-                                    {targetType === 'IDENTITY' ? "CONTINUE (MITM ATTACK)" : "ACKNOWLEDGE FAILURE"}
-                                </button>
+                                <div className="text-center">
+                                    <div className="text-red-500 font-bold mb-2">ENCRYPTION UNBROKEN</div>
+                                    <p className="text-xs text-slate-400 mb-4">Without the private key or shared secret, this data is random noise.</p>
+                                    <button onClick={() => onClose()} className="w-full bg-slate-700 hover:bg-slate-600 text-white font-bold py-3 rounded-lg">
+                                        CLOSE TERMINAL
+                                    </button>
+                                </div>
                             )}
                         </div>
                     </div>
@@ -257,367 +232,267 @@
         const App = () => {
             // Identity State
             const [isDarth, setIsDarth] = useState(false);
-            const [tab, setTab] = useState('CONNECT'); // CONNECT, MESSAGE
+            const [activeTab, setActiveTab] = useState('CONNECT'); // CONNECT, VERIFY, CHAT
             
-            // My Keys
-            const [rsaKeys, setRsaKeys] = useState(null);
-            const [ecdhKeys, setEcdhKeys] = useState(null);
-            const [myIdentityString, setMyIdentityString] = useState(null);
-
-            // Connection State
-            const [partner, setPartner] = useState(null); // { rsaPub, ecdhPub, fingerprint, verified }
+            // My Keys (Alice/Bob)
+            const [myKeyPair, setMyKeyPair] = useState(null);
+            const [myPublicString, setMyPublicString] = useState(""); 
+            const [sharedSecretKey, setSharedSecretKey] = useState(null); 
+            const [sharedFingerprint, setSharedFingerprint] = useState("????");
             
-            // Messaging State
-            const [textInput, setTextInput] = useState("");
-            const [lastPacket, setLastPacket] = useState(null);
-            const [messages, setMessages] = useState([]);
-            
-            // UI State
-            const [scannerOpen, setScannerOpen] = useState(false);
-            const [scanPurpose, setScanPurpose] = useState(null); // 'IDENTITY', 'MESSAGE'
-            const [logs, setLogs] = useState([]);
-            
-            // Hacking State
+            // Darth State
+            const [darthFakeMessage, setDarthFakeMessage] = useState("Fake Message");
+            const [darthFakePacket, setDarthFakePacket] = useState(null);
             const [hackTarget, setHackTarget] = useState(null); // 'IDENTITY' or 'MESSAGE'
-            const [pendingScanData, setPendingScanData] = useState(null);
 
-            const log = (msg) => setLogs(prev => [`[${new Date().toLocaleTimeString().split(' ')[0]}] ${msg}`, ...prev]);
+            // UI State
+            const [scannerMode, setScannerMode] = useState(null); // 'KEY', 'MESSAGE', 'DARTH_INTERCEPT'
+            const [message, setMessage] = useState("");
+            const [packetDisplay, setPacketDisplay] = useState(null);
+            const [chatLog, setChatLog] = useState([]);
+            const [logs, setLogs] = useState([]);
 
-            // 1. GENERATE DUAL KEYS (RSA + ECDH)
+            const log = (m) => setLogs(p => [`> ${m}`, ...p]);
+
+            // 1. Generate ECDH Identity (Alice/Bob)
             const generateIdentity = async () => {
-                log(`Generating Dual-Channel Keys (${isDarth ? 'DARTH MODE' : 'Standard'})...`);
                 try {
-                    // A. Generate RSA (For Main Encryption)
-                    const rsa = await window.crypto.subtle.generateKey(
-                        { name: "RSA-OAEP", modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: "SHA-256" },
-                        true, ["encrypt", "decrypt"]
-                    );
-
-                    // B. Generate ECDH (For Verification/Tunnel)
-                    const ecdh = await window.crypto.subtle.generateKey(
+                    const keys = await window.crypto.subtle.generateKey(
                         { name: "ECDH", namedCurve: "P-256" },
                         true, ["deriveKey", "deriveBits"]
                     );
-
-                    // Export Public Keys to share
-                    const rsaExp = await window.crypto.subtle.exportKey("spki", rsa.publicKey);
-                    const ecdhExp = await window.crypto.subtle.exportKey("spki", ecdh.publicKey);
-
-                    // Create Identity Payload
-                    const identityPayload = JSON.stringify({
-                        r: btoa(String.fromCharCode(...new Uint8Array(rsaExp))), // RSA Public
-                        e: btoa(String.fromCharCode(...new Uint8Array(ecdhExp)))  // ECDH Public
-                    });
-
-                    setRsaKeys(rsa);
-                    setEcdhKeys(ecdh);
-                    setMyIdentityString(identityPayload);
-                    setPartner(null); // Reset partner
-                    setMessages([]);
-                    log("Identity Generated.");
-                } catch (e) { log("KeyGen Error: " + e.message); }
+                    const exported = await window.crypto.subtle.exportKey("spki", keys.publicKey);
+                    const str = btoa(String.fromCharCode(...new Uint8Array(exported)));
+                    setMyKeyPair(keys);
+                    setMyPublicString(str);
+                    setSharedSecretKey(null);
+                    setSharedFingerprint("????");
+                    setActiveTab('CONNECT');
+                } catch (e) { console.error(e); }
             };
 
-            // Re-generate if role changes
-            useEffect(() => { generateIdentity(); }, [isDarth]);
+            useEffect(() => { generateIdentity(); }, []);
 
-            // 2. CONNECT WITH PARTNER (Scan Their Identity)
-            const handleIdentityScan = async (jsonString) => {
+            // 2. Key Exchange (Alice/Bob)
+            const handleScannedPublicKey = async (partnerKeyStr) => {
                 try {
-                    const data = JSON.parse(jsonString);
-                    if (!data.r || !data.e) throw new Error("Invalid Identity QR");
-
-                    log("Partner Identity Scanned. Calculating Dual Keys...");
-
-                    // A. Import Partner RSA Public (For Sending)
-                    const rsaDer = Uint8Array.from(atob(data.r), c => c.charCodeAt(0));
-                    const rsaPub = await window.crypto.subtle.importKey(
-                        "spki", rsaDer.buffer, { name: "RSA-OAEP", hash: "SHA-256" }, true, ["encrypt"]
+                    const binaryDer = Uint8Array.from(atob(partnerKeyStr), c => c.charCodeAt(0));
+                    const partnerKey = await window.crypto.subtle.importKey(
+                        "spki", binaryDer.buffer, { name: "ECDH", namedCurve: "P-256" }, true, []
                     );
-
-                    // B. Import Partner ECDH Public (For Verification)
-                    const ecdhDer = Uint8Array.from(atob(data.e), c => c.charCodeAt(0));
-                    const ecdhPub = await window.crypto.subtle.importKey(
-                        "spki", ecdhDer.buffer, { name: "ECDH", namedCurve: "P-256" }, true, []
+                    const derivedKey = await window.crypto.subtle.deriveKey(
+                        { name: "ECDH", public: partnerKey },
+                        myKeyPair.privateKey,
+                        { name: "AES-GCM", length: 256 },
+                        true, ["encrypt", "decrypt"]
                     );
-
-                    // C. Derive Shared Secret (ECDH) for Fingerprint
-                    const sharedBits = await window.crypto.subtle.deriveBits(
-                        { name: "ECDH", public: ecdhPub },
-                        ecdhKeys.privateKey,
-                        256
-                    );
-
-                    const fingerprint = await generateFingerprint(sharedBits);
-
-                    setPartner({
-                        rsaPub: rsaPub,
-                        ecdhPub: ecdhPub,
-                        fingerprint: fingerprint,
-                        verified: false
-                    });
-
-                    log(`Connection Established. Fingerprint: ${fingerprint}`);
-                } catch (e) { 
-                    log("Scan Error: " + e.message);
-                    alert("Invalid QR Code");
-                }
+                    const rawKey = await window.crypto.subtle.exportKey("raw", derivedKey);
+                    const fp = await generateFingerprint(rawKey);
+                    setSharedSecretKey(derivedKey);
+                    setSharedFingerprint(fp);
+                    setActiveTab('VERIFY');
+                } catch (e) { alert("Invalid Key Scanned"); }
             };
 
-            // 3. ENCRYPT & SEND (Hybrid RSA+AES)
-            const sendMessage = async () => {
-                if (!partner || !partner.verified) {
-                    alert("Please verify your partner first!");
+            // 3. Encrypt Message (Alice/Bob)
+            const encryptMessage = async () => {
+                if (!sharedSecretKey) return;
+                const iv = window.crypto.getRandomValues(new Uint8Array(12));
+                const enc = new TextEncoder();
+                const encryptedContent = await window.crypto.subtle.encrypt(
+                    { name: "AES-GCM", iv }, sharedSecretKey, enc.encode(message)
+                );
+                const packet = JSON.stringify({ iv: buf2hex(iv), d: buf2hex(encryptedContent) });
+                setPacketDisplay(packet);
+                setChatLog(p => [...p, { sender: 'Me', text: message }]);
+                setMessage("");
+            };
+
+            // 4. Decrypt Message (Alice/Bob)
+            const decryptMessage = async (packetStr) => {
+                if (!sharedSecretKey) {
+                    alert("No secure connection! Scan keys first.");
                     return;
                 }
-                if (!textInput) return;
-
-                log("Encrypting Message...");
-                playModemSound();
-
                 try {
-                    // A. Generate AES Key
-                    const aesKey = await window.crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, true, ["encrypt"]);
-
-                    // B. Encrypt Message with AES
-                    const iv = window.crypto.getRandomValues(new Uint8Array(12));
-                    const enc = new TextEncoder();
-                    const encryptedData = await window.crypto.subtle.encrypt(
-                        { name: "AES-GCM", iv }, aesKey, enc.encode(textInput)
+                    const pkt = JSON.parse(packetStr);
+                    const dec = await window.crypto.subtle.decrypt(
+                        { name: "AES-GCM", iv: hex2buf(pkt.iv) }, sharedSecretKey, hex2buf(pkt.d)
                     );
-
-                    // C. Encrypt AES Key with Partner's RSA Public Key
-                    const rawAes = await window.crypto.subtle.exportKey("raw", aesKey);
-                    const encryptedAesKey = await window.crypto.subtle.encrypt(
-                        { name: "RSA-OAEP" }, partner.rsaPub, rawAes
-                    );
-
-                    // D. Package
-                    const packet = JSON.stringify({
-                        iv: buf2hex(iv),
-                        k: buf2hex(encryptedAesKey),
-                        d: buf2hex(encryptedData)
-                    });
-
-                    setLastPacket(packet);
-                    setMessages(prev => [...prev, { from: 'Me', text: textInput }]);
-                    setTextInput("");
-                    log("Message Encrypted & QR Generated.");
-
-                } catch (e) { log("Encrypt Error: " + e.message); }
+                    const text = new TextDecoder().decode(dec);
+                    setChatLog(p => [...p, { sender: 'Partner', text: text }]);
+                    alert(`New Message: ${text}`);
+                } catch (e) { 
+                    alert("❌ AUTHENTICITY CHECK FAILED\n\nThis packet was NOT encrypted with the verified shared key.\nPossible spoofing attempt detected.");
+                }
             };
 
-            // 4. DECRYPT INCOMING (Hybrid RSA+AES)
-            const handleMessageScan = async (jsonString) => {
-                log("Scanning Message...");
-                try {
-                    const packet = JSON.parse(jsonString);
-
-                    // A. Decrypt AES Key using My RSA Private Key
-                    const rawAes = await window.crypto.subtle.decrypt(
-                        { name: "RSA-OAEP" }, rsaKeys.privateKey, hex2buf(packet.k)
-                    );
-
-                    // B. Import AES Key
-                    const aesKey = await window.crypto.subtle.importKey("raw", rawAes, "AES-GCM", true, ["decrypt"]);
-
-                    // C. Decrypt Data
-                    const decryptedData = await window.crypto.subtle.decrypt(
-                        { name: "AES-GCM", iv: hex2buf(packet.iv) }, aesKey, hex2buf(packet.d)
-                    );
-
-                    const text = new TextDecoder().decode(decryptedData);
-                    setMessages(prev => [...prev, { from: 'Partner', text: text }]);
-                    log("Decryption Successful.");
-                    playModemSound();
-                    alert("New Message Received: " + text);
-
-                } catch (e) {
-                    log("Decryption FAILED.");
-                    if (isDarth) {
-                        alert("DARTH FAILED: You do not have the Private RSA Key to read this message.");
-                    } else {
-                        alert("Decryption Error. Are you scanning the right message?");
-                    }
-                }
+            // 5. Darth: Generate Fake QR
+            const generateFakePacket = async () => {
+                // Darth uses a random key because he doesn't know the shared secret
+                const randomKey = await window.crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, true, ["encrypt"]);
+                const iv = window.crypto.getRandomValues(new Uint8Array(12));
+                const enc = new TextEncoder();
+                const encryptedContent = await window.crypto.subtle.encrypt(
+                    { name: "AES-GCM", iv }, randomKey, enc.encode(darthFakeMessage)
+                );
+                const packet = JSON.stringify({ iv: buf2hex(iv), d: buf2hex(encryptedContent) });
+                setDarthFakePacket(packet);
             };
 
             const onScan = (data) => {
-                setScannerOpen(false);
-                
-                // --- DARTH HACK INTERCEPTION ---
+                setScannerMode(null);
+                // Darth Interception Logic
                 if (isDarth) {
-                    setPendingScanData(data);
-                    // Heuristic to detect message vs identity
-                    const type = data.includes('"iv":') ? 'MESSAGE' : 'IDENTITY';
-                    setHackTarget(type);
+                    // Simple heuristic to decide visualization
+                    setHackTarget(data.includes('"iv":') ? 'MESSAGE' : 'IDENTITY');
                     return;
                 }
-                
                 // Normal Logic
-                if (scanPurpose === 'IDENTITY') handleIdentityScan(data);
-                else handleMessageScan(data);
-            };
-            
-            const closeHacking = (proceed) => {
-                setHackTarget(null);
-                if (proceed && pendingScanData) {
-                    // Darth "succeeded" in getting public keys (Identity)
-                    // Even though he failed to crack private key, he can still try MITM
-                    handleIdentityScan(pendingScanData);
-                } else {
-                    setPendingScanData(null);
-                }
+                if (data.includes('"iv":')) decryptMessage(data);
+                else handleScannedPublicKey(data);
             };
 
             // --- RENDER ---
             return (
-                <div className={`min-h-screen flex flex-col ${isDarth ? 'border-4 border-red-600' : ''}`}>
+                <div className={`min-h-screen flex flex-col ${isDarth ? 'border-4 border-red-900 bg-slate-950' : ''}`}>
+                    
                     {/* Header */}
-                    <header className="bg-slate-900 p-4 border-b border-slate-700 flex justify-between items-center shadow-lg z-10">
+                    <header className={`p-4 border-b flex justify-between items-center shadow-lg z-10 ${isDarth ? 'bg-red-950 border-red-800' : 'bg-slate-900 border-slate-700'}`}>
                         <div className="flex items-center gap-3">
-                            <div className={`p-2 rounded-lg ${isDarth ? 'bg-red-500/20 text-red-400' : 'bg-cyan-500/20 text-cyan-400'}`}>
+                            <div className={`p-2 rounded-lg ${isDarth ? 'bg-red-500/20 text-red-500' : 'bg-cyan-500/20 text-cyan-400'}`}>
                                 <Icon p={isDarth ? icons.skull : icons.shield} size={28} />
                             </div>
                             <div>
-                                <h1 className="font-bold text-white leading-tight">CryptoVis <span className="text-slate-500 text-xs font-normal">v3.0</span></h1>
-                                <div className="text-[10px] text-slate-400">RSA + AES (ECDH Add-on)</div>
+                                <h1 className={`font-bold leading-tight ${isDarth ? 'text-red-500' : 'text-white'}`}>CryptoVis <span className="opacity-50 text-xs">v3.0</span></h1>
+                                <div className="text-[10px] opacity-70 text-white">{isDarth ? 'DARTH ATTACKER MODE' : 'ECDH + AES Secure'}</div>
                             </div>
                         </div>
-                        <div className="flex items-center gap-4">
-                            <label className="flex items-center gap-2 cursor-pointer">
-                                <span className={`text-xs font-bold ${isDarth ? 'text-red-400' : 'text-slate-500'}`}>DARTH MODE</span>
-                                <div className="relative inline-block w-10 h-5 transition duration-200 ease-in-out">
-                                    <input type="checkbox" checked={isDarth} onChange={e => setIsDarth(e.target.checked)} className="peer absolute opacity-0 w-0 h-0" />
-                                    <span className="block w-full h-full bg-slate-700 rounded-full shadow-inner peer-checked:bg-red-600 transition-colors"></span>
-                                    <span className="absolute left-1 top-1 bg-white w-3 h-3 rounded-full transition-transform peer-checked:translate-x-5"></span>
-                                </div>
-                            </label>
-                        </div>
+                        <label className="flex items-center gap-2 text-xs text-white cursor-pointer select-none bg-white/10 px-3 py-1 rounded-full">
+                            <input type="checkbox" checked={isDarth} onChange={(e) => setIsDarth(e.target.checked)} className="accent-red-500"/>
+                            {isDarth ? 'Exit Darth Mode' : 'Enter Darth Mode'}
+                        </label>
                     </header>
 
-                    {/* Main Content */}
-                    <main className="flex-1 max-w-lg mx-auto w-full p-4 flex flex-col gap-4">
-                        
-                        {/* CONNECTION STATUS CARD */}
-                        <div className={`glass rounded-2xl p-6 transition-all ${partner ? 'border-emerald-500/50' : 'border-slate-700'}`}>
-                            {!partner ? (
-                                <div className="text-center space-y-4">
-                                    <h2 className="text-white font-bold text-lg">1. Connect Identities</h2>
-                                    <p className="text-slate-400 text-sm">Scan your partner's QR to exchange Public RSA & ECDH Keys.</p>
-                                    
-                                    {/* My Identity QR */}
-                                    <div className="flex justify-center">
-                                        <QRDisplay data={myIdentityString} label="My Identity" subLabel="RSA-2048 + ECDH-P256" />
-                                    </div>
+                    {/* DARTH INTERFACE */}
+                    {isDarth ? (
+                        <main className="flex-1 p-4 max-w-md mx-auto w-full space-y-6 overflow-y-auto">
+                            
+                            {/* 1. Intercept Module */}
+                            <div className="glass p-6 rounded-xl border border-red-800/50 shadow-[0_0_30px_rgba(220,38,38,0.1)]">
+                                <h2 className="text-red-500 font-bold mb-4 flex items-center gap-2 text-lg">
+                                    <Icon p={icons.cam} /> 1. INTERCEPT SIGNAL
+                                </h2>
+                                <p className="text-red-300/60 text-sm mb-4">Scan any QR Code (Key or Message) to attempt cryptanalysis.</p>
+                                <button onClick={()=>setScannerMode('DARTH_INTERCEPT')} className="w-full bg-red-900/50 hover:bg-red-900 border border-red-700 text-red-100 py-4 rounded-xl font-bold flex items-center justify-center gap-2 transition-all">
+                                    ACTIVATE SNIFFER
+                                </button>
+                            </div>
 
-                                    <button onClick={() => { setScanPurpose('IDENTITY'); setScannerOpen(true); }} className="btn-primary w-full">
-                                        <Icon p={icons.cam} /> Scan Partner
-                                    </button>
-                                </div>
-                            ) : (
-                                <div className="space-y-4">
-                                    <div className="flex justify-between items-center">
-                                        <h2 className="text-emerald-400 font-bold text-lg">Connected</h2>
-                                        <button onClick={() => setPartner(null)} className="text-xs text-red-400 hover:text-red-300">Disconnect</button>
-                                    </div>
-                                    
-                                    {/* VERIFICATION UI */}
-                                    <div className={`p-4 rounded-xl border-2 ${partner.verified ? 'bg-emerald-900/20 border-emerald-500' : 'bg-yellow-900/20 border-yellow-500'} text-center`}>
-                                        <p className="text-xs text-slate-400 uppercase tracking-widest mb-2">Security Fingerprint</p>
-                                        <div className="fingerprint mb-2">{partner.fingerprint}</div>
-                                        
-                                        {!partner.verified ? (
-                                            <div>
-                                                <p className="text-sm text-yellow-200 mb-3 font-bold">⚠️ VERIFY PARTNER</p>
-                                                <p className="text-xs text-slate-400 mb-3">Do these emojis match your partner's screen?</p>
-                                                <div className="flex gap-2">
-                                                    <button onClick={() => setPartner({...partner, verified: true})} className="flex-1 bg-emerald-600 py-2 rounded-lg text-white font-bold text-sm">YES (Match)</button>
-                                                    <button onClick={() => { alert("ATTACK DETECTED! Fingerprint Mismatch."); setPartner(null); }} className="flex-1 bg-red-600 py-2 rounded-lg text-white font-bold text-sm">NO (Mismatch)</button>
-                                                </div>
-                                            </div>
-                                        ) : (
-                                            <div className="text-emerald-400 text-xs font-bold bg-emerald-900/50 py-1 rounded">
-                                                IDENTITY VERIFIED ✅
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    {/* Reciprocal Connection Helper */}
-                                    <div className="glass p-6 rounded-xl border border-slate-700 text-center">
-                                        <p className="text-xs text-slate-400 mb-4">Has your partner scanned you yet? Show them this:</p>
-                                        <div className="flex justify-center">
-                                            <QRDisplay data={myIdentityString} label="My Identity" subLabel="For Partner to Scan" />
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-
-                        {/* MESSAGING INTERFACE (Only if connected & verified) */}
-                        {partner && partner.verified && (
-                            <div className="glass rounded-2xl p-4 flex-1 flex flex-col gap-4 animate-in fade-in slide-in-from-bottom-4">
-                                <div className="flex items-center gap-2 pb-2 border-b border-slate-700">
-                                    <Icon p={icons.shield} size={16} className="text-cyan-400"/>
-                                    <span className="text-xs text-cyan-400 font-bold uppercase">Secure Channel: RSA+AES</span>
-                                </div>
-
-                                {/* Chat History */}
-                                <div className="flex-1 bg-slate-900/50 rounded-xl p-4 overflow-y-auto min-h-[200px] max-h-[300px] space-y-3">
-                                    {messages.length === 0 && <div className="text-center text-slate-600 text-xs italic mt-10">No messages yet</div>}
-                                    {messages.map((m, i) => (
-                                        <div key={i} className={`p-3 rounded-lg text-sm max-w-[85%] ${m.from==='Me'?'bg-cyan-900/60 ml-auto border border-cyan-500/30 text-white':'bg-slate-700 mr-auto text-slate-200'}`}>
-                                            <p className="text-[10px] opacity-50 mb-1 font-bold uppercase">{m.from}</p>
-                                            {m.text}
-                                        </div>
-                                    ))}
-                                </div>
-
-                                {/* Controls */}
-                                <div className="flex gap-2">
+                            {/* 2. Spoof Module */}
+                            <div className="glass p-6 rounded-xl border border-red-800/50">
+                                <h2 className="text-red-500 font-bold mb-4 flex items-center gap-2 text-lg">
+                                    <Icon p={icons.bomb} /> 2. INJECT FAKE PACKET
+                                </h2>
+                                <p className="text-red-300/60 text-sm mb-4">Generate a message. Since you lack the Shared Key, this packet will fail verification.</p>
+                                
+                                <div className="space-y-3">
                                     <input 
-                                        type="text" 
-                                        value={textInput}
-                                        onChange={e => setTextInput(e.target.value)}
-                                        placeholder="Type secret..." 
-                                        className="flex-1 bg-slate-800 border-none rounded-xl px-4 text-white focus:ring-2 focus:ring-cyan-500 outline-none"
+                                        value={darthFakeMessage}
+                                        onChange={e=>setDarthFakeMessage(e.target.value)}
+                                        className="w-full bg-black/50 border border-red-900 rounded p-3 text-red-100 placeholder-red-900 outline-none focus:border-red-500"
+                                        placeholder="Enter Malicious Payload"
                                     />
-                                    <button onClick={sendMessage} className="bg-cyan-600 hover:bg-cyan-500 text-white w-12 rounded-xl flex items-center justify-center">
-                                        <Icon p={icons.send} />
+                                    <button onClick={generateFakePacket} className="w-full bg-red-600 hover:bg-red-500 text-white py-3 rounded-lg font-bold shadow-lg shadow-red-900/50">
+                                        GENERATE TOXIC QR
                                     </button>
                                 </div>
 
-                                <div className="grid grid-cols-2 gap-2">
-                                    {lastPacket && (
-                                        <button onClick={() => setScanPurpose('SHOW_LAST')} className="bg-slate-700 py-3 rounded-xl text-xs text-white font-bold">
-                                            Show Last QR
-                                        </button>
-                                    )}
-                                    <button onClick={() => { setScanPurpose('MESSAGE'); setScannerOpen(true); }} className={`bg-slate-700 hover:bg-slate-600 py-3 rounded-xl text-white font-bold text-xs flex items-center justify-center gap-2 ${!lastPacket ? 'col-span-2' : ''}`}>
-                                        <Icon p={icons.cam} size={16} /> Scan Incoming
-                                    </button>
-                                </div>
-
-                                {/* Area to show Last Packet QR */}
-                                {scanPurpose === 'SHOW_LAST' && lastPacket && (
-                                    <div className="fixed inset-0 z-40 bg-black/90 flex items-center justify-center p-4" onClick={() => setScanPurpose(null)}>
-                                        <div className="bg-white p-6 rounded-2xl" onClick={e => e.stopPropagation()}>
-                                            <QRDisplay data={lastPacket} label="Encrypted Message" subLabel="AES Encrypted (RSA Locked)" />
-                                            <button onClick={() => setScanPurpose(null)} className="mt-4 w-full bg-slate-800 text-white py-3 rounded-xl font-bold">Close</button>
-                                        </div>
+                                {darthFakePacket && (
+                                    <div className="mt-6 flex justify-center animate-in fade-in slide-in-from-bottom-4">
+                                        <QRDisplay data={darthFakePacket} label="TOXIC PAYLOAD" subLabel="Authenticity: INVALID" isToxic={true} />
                                     </div>
                                 )}
                             </div>
-                        )}
+                        </main>
+                    ) : (
+                        /* STANDARD USER INTERFACE (Alice/Bob) */
+                        <>
+                            {/* Tabs */}
+                            <div className="flex bg-slate-900/50 border-b border-slate-700">
+                                <button onClick={()=>setActiveTab('CONNECT')} className={`flex-1 py-3 font-bold text-sm transition-colors ${activeTab==='CONNECT'?'text-cyan-400 border-b-2 border-cyan-400 bg-slate-800/30':'text-slate-500 hover:text-slate-300'}`}>1. Connect</button>
+                                <button onClick={()=>setActiveTab('VERIFY')} className={`flex-1 py-3 font-bold text-sm transition-colors ${activeTab==='VERIFY'?'text-cyan-400 border-b-2 border-cyan-400 bg-slate-800/30':'text-slate-500 hover:text-slate-300'}`}>2. Verify</button>
+                                <button onClick={()=>setActiveTab('CHAT')} className={`flex-1 py-3 font-bold text-sm transition-colors ${activeTab==='CHAT'?'text-cyan-400 border-b-2 border-cyan-400 bg-slate-800/30':'text-slate-500 hover:text-slate-300'}`}>3. Transfer</button>
+                            </div>
 
-                        {/* Logs */}
-                        <div className="glass p-3 rounded-xl max-h-32 overflow-y-auto font-mono text-[10px] text-slate-500">
-                            {logs.map((l,i) => <div key={i}>{l}</div>)}
-                        </div>
-                    </main>
+                            <main className="flex-1 p-4 max-w-md mx-auto w-full space-y-6">
+                                {/* TAB 1: CONNECT */}
+                                {activeTab === 'CONNECT' && (
+                                    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
+                                        <div className="glass p-6 rounded-xl border border-cyan-500/30 text-center">
+                                            <h3 className="text-cyan-400 font-bold mb-2">My Identity</h3>
+                                            <div className="flex justify-center mb-4"><QRDisplay data={myPublicString} label="My Public Key" /></div>
+                                            <p className="text-xs text-slate-400">Scan this on Partner's device</p>
+                                        </div>
+                                        <div className="text-center text-slate-600">⬇️ OR ⬇️</div>
+                                        <button onClick={()=>setScannerMode('KEY')} className="w-full bg-slate-700 hover:bg-slate-600 py-4 rounded-xl font-bold text-white flex items-center justify-center gap-2 border border-slate-600">
+                                            <Icon p={icons.cam}/> Scan Partner
+                                        </button>
+                                    </div>
+                                )}
 
-                    {scannerOpen && <QRScanner onScan={onScan} onClose={() => setScannerOpen(false)} />}
-                    {hackTarget && <HackingTerminal targetType={hackTarget} onClose={closeHacking} />}
+                                {/* TAB 2: VERIFY */}
+                                {activeTab === 'VERIFY' && (
+                                    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
+                                        <div className="glass p-6 rounded-xl border border-yellow-500 text-center">
+                                            <h3 className="text-yellow-400 font-bold mb-4 uppercase tracking-widest">Fingerprint Check</h3>
+                                            <p className="text-sm text-slate-300 mb-4">Compare these emojis with your partner.</p>
+                                            {sharedSecretKey ? (
+                                                <div className="bg-slate-900 p-6 rounded-xl border-2 border-yellow-500/50 inline-block mb-4">
+                                                    <div className="fingerprint-box text-4xl">{sharedFingerprint}</div>
+                                                </div>
+                                            ) : <div className="text-red-400 font-bold py-4">Not Connected</div>}
+                                            <div className="mt-4 pt-4 border-t border-slate-700">
+                                                <p className="text-xs text-slate-400 mb-2">Partner needs to scan you?</p>
+                                                <div className="flex justify-center"><QRDisplay data={myPublicString} label="My Identity" /></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* TAB 3: CHAT */}
+                                {activeTab === 'CHAT' && (
+                                    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
+                                        <div className="glass h-64 rounded-xl flex flex-col overflow-hidden border border-slate-700">
+                                            <div className="bg-slate-900/50 p-2 text-xs text-center border-b border-slate-700 text-slate-400">Encrypted Channel: AES-256</div>
+                                            <div className="flex-1 overflow-y-auto p-4 space-y-2">
+                                                {chatLog.length === 0 && <div className="text-center text-slate-600 text-sm mt-10">No messages yet.</div>}
+                                                {chatLog.map((msg, i) => (
+                                                    <div key={i} className={`p-2 rounded max-w-[80%] text-sm ${msg.sender === 'Me' ? 'bg-cyan-900/50 ml-auto border border-cyan-500/30 text-white' : 'bg-slate-800 mr-auto border border-slate-600 text-slate-200'}`}>
+                                                        <strong>{msg.sender}:</strong> {msg.text}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <input type="text" value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Secret Message..." className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-4 outline-none focus:border-cyan-500 text-white"/>
+                                            <button onClick={encryptMessage} disabled={!sharedSecretKey} className="bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 px-4 rounded-lg text-white"><Icon p={icons.send}/></button>
+                                        </div>
+                                        {packetDisplay && (
+                                            <div className="glass p-4 rounded-xl text-center">
+                                                <p className="text-xs text-slate-400 mb-2">Encrypted Packet</p>
+                                                <div className="flex justify-center"><QRDisplay data={packetDisplay} label="Scan on Partner" /></div>
+                                            </div>
+                                        )}
+                                        <button onClick={()=>setScannerMode('MESSAGE')} className="w-full bg-blue-600 hover:bg-blue-500 py-3 rounded-lg font-bold text-white flex items-center justify-center gap-2"><Icon p={icons.cam}/> Scan Incoming</button>
+                                    </div>
+                                )}
+                            </main>
+                        </>
+                    )}
+
+                    {scannerMode && <QRScanner onScan={onScan} onClose={()=>setScannerMode(null)} />}
+                    {hackTarget && <HackingTerminal targetType={hackTarget} onClose={()=>setHackTarget(null)} />}
                 </div>
             );
         };
