@@ -577,6 +577,11 @@
             
             const lastScanRef = useRef("");
 
+            // Fix: Reset scan history when scanner opens to allow re-scanning
+            useEffect(() => {
+                if (scanner) lastScanRef.current = "";
+            }, [scanner]);
+
             // 1. INIT KEYS (Upgrade: Add Signature Key?)
             // For simplicity and speed in JS, we use RSA-OAEP 2048 for encryption 
             // and we'll implement HKDF for the session.
@@ -743,6 +748,7 @@
                         const text = new TextDecoder().decode(pt);
                         setChat(prev => [...prev, { from: 'Partner', text }]);
                         setScanner(null);
+                        setActiveTab('CHAT'); // Fix: Switch to Chat tab to see message
                         alert("New Message Received");
                     }
 
@@ -1006,6 +1012,12 @@
                                         </div>
                                         
                                         <div className="flex gap-2">
+                                            <button onClick={()=>setScanner('QR')} className="bg-slate-700 hover:bg-slate-600 text-slate-300 p-3 rounded-xl transition-colors" title="Scan QR Message">
+                                                <Icon p={icons.eye} />
+                                            </button>
+                                            <button onClick={()=>setScanner('AUDIO')} className="bg-slate-700 hover:bg-slate-600 text-slate-300 p-3 rounded-xl transition-colors" title="Listen for Audio">
+                                                <Icon p={icons.mic} />
+                                            </button>
                                             <input value={msg} onChange={e=>setMsg(e.target.value)} 
                                                 className="flex-1 bg-slate-800 text-white px-4 rounded-xl border border-slate-700 focus:border-cyan-500 outline-none" 
                                                 placeholder="Secure Message..." 
