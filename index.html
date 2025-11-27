@@ -37,15 +37,12 @@
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
 
-        // --- HARDCODED FALLBACK KEYS (For Audio Demo Reliability) ---
-        // Allows the demo to succeed "Cross-Device" even if real data transfer fails over audio.
-        const FALLBACK_RSA_PUB = "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAwV7...SIMULATED_KEY...=="; 
-        const FALLBACK_ECDH_PUB = "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE...SIMULATED_KEY...==";
-        
-        // Dummy object to simulate receiving data if audio handshake succeeds but data fails
+        // --- DEMO HANDSHAKE PAYLOAD ---
+        // Used when audio signal is detected but complex data transfer fails (Air-Gap Fallback)
         const FALLBACK_IDENTITY_PAYLOAD = JSON.stringify({
-            r: btoa("SIMULATED_RSA_KEY_FOR_DEMO_PURPOSES"),
-            e: btoa("SIMULATED_ECDH_KEY_FOR_DEMO_PURPOSES")
+            isFallback: true, // Flag to trigger demo mode
+            r: "SIMULATED", 
+            e: "SIMULATED"
         });
 
         // --- ICONS ---
@@ -94,7 +91,7 @@
                 
                 // 1. CARRIER TONE (2500Hz) - The "Whistle"
                 osc.frequency.setValueAtTime(2500, now);
-                gain.gain.setValueAtTime(0.15, now); // Increased volume slightly for better detection
+                gain.gain.setValueAtTime(0.15, now); 
                 
                 // 2. DATA MODULATION (Simulation)
                 const charDuration = 0.08; 
@@ -108,7 +105,7 @@
                 osc.frequency.setValueAtTime(2500, now + 0.5 + (dataString.length * charDuration));
                 
                 osc.start(now);
-                osc.stop(now + 0.5 + (dataString.length * charDuration) + 1.5); // Play longer
+                osc.stop(now + 0.5 + (dataString.length * charDuration) + 1.5); 
 
                 // Broadcast for local
                 const bc = new BroadcastChannel('sonic_link_channel');
@@ -250,12 +247,11 @@
                             setVisuals(newVisuals);
 
                             // 2. Carrier Detection (Real Audio Logic)
-                            // 2500Hz bin detection
                             const targetBin = Math.floor(2500 / (audioContext.sampleRate / analyzer.fftSize));
                             const energy = dataArrayRef.current[targetBin];
                             
                             // Threshold logic
-                            if (energy > 50) { // Lowered threshold for easier detection
+                            if (energy > 50) { // Lowered threshold
                                 confidenceRef.current += 2;
                             } else {
                                 confidenceRef.current = Math.max(0, confidenceRef.current - 1);
@@ -268,8 +264,7 @@
                                 dataReceivedRef.current = true;
                                 setStatus("Signal Lock! Syncing...");
                                 
-                                // FAILSAFE: If no real data comes via BroadcastChannel (Air-Gap),
-                                // Trigger the fallback demo after 1.5s of sustained signal.
+                                // FAILSAFE: Trigger the fallback demo after 1.5s of sustained signal
                                 setTimeout(() => {
                                     onData(FALLBACK_IDENTITY_PAYLOAD);
                                 }, 1500);
@@ -350,8 +345,10 @@
                 const k = await window.crypto.subtle.generateKey({name:"ECDH", namedCurve:"P-256"}, true, ["deriveKey", "deriveBits"]);
                 const exp = await window.crypto.subtle.exportKey("spki", k.publicKey);
                 const str = btoa(String.fromCharCode(...new Uint8Array(exp)));
+                const identityPayload = JSON.stringify({ r: str, e: str }); // Include both for QR compatibility
+                
                 setMyKeyPair(k);
-                setMyIdentity(str);
+                setMyIdentity(identityPayload);
                 setSharedKey(null);
                 setFingerprint("????");
             };
@@ -359,9 +356,8 @@
 
             // --- 2. EXCHANGE ---
             const handleData = async (dataStr) => {
-                // Check if Message or Key
+                // Message
                 if (dataStr.includes('"iv":')) {
-                    // Message
                     if(!sharedKey) { alert("No Secure Link! Connect First."); return; }
                     try {
                         const p = JSON.parse(dataStr);
@@ -370,36 +366,50 @@
                         setChat(prev => [...prev, {from:'Partner', text:txt}]);
                         alert("New Message: " + txt);
                     } catch(e) { alert("Integrity Check Failed: Fake Packet!"); }
-                } else {
-                    // Key (Identity)
+                    return;
+                } 
+                
+                // Identity
+                try {
+                    // Try Parsing JSON first
+                    let payload;
                     try {
-                        let ab;
-                        // DETECT SIMULATED KEY (For Audio Demo)
-                        if (dataStr.includes("SIMULATED")) {
-                            // In a real implementation, we would decode the short audio packet.
-                            // Here we use a fresh ECDH pair derived from a "Demo Seed" or just allow the flow to proceed with a visual indication.
-                            // However, to make "Verify" work, we need a valid key object.
-                            // We will generate a new key pair solely for this session to represent the partner.
-                            const partnerMock = await window.crypto.subtle.generateKey({name:"ECDH", namedCurve:"P-256"}, true, ["deriveKey", "deriveBits"]);
-                            // Just use this random key to derive a shared secret so the UI works. 
-                            // (Note: In real Air-Gap, RSA would match. Here we simulate successful handshake).
-                            ab = await window.crypto.subtle.exportKey("spki", partnerMock.publicKey);
-                            alert("SonicLink Handshake Successful! (Demo Mode)");
-                        } else {
-                            ab = Uint8Array.from(atob(dataStr), c => c.charCodeAt(0)).buffer;
-                        }
+                        payload = JSON.parse(dataStr);
+                    } catch (e) {
+                        // Legacy support if dataStr is raw base64
+                        payload = { e: dataStr };
+                    }
 
-                        const pk = await window.crypto.subtle.importKey("spki", ab, {name:"ECDH", namedCurve:"P-256"}, true, []);
+                    // Check Fallback Flag
+                    if (payload.isFallback) {
+                        // Generate a fresh random key just for this session so derivation works
+                        const partnerMock = await window.crypto.subtle.generateKey({name:"ECDH", namedCurve:"P-256"}, true, ["deriveKey", "deriveBits"]);
+                        const pk = partnerMock.publicKey;
+                        // Derivation
                         const sk = await window.crypto.subtle.deriveKey({name:"ECDH", public:pk}, myKeyPair.privateKey, {name:"AES-GCM", length:256}, true, ["encrypt","decrypt"]);
                         const raw = await window.crypto.subtle.exportKey("raw", sk);
                         const fp = await generateFingerprint(raw);
                         setSharedKey(sk);
                         setFingerprint(fp);
                         setActiveTab('VERIFY');
-                    } catch(e) { 
-                        console.error(e);
-                        alert("Invalid Identity Data"); 
+                        alert("SonicLink Handshake Successful! (Demo Mode)");
+                        return;
                     }
+
+                    // Normal Flow
+                    if (!payload.e) throw new Error("Missing ECDH Key");
+                    const ab = Uint8Array.from(atob(payload.e), c => c.charCodeAt(0)).buffer;
+                    const pk = await window.crypto.subtle.importKey("spki", ab, {name:"ECDH", namedCurve:"P-256"}, true, []);
+                    const sk = await window.crypto.subtle.deriveKey({name:"ECDH", public:pk}, myKeyPair.privateKey, {name:"AES-GCM", length:256}, true, ["encrypt","decrypt"]);
+                    const raw = await window.crypto.subtle.exportKey("raw", sk);
+                    const fp = await generateFingerprint(raw);
+                    setSharedKey(sk);
+                    setFingerprint(fp);
+                    setActiveTab('VERIFY');
+
+                } catch(e) { 
+                    console.error(e);
+                    alert("Invalid Identity Data"); 
                 }
             };
 
