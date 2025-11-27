@@ -542,6 +542,14 @@
                                             </div>
                                         )}
                                     </div>
+
+                                    {/* Reciprocal Connection Helper */}
+                                    <div className="glass p-6 rounded-xl border border-slate-700 text-center">
+                                        <p className="text-xs text-slate-400 mb-4">Has your partner scanned you yet? Show them this:</p>
+                                        <div className="flex justify-center">
+                                            <QRDisplay data={myIdentityString} label="My Identity" subLabel="For Partner to Scan" />
+                                        </div>
+                                    </div>
                                 </div>
                             )}
                         </div>
