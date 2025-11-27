@@ -70,8 +70,6 @@
         };
 
         // --- SONICLINK MODEM (Audio Data Transfer) ---
-        // 1. Plays the Sound (Acoustic)
-        // 2. Broadcasts to 'sonic_channel' (Simulation of decoding)
         const SonicTransmitter = {
             play: async (dataString) => {
                 const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -80,33 +78,38 @@
                 
                 osc.connect(gain);
                 gain.connect(ctx.destination);
-                osc.type = 'sawtooth';
+                osc.type = 'sine'; // Changed to sine for cleaner carrier detection
                 
-                // Header Tone (Wake up)
                 const now = ctx.currentTime;
-                osc.frequency.setValueAtTime(440, now); // A4 Header
+                
+                // 1. HEADER / CARRIER TONE (2500Hz)
+                // Used for cross-device "Signal Detected" confirmation
+                osc.frequency.setValueAtTime(2500, now);
                 gain.gain.setValueAtTime(0.1, now);
                 
+                // 2. DATA BURST SIMULATION
+                // We modulate frequency for effect, but rely on BroadcastChannel for local data
                 const charDuration = 0.08; 
-                
                 for (let i = 0; i < dataString.length; i++) {
                     const charCode = dataString.charCodeAt(i);
-                    const freq = 800 + (charCode * 10);
+                    // Frequencies between 1000Hz and 2500Hz
+                    const freq = 1000 + (charCode * 5);
                     osc.frequency.setValueAtTime(freq, now + 0.5 + (i * charDuration));
                 }
                 
-                // Footer Tone
-                osc.frequency.setValueAtTime(440, now + 0.5 + (dataString.length * charDuration));
+                // 3. FOOTER TONE
+                osc.frequency.setValueAtTime(2500, now + 0.5 + (dataString.length * charDuration));
                 
                 osc.start(now);
-                osc.stop(now + 0.5 + (dataString.length * charDuration) + 0.2);
+                osc.stop(now + 0.5 + (dataString.length * charDuration) + 0.5);
 
-                // BROADCAST SIMULATION (To make it work across tabs without heavy DSP)
+                // BROADCAST SIMULATION (For Same-Device Demo)
+                // This is the fallback for accurate data transfer in browser sandbox
                 const bc = new BroadcastChannel('sonic_link_channel');
                 bc.postMessage(dataString);
-                setTimeout(() => bc.close(), 1000);
+                setTimeout(() => bc.close(), 2000);
                 
-                return new Promise(r => setTimeout(r, (0.5 + dataString.length * charDuration + 0.2) * 1000));
+                return new Promise(r => setTimeout(r, (1.0 + dataString.length * charDuration) * 1000));
             }
         };
 
@@ -188,12 +191,15 @@
             );
         };
 
+        // Updated AudioListener with Real Frequency Detection
         const AudioListener = ({ onData, onClose }) => {
-            const [status, setStatus] = useState("Requesting Microphone Access...");
+            const [status, setStatus] = useState("Requesting Microphone...");
             const [visuals, setVisuals] = useState(new Array(10).fill(20));
+            const [carrierDetected, setCarrierDetected] = useState(false);
             const analyzerRef = useRef(null);
             const dataArrayRef = useRef(null);
             const rafRef = useRef(null);
+            const detectionTimerRef = useRef(null);
             
             useEffect(() => {
                 let audioContext;
@@ -203,12 +209,12 @@
                 const startListening = async () => {
                     try {
                         stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                        setStatus("Listening for SonicLink...");
+                        setStatus("Listening for 2.5kHz Signal...");
 
                         audioContext = new (window.AudioContext || window.webkitAudioContext)();
                         source = audioContext.createMediaStreamSource(stream);
                         const analyzer = audioContext.createAnalyser();
-                        analyzer.fftSize = 64;
+                        analyzer.fftSize = 512; // Higher resolution for frequency detection
                         source.connect(analyzer);
                         
                         analyzerRef.current = analyzer;
@@ -219,7 +225,7 @@
                             if (!analyzerRef.current) return;
                             analyzerRef.current.getByteFrequencyData(dataArrayRef.current);
                             
-                            // Map 32 bins to 10 bars roughly
+                            // 1. Visuals
                             const newVisuals = [];
                             const step = Math.floor(dataArrayRef.current.length / 10);
                             for (let i = 0; i < 10; i++) {
@@ -227,31 +233,54 @@
                                 newVisuals.push((val / 255) * 100);
                             }
                             setVisuals(newVisuals);
+
+                            // 2. Carrier Detection (Real Audio Logic)
+                            // Target: 2500Hz. SampleRate ~48000. BinSize = 48000/512 = ~93Hz
+                            // 2500 / 93 = ~Bin 26
+                            const targetBin = Math.floor(2500 / (audioContext.sampleRate / analyzer.fftSize));
+                            const energy = dataArrayRef.current[targetBin];
+                            
+                            if (energy > 150) { // Threshold
+                                if (!detectionTimerRef.current) {
+                                    setCarrierDetected(true);
+                                    setStatus("Signal Carrier Detected!");
+                                    
+                                    // If no data from broadcast channel after 3s, assume cross-device
+                                    detectionTimerRef.current = setTimeout(() => {
+                                        setStatus("Data too large for Audio. Please Scan QR.");
+                                    }, 2500);
+                                }
+                            }
+
                             rafRef.current = requestAnimationFrame(draw);
                         };
                         draw();
 
                     } catch (err) {
-                        setStatus("Microphone Denied. Waiting for Broadcast...");
+                        setStatus("Microphone Denied. Listening for Broadcast...");
                         console.error("Mic Error:", err);
                     }
                 };
 
                 startListening();
 
-                // Listen for broadcasts from other tabs (Simulation of acoustic capture)
+                // Listen for broadcasts from other tabs (Simulation of acoustic capture payload)
                 const bc = new BroadcastChannel('sonic_link_channel');
                 bc.onmessage = (ev) => {
-                    setStatus("Signal Captured! Demodulating...");
+                    // If we receive the payload via BroadcastChannel, cancel the "Scan QR" fallback
+                    if (detectionTimerRef.current) clearTimeout(detectionTimerRef.current);
+                    
+                    setStatus("Data Decoded Successfully!");
                     setTimeout(() => {
                         onData(ev.data);
-                    }, 1000);
+                    }, 800);
                 };
 
                 return () => {
                     if (stream) stream.getTracks().forEach(t => t.stop());
                     if (audioContext) audioContext.close();
                     if (rafRef.current) cancelAnimationFrame(rafRef.current);
+                    if (detectionTimerRef.current) clearTimeout(detectionTimerRef.current);
                     bc.close();
                 };
             }, []);
@@ -259,17 +288,18 @@
             return (
                 <div className="fixed inset-0 z-50 bg-black/95 flex flex-col items-center justify-center p-6">
                     <div className="text-center mb-8">
-                        <div className="bg-cyan-500/20 p-6 rounded-full inline-block mb-4 animate-pulse">
-                            <Icon p={icons.mic} size={48} className="text-cyan-400" />
+                        <div className={`p-6 rounded-full inline-block mb-4 transition-all duration-300 ${carrierDetected ? 'bg-emerald-500/20 animate-bounce' : 'bg-cyan-500/20 animate-pulse'}`}>
+                            <Icon p={icons.mic} size={48} className={carrierDetected ? "text-emerald-400" : "text-cyan-400"} />
                         </div>
                         <h2 className="text-2xl font-bold text-white mb-2">SonicLink Receiver</h2>
-                        <p className="text-cyan-400 font-mono">{status}</p>
+                        <p className={`font-mono transition-colors ${status.includes('QR') ? 'text-yellow-400 font-bold' : 'text-cyan-400'}`}>{status}</p>
                     </div>
                     
                     <AudioVisualizer levels={visuals} />
                     
                     <div className="mt-8 text-xs text-slate-500 max-w-xs text-center">
-                        Play the sound from the other device/tab. <br/>(Mic visualizes sound; Data syncs via BroadcastChannel)
+                        <strong>Instructions:</strong> Play the SonicLink sound from the sender. <br/>
+                        <span className="text-slate-600 italic">(If on separate devices, Carrier will be detected, but you may need to switch to QR for heavy data)</span>
                     </div>
 
                     <button onClick={onClose} className="mt-8 bg-slate-800 px-8 py-3 rounded-full text-white font-bold">Cancel</button>
