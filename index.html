@@ -313,6 +313,11 @@
             }, []);
             const progress = incomingFile && incomingFile.total > 0
                 ? (Object.keys(incomingFile.chunks).length / incomingFile.total) * 100 : 0;
+            const missingChunks = useMemo(() => {
+                if (!incomingFile || incomingFile.total === 0) return [];
+                const received = new Set(Object.keys(incomingFile.chunks).map(Number));
+                return Array.from({length: incomingFile.total}, (_, i) => i).filter(i => !received.has(i));
+            }, [incomingFile]);
             return (
                 <div className="fixed inset-0 z-50 bg-black flex flex-col items-center justify-center p-4">
                     {error ? (
@@ -333,12 +338,17 @@
                                         <span>RECEIVING FILE...</span>
                                         <span>{Math.round(progress)}%</span>
                                     </div>
-                                    <div className="w-full bg-slate-700 h-1.5 rounded-full overflow-hidden">
+                                    <div className="w-full bg-slate-700 h-1.5 rounded-full overflow-hidden mb-2">
                                         <div className={`h-full transition-all duration-100 ${isDarth ? 'bg-red-500' : 'bg-cyan-400'}`} style={{width: `${progress}%`}}></div>
                                     </div>
-                                    <div className="text-[10px] text-slate-400 mt-1">
+                                    <div className="text-[10px] text-slate-400 mb-1">
                                         Chunks: {Object.keys(incomingFile.chunks).length} / {incomingFile.total}
                                     </div>
+                                    {missingChunks.length > 0 && (
+                                        <div className="text-[10px] text-red-400 font-bold">
+                                            Missing: {missingChunks.join(', ')}
+                                        </div>
+                                    )}
                                 </div>
                             )}
                         </div>
@@ -563,6 +573,7 @@
                     assembleFileNoDownload(incomingFile).then(({url, filename}) => {
                         const newLog = { type: 'received', name: filename, timestamp: new Date().toLocaleString(), url, downloaded: false };
                         setFileLog(prev => [newLog, ...prev]);
+                        setChat(prev => [...prev, { from: 'Partner', text: `📎 Shared file: ${filename}` }]);
                         setPendingDownload(newLog);
                     }).catch(e => {
                         console.error(e);
@@ -764,6 +775,7 @@
                 if (!file || !sessionKey) return;
                 const newLog = { type: 'sent', name: file.name, timestamp: new Date().toLocaleString() };
                 setFileLog(prev => [newLog, ...prev]);
+                setChat(prev => [...prev, { from: 'Me', text: `📎 Shared file: ${file.name}` }]);
                 const raw = await file.arrayBuffer();
                 const mimeBytes = new TextEncoder().encode(file.type);
                 const pack = new Uint8Array(1 + mimeBytes.length + raw.byteLength);
