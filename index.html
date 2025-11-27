@@ -46,7 +46,7 @@
             CHAR_DURATION: 0.15,
             HEADER_DURATION: 1.0,
             FFT_SIZE: 2048,
-            THRESHOLD: 25,
+            THRESHOLD: 30,
             QR_FRAME_RATE: 150, 
             QR_CHUNK_SIZE: 500  
         };
@@ -360,7 +360,7 @@
             const canvasRef = useRef(null);
             const [error, setError] = useState("");
             const lastScanned = useRef(null); 
-            const noSignalCount = useRef(0); // For resetting double-scan memory
+            const noSignalCount = useRef(0); 
 
             useEffect(() => {
                 let stream;
@@ -394,7 +394,6 @@
                                 }
                             } else {
                                 noSignalCount.current++;
-                                // If we don't see a QR for 60 frames (~1 sec), allow rescanning the same code
                                 if (noSignalCount.current > 60) {
                                     lastScanned.current = null;
                                 }
@@ -403,7 +402,10 @@
                     }
                     requestAnimationFrame(tick);
                 };
-                return () => stream?.getTracks().forEach(t => t.stop());
+                
+                return () => {
+                    if(stream) stream.getTracks().forEach(t => t.stop());
+                };
             }, []);
 
             return (
@@ -615,32 +617,46 @@
             // 2. EXCHANGE & DATA HANDLING
             const handleData = async (dataPayload) => {
                 if (isDarth) {
-                    setInterceptedData(JSON.stringify(dataPayload));
+                    setInterceptedData(typeof dataPayload === 'string' ? dataPayload : JSON.stringify(dataPayload));
                     setScanner(null);
                     return;
                 }
 
-                // If receiving an ACK, we don't process it here, AudioListener handles logic.
-                // We just handle 'D' type packets (Data)
                 try {
                     const dataStr = typeof dataPayload === 'string' ? dataPayload : JSON.stringify(dataPayload);
-                    let payload;
                     
-                    try { payload = JSON.parse(dataStr); } 
-                    catch(e) { 
-                        // QR might not be JSON wrapped with t:'D'
-                        if (dataStr.startsWith('F|')) { // File chunk
-                             // ... existing file logic ...
-                             return;
-                        }
-                        if (dataStr.includes('"iv":')) payload = { t: 'D', i: '0000', d: JSON.parse(dataStr) }; // Legacy Msg
-                        else payload = { t: 'D', i: '0000', d: { e: dataStr } }; // Legacy Identity (Raw base64)
+                    // 1. Handle File Chunks (Raw String)
+                    if (dataStr.startsWith('F|')) {
+                        if (!sharedKey) { alert("Connect First!"); return; }
+                        const [_, id, idx, tot, payload] = dataStr.split('|');
+                        const index = parseInt(idx);
+                        const total = parseInt(tot);
+                        setIncomingFile(prev => {
+                            if (prev.id !== id) return { id, chunks: {[index]: payload}, total };
+                            return { ...prev, chunks: { ...prev.chunks, [index]: payload }, total };
+                        });
+                        return;
                     }
 
-                    // Process Payload.d
-                    const content = payload.d;
-                    
-                    // A. Identity Exchange
+                    // 2. Parse JSON
+                    let content;
+                    let payload;
+                    try {
+                        payload = JSON.parse(dataStr);
+                        // Check if it's an Audio Packet Wrapper ({ t: 'D', d: ... })
+                        if (payload.t === 'D' && payload.d) {
+                            content = payload.d;
+                        } else {
+                            // Standard QR JSON ({ e: ... } or { iv: ... })
+                            content = payload;
+                        }
+                    } catch (e) {
+                        // Not JSON? Maybe raw base64 (Legacy Identity)
+                        content = { e: dataStr };
+                    }
+
+                    // 3. Process Content
+                    // A. Identity Exchange ({ e: "..." })
                     if (content.e) {
                         const ab = Uint8Array.from(atob(content.e), c => c.charCodeAt(0)).buffer;
                         const pk = await window.crypto.subtle.importKey("spki", ab, {name:"ECDH", namedCurve:"P-256"}, true, []);
@@ -653,15 +669,14 @@
                         setScanner(null);
                         
                         // AUTO ACK!
-                        if (payload.i && payload.i !== '0000') {
-                            // Play ACK sound
+                        if (payload && payload.i && payload.i !== '0000') {
                             const ackJson = JSON.stringify({ t: 'A', i: payload.i });
                             await SonicTransmitter.play(ackJson, false);
                         } else {
                             alert("Handshake Complete!");
                         }
                     } 
-                    // B. Message
+                    // B. Message ({ iv: "...", d: "..." })
                     else if (content.iv) {
                         if(!sharedKey) { 
                             alert("Connect First!"); 
@@ -673,12 +688,14 @@
                         setChat(prev => [...prev, {from:'Partner', text:txt}]);
                         setScanner(null);
                         
-                        if (payload.i && payload.i !== '0000') {
+                        if (payload && payload.i && payload.i !== '0000') {
                             const ackJson = JSON.stringify({ t: 'A', i: payload.i });
                             await SonicTransmitter.play(ackJson, false);
                         } else {
                             alert("Received: " + txt);
                         }
+                    } else {
+                        throw new Error("Unknown Data Format");
                     }
 
                 } catch(e) { 
@@ -817,6 +834,12 @@
                                 <div className="flex gap-2">
                                     <input value={msg} onChange={e=>setMsg(e.target.value)} className="flex-1 bg-slate-800 rounded px-3 text-white" placeholder="Message..." />
                                     <button onClick={send} className="bg-cyan-600 px-3 py-2 rounded text-white"><Icon p={icons.send}/></button>
+                                    
+                                    {/* FILE INPUT */}
+                                    <label className="bg-slate-700 px-3 py-2 rounded text-white cursor-pointer hover:bg-slate-600 flex items-center gap-1">
+                                        <input type="file" className="hidden" onChange={handleFileSelect} />
+                                        <Icon p={icons.clip} /> <span className="text-[10px]">Send File (Direct)</span>
+                                    </label>
                                 </div>
                                 
                                 {packet && (
