@@ -70,10 +70,8 @@
         };
 
         // --- SONICLINK MODEM (Audio Data Transfer) ---
-        // Simplified FSK-like modulation for demo purposes (Robustness trades off with speed)
-        // Base Freq: 1000Hz. Step: 40Hz per char code index (0-15 hex).
-        // Hex Nibble Transmission.
-        
+        // 1. Plays the Sound (Acoustic)
+        // 2. Broadcasts to 'sonic_channel' (Simulation of decoding)
         const SonicTransmitter = {
             play: async (dataString) => {
                 const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -82,19 +80,17 @@
                 
                 osc.connect(gain);
                 gain.connect(ctx.destination);
-                osc.type = 'sine';
+                osc.type = 'sawtooth';
                 
                 // Header Tone (Wake up)
                 const now = ctx.currentTime;
                 osc.frequency.setValueAtTime(440, now); // A4 Header
                 gain.gain.setValueAtTime(0.1, now);
                 
-                const charDuration = 0.08; // 80ms per character
+                const charDuration = 0.08; 
                 
                 for (let i = 0; i < dataString.length; i++) {
                     const charCode = dataString.charCodeAt(i);
-                    // Simple Mapping: 1000Hz + (Char * 15Hz) to keep it in audible range
-                    // To make it sound "data-like", we jump frequencies
                     const freq = 800 + (charCode * 10);
                     osc.frequency.setValueAtTime(freq, now + 0.5 + (i * charDuration));
                 }
@@ -104,6 +100,11 @@
                 
                 osc.start(now);
                 osc.stop(now + 0.5 + (dataString.length * charDuration) + 0.2);
+
+                // BROADCAST SIMULATION (To make it work across tabs without heavy DSP)
+                const bc = new BroadcastChannel('sonic_link_channel');
+                bc.postMessage(dataString);
+                setTimeout(() => bc.close(), 1000);
                 
                 return new Promise(r => setTimeout(r, (0.5 + dataString.length * charDuration + 0.2) * 1000));
             }
@@ -193,17 +194,16 @@
         const AudioListener = ({ onData, onClose }) => {
             const [status, setStatus] = useState("Listening for SonicLink...");
             
-            // Mocking the Audio Decode for Demo Stability
-            // Real-world Web Audio FSK decoding in a single file is extremely flaky due to background noise.
-            // We simulate the "Listening" phase and then prompt for input or assume success for the demo flow if using two devices.
-            // Since we can't actually decode complex data reliably in this specific constrained environment without external libs:
-            // We will simulate the "reception" after a delay if testing on one device, OR allow manual paste for fallback.
-            
             useEffect(() => {
-                const timer = setTimeout(() => {
-                    setStatus("Signal Detected... Demodulating...");
-                }, 2000);
-                return () => clearTimeout(timer);
+                // Listen for broadcasts from other tabs (Simulation of acoustic capture)
+                const bc = new BroadcastChannel('sonic_link_channel');
+                bc.onmessage = (ev) => {
+                    setStatus("Signal Captured! Demodulating...");
+                    setTimeout(() => {
+                        onData(ev.data);
+                    }, 1000);
+                };
+                return () => bc.close();
             }, []);
 
             return (
@@ -219,7 +219,7 @@
                     <AudioVisualizer isListening={true} />
                     
                     <div className="mt-8 text-xs text-slate-500 max-w-xs text-center">
-                        Note: For this demo, if audio fails, you can scan the QR code.
+                        Play the sound from the other device/tab. <br/>(Simulated via BroadcastChannel)
                     </div>
 
                     <button onClick={onClose} className="mt-8 bg-slate-800 px-8 py-3 rounded-full text-white font-bold">Cancel</button>
@@ -343,6 +343,11 @@
                                     </button>
                                 </div>
                                 {isDarth && <div className="text-red-400 text-xs border border-red-500 p-2 rounded">Darth: Use SonicLink to broadcast fake identity signals.</div>}
+                                <div className="grid grid-cols-1 gap-2 mt-2">
+                                     <button onClick={() => setScanner('AUDIO')} className="btn-secondary bg-purple-900/50 hover:bg-purple-900 border border-purple-500">
+                                        <Icon p={icons.mic}/> Receive SonicLink (Listen)
+                                    </button>
+                                </div>
                             </div>
                         )}
 
@@ -356,6 +361,9 @@
                                         <p className="text-slate-400 text-sm">Does this match your partner's screen?</p>
                                         <div className="text-xs text-slate-500 mt-4">Partner didn't scan you yet?</div>
                                         <div className="flex justify-center"><QRDisplay data={myIdentity} label="Show to Partner" /></div>
+                                        <button onClick={() => playAudio(myIdentity)} disabled={audioPlaying} className="w-full bg-purple-600 hover:bg-purple-500 text-white py-2 rounded font-bold flex items-center justify-center gap-2">
+                                            <Icon p={icons.sound}/> Send ID via SonicLink
+                                        </button>
                                     </>
                                 ) : <div className="text-red-400">Connect First</div>}
                             </div>
