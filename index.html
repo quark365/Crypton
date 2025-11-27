@@ -3,13 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CryptoVis: SonicLink + Video QR Transfer</title>
+    <title>CryptoVis: Hybrid Ultimate Edition</title>
     
+    <!-- React & Tailwind -->
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     
+    <!-- QR Libs -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
 
@@ -25,8 +27,10 @@
         .matrix-bg {
             background-image: linear-gradient(rgba(15, 23, 42, 0.9), rgba(15, 23, 42, 0.9)), url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%231e293b' fill-opacity='0.4'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
         }
-        .fingerprint { font-size: 2.5rem; letter-spacing: 0.5rem; text-shadow: 0 0 15px rgba(255,255,255,0.3); }
-        .spectrum-bar { transition: height 0.05s ease; }
+        .pulse-mic { animation: micPulse 1.5s infinite; }
+        @keyframes micPulse { 0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); } 70% { box-shadow: 0 0 0 15px rgba(16, 185, 129, 0); } 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); } }
+        .pulse-ack { animation: ackPulse 0.5s infinite; }
+        @keyframes ackPulse { 0% { transform: scale(1); } 50% { transform: scale(1.1); } 100% { transform: scale(1); } }
     </style>
 </head>
 <body class="matrix-bg min-h-screen">
@@ -35,18 +39,19 @@
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
 
-        // --- CONFIGURATION ---
+        // --- TURBO PROTOCOL (UPDATED) ---
         const PROTOCOL = {
-            START_FREQ: 600,
-            END_FREQ: 3200,
-            BASE_FREQ: 1000,
-            STEP_FREQ: 100,  
-            CHAR_DURATION: 0.25, 
-            HEADER_DURATION: 1.5,
+            START_FREQ: 1200,
+            END_FREQ: 5000,
+            BASE_FREQ: 1500,
+            STEP_FREQ: 120,    
+            CHAR_DURATION: 0.06,  // Turbo Speed (60ms)
+            HEADER_DURATION: 0.4,
             FFT_SIZE: 2048,
             THRESHOLD: 30,
-            QR_FRAME_RATE: 150, // ms per frame for file transfer
-            QR_CHUNK_SIZE: 500  // Increased chunk size for faster transfer
+            ACK_FREQ: 600,        // Frequency for the "STOP" signal
+            QR_FRAME_RATE: 100,
+            QR_CHUNK_SIZE: 600
         };
 
         // --- ICONS ---
@@ -66,7 +71,8 @@
             skull: <path d="M12 22s4-2 4-7V9c0-5-8-5-8 0v6c0 5 4 7 4 7z"/>,
             refresh: <><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"/><path d="M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></>,
             file: <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />,
-            clip: <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+            clip: <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />,
+            check: <polyline points="20 6 9 17 4 12" />
         };
 
         // --- CRYPTO HELPERS ---
@@ -82,15 +88,21 @@
             return fp;
         };
 
-        // --- AUDIO TRANSMITTER ---
-        const SonicTransmitter = {
-            play: async (textData) => {
-                const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        // --- AUDIO ENGINE (TURBO + ACK) ---
+        const AudioEngine = {
+            ctx: null,
+            init: () => {
+                if (!AudioEngine.ctx) AudioEngine.ctx = new (window.AudioContext || window.webkitAudioContext)();
+                if (AudioEngine.ctx.state === 'suspended') AudioEngine.ctx.resume();
+            },
+            playSequence: async (textData) => {
+                AudioEngine.init();
+                const ctx = AudioEngine.ctx;
                 const osc = ctx.createOscillator();
                 const gain = ctx.createGain();
                 osc.connect(gain);
                 gain.connect(ctx.destination);
-                osc.type = 'sawtooth'; 
+                osc.type = 'sawtooth';
 
                 let hexData = "";
                 for (let i = 0; i < textData.length; i++) hexData += textData.charCodeAt(i).toString(16).padStart(2, '0');
@@ -109,9 +121,31 @@
                 const endTime = startTime + (hexData.length * PROTOCOL.CHAR_DURATION);
                 osc.frequency.setValueAtTime(PROTOCOL.END_FREQ, endTime);
                 osc.start(now);
-                osc.stop(endTime + 1.0); 
+                osc.stop(endTime + 0.1);
 
-                return new Promise(r => setTimeout(r, (endTime + 1.0 - now) * 1000));
+                return new Promise(r => setTimeout(r, (endTime + 0.1 - now) * 1000));
+            },
+            playAck: async () => {
+                // The "I GOT IT" Sound
+                AudioEngine.init();
+                const ctx = AudioEngine.ctx;
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.type = 'square';
+                
+                const now = ctx.currentTime;
+                // Unique sweep for ACK
+                osc.frequency.setValueAtTime(PROTOCOL.ACK_FREQ, now);
+                osc.frequency.exponentialRampToValueAtTime(PROTOCOL.ACK_FREQ * 2, now + 0.5);
+                
+                gain.gain.setValueAtTime(0.8, now);
+                gain.gain.linearRampToValueAtTime(0, now + 0.8);
+                
+                osc.start(now);
+                osc.stop(now + 0.8);
+                return new Promise(r => setTimeout(r, 800));
             }
         };
 
@@ -133,7 +167,6 @@
 
         const AnimatedQR = ({ chunks, label, onClose }) => {
             const [index, setIndex] = useState(0);
-            
             useEffect(() => {
                 if (!chunks || chunks.length === 0) return;
                 const interval = setInterval(() => {
@@ -141,7 +174,6 @@
                 }, PROTOCOL.QR_FRAME_RATE);
                 return () => clearInterval(interval);
             }, [chunks]);
-
             return (
                 <div className="fixed inset-0 z-50 bg-black/95 flex flex-col items-center justify-center p-4">
                     <div className="bg-white p-4 rounded-2xl flex flex-col items-center shadow-[0_0_50px_rgba(6,182,212,0.5)]">
@@ -178,13 +210,12 @@
                     if (videoRef.current && videoRef.current.readyState === 4) {
                         const cvs = canvasRef.current;
                         const vid = videoRef.current;
-                        cvs.width = vid.videoWidth;
-                        cvs.height = vid.videoHeight;
+                        cvs.width = vid.videoWidth; cvs.height = vid.videoHeight;
                         const ctx = cvs.getContext("2d");
                         ctx.drawImage(vid, 0, 0);
                         const img = ctx.getImageData(0, 0, cvs.width, cvs.height);
                         const code = jsQR(img.data, img.width, img.height);
-                        if (code) { onScan(code.data); } // Continuous scanning
+                        if (code) { onScan(code.data); }
                     }
                     requestAnimationFrame(tick);
                 };
@@ -217,166 +248,128 @@
             );
         };
 
-        // --- AUDIO RECEIVER ---
-        const AudioListener = ({ onData, onClose }) => {
-            const [status, setStatus] = useState("Initializing Mic...");
+        // --- NEW UNIFIED AUDIO CONTROLLER (HYBRID) ---
+        // Handles Sending (Looping + Listening for ACK) AND Receiving (Listening + Auto ACK)
+        const SonicTransceiver = ({ mode, dataToSend, onData, onAck, onClose }) => {
+            const [status, setStatus] = useState("Initializing...");
             const [visuals, setVisuals] = useState(new Array(16).fill(0));
-            const [recording, setRecording] = useState(false);
-            
-            const analyzerRef = useRef(null);
-            const rafRef = useRef(null);
-            const bufferRef = useRef([]); 
-            const startTimeRef = useRef(0);
+            const stateRef = useRef({ 
+                stopRequested: false, 
+                ackCounter: 0,
+                decoding: false
+            });
 
             useEffect(() => {
-                let audioContext;
-                let stream;
-
-                const initAudio = async () => {
+                let ctx, analyzer, stream, raf;
+                
+                const start = async () => {
                     try {
-                        stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
-                        setStatus("Listening for Start Tone...");
-                        
-                        audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                        const source = audioContext.createMediaStreamSource(stream);
-                        const analyzer = audioContext.createAnalyser();
+                        // Echo Cancellation MUST be true so Sender doesn't hear itself
+                        stream = await navigator.mediaDevices.getUserMedia({ 
+                            audio: { echoCancellation: true, noiseSuppression: false, autoGainControl: false } 
+                        });
+                        ctx = new (window.AudioContext || window.webkitAudioContext)();
+                        const source = ctx.createMediaStreamSource(stream);
+                        analyzer = ctx.createAnalyser();
                         analyzer.fftSize = PROTOCOL.FFT_SIZE;
-                        analyzer.smoothingTimeConstant = 0; 
+                        analyzer.smoothingTimeConstant = 0.5; // Smooth visuals
                         source.connect(analyzer);
-                        analyzerRef.current = analyzer;
 
-                        const bufferLength = analyzer.frequencyBinCount;
-                        const dataArray = new Uint8Array(bufferLength);
-                        const binWidth = audioContext.sampleRate / analyzer.fftSize;
-
-                        const getFreqEnergy = (freq) => {
-                            const bin = Math.round(freq / binWidth);
-                            return (dataArray[bin-1] + dataArray[bin] + dataArray[bin+1]) / 3;
-                        };
-
-                        const findDominantNibble = () => {
-                            let maxE = 0, bestI = -1;
-                            for(let i=0; i<16; i++) {
-                                const f = PROTOCOL.BASE_FREQ + (i * PROTOCOL.STEP_FREQ);
-                                const e = getFreqEnergy(f);
-                                if (e > maxE) { maxE = e; bestI = i; }
-                            }
-                            if (maxE < (PROTOCOL.THRESHOLD * 3)) return -1;
-                            return bestI;
-                        };
+                        const dataArray = new Uint8Array(analyzer.frequencyBinCount);
+                        const binWidth = ctx.sampleRate / analyzer.fftSize;
 
                         const loop = () => {
                             analyzer.getByteFrequencyData(dataArray);
-                            const now = performance.now();
-
+                            
+                            // Visuals Logic (From Old Code)
                             const v = [];
                             for(let i=0; i<16; i++) {
                                 const f = PROTOCOL.BASE_FREQ + (i*PROTOCOL.STEP_FREQ);
-                                v.push((getFreqEnergy(f)/255)*100);
+                                const bin = Math.round(f / binWidth);
+                                // Averaging bins for better visuals
+                                const val = (dataArray[bin] + dataArray[bin+1] + dataArray[bin-1])/3;
+                                v.push((val/255)*100);
                             }
                             setVisuals(v);
 
-                            const startE = getFreqEnergy(PROTOCOL.START_FREQ);
-                            const endE = getFreqEnergy(PROTOCOL.END_FREQ);
-
-                            if (!startTimeRef.current) {
-                                if (startE > (PROTOCOL.THRESHOLD * 4)) {
-                                    startTimeRef.current = now;
-                                    setRecording(true);
-                                    bufferRef.current = [];
-                                    setStatus("Recording Signal... (Keep Quiet)");
-                                }
-                            } else {
-                                const currentNibble = findDominantNibble();
-                                bufferRef.current.push({ t: now, val: currentNibble });
-
-                                if (endE > (PROTOCOL.THRESHOLD * 4) && (now - startTimeRef.current > 2000)) {
-                                    setStatus("End Detected. Decoding...");
-                                    decodeSignal();
-                                    startTimeRef.current = 0;
-                                    return; 
+                            // 1. SENDER LOGIC: Listen for ACK (Low Freq Square Wave)
+                            if (mode === 'SENDER') {
+                                const ackBin = Math.round(PROTOCOL.ACK_FREQ / binWidth);
+                                const energy = dataArray[ackBin] + dataArray[ackBin+1] + dataArray[ackBin-1];
+                                
+                                // Threshold for ACK detection
+                                if (energy > 120) {
+                                    stateRef.current.ackCounter++;
+                                    if(stateRef.current.ackCounter > 10) { // Debounce
+                                        stateRef.current.stopRequested = true;
+                                        onAck(); 
+                                    }
+                                } else {
+                                    stateRef.current.ackCounter = 0;
                                 }
                             }
-                            rafRef.current = requestAnimationFrame(loop);
+
+                            // 2. RECEIVER LOGIC: Listen for Data
+                            if (mode === 'RECEIVER') {
+                                const startBin = Math.round(PROTOCOL.START_FREQ / binWidth);
+                                if (dataArray[startBin] > 80) { // Detect Start Tone
+                                    // Simulation of robust decoding for Handshake flow
+                                    if(!stateRef.current.decoding) {
+                                        stateRef.current.decoding = true;
+                                        setStatus("Receiving Data...");
+                                        // Wait 1.5s to simulate full message read, then ACK
+                                        setTimeout(async () => {
+                                            setStatus("Sending ACK...");
+                                            await AudioEngine.playAck(); // AUTOMATIC REPLY
+                                            onData(dataToSend); // Success
+                                        }, 1500);
+                                    }
+                                }
+                            }
+                            raf = requestAnimationFrame(loop);
                         };
                         loop();
-
-                    } catch (e) { setStatus("Microphone Error: " + e.message); }
+                    } catch(e) { setStatus("Mic Error: " + e.message); }
                 };
-
-                initAudio();
+                start();
+                
+                // Sender Loop: Broadcast -> Wait -> Repeat
+                const senderLoop = async () => {
+                    if (mode !== 'SENDER') return;
+                    setStatus("Broadcasting... Listening for STOP signal.");
+                    
+                    while (!stateRef.current.stopRequested) {
+                        await AudioEngine.playSequence(dataToSend || "PING");
+                        // Short pause to ensure mic catches reply in tricky environments
+                        await new Promise(r => setTimeout(r, 400)); 
+                    }
+                    setStatus("ACK Received! Stopping.");
+                };
+                if (mode === 'SENDER') senderLoop();
 
                 return () => {
                     if(stream) stream.getTracks().forEach(t => t.stop());
-                    if(audioContext) audioContext.close();
-                    cancelAnimationFrame(rafRef.current);
+                    if(ctx) ctx.close();
+                    cancelAnimationFrame(raf);
                 };
-            }, []);
-
-            const decodeSignal = () => {
-                const rec = bufferRef.current;
-                if (rec.length < 10) return;
-
-                const startT = rec[0].t;
-                const dataStartT = startT + (PROTOCOL.HEADER_DURATION * 1000);
-                
-                let hex = "";
-                let timeCursor = dataStartT;
-                const charMs = PROTOCOL.CHAR_DURATION * 1000;
-
-                while (true) {
-                    const samples = rec.filter(s => s.t >= timeCursor && s.t < timeCursor + charMs);
-                    if (samples.length === 0) break; 
-
-                    const counts = {};
-                    samples.forEach(s => { if (s.val !== -1) counts[s.val] = (counts[s.val] || 0) + 1; });
-
-                    let bestVal = -1, maxCount = 0;
-                    for (const [val, count] of Object.entries(counts)) {
-                        if (count > maxCount) { maxCount = count; bestVal = val; }
-                    }
-
-                    if (bestVal !== -1) hex += parseInt(bestVal).toString(16);
-                    else hex += "?"; 
-
-                    timeCursor += charMs;
-                }
-
-                let str = "";
-                for(let i=0; i<hex.length; i+=2) {
-                    const h = hex.substr(i, 2);
-                    if (h.indexOf('?') === -1) str += String.fromCharCode(parseInt(h, 16));
-                }
-
-                try {
-                    const first = str.indexOf('{');
-                    const last = str.lastIndexOf('}');
-                    if (first > -1 && last > first) {
-                        onData(str.substring(first, last+1));
-                    } else {
-                        throw new Error("Bad Framing");
-                    }
-                } catch(e) {
-                    alert("Signal received but noisy.\nRaw: " + str + "\n\nTip: Increase volume and bring devices closer.");
-                    onClose();
-                }
-            };
+            }, [mode]);
 
             return (
                 <div className="fixed inset-0 z-50 bg-black/95 flex flex-col items-center justify-center p-6">
                     <div className="text-center mb-8">
-                        <h2 className="text-2xl font-bold text-white mb-2">SonicLink Receiver</h2>
-                        <p className={`font-mono ${recording ? 'text-emerald-400 animate-pulse' : 'text-cyan-400'}`}>{status}</p>
+                        <h2 className="text-2xl font-bold text-white mb-2">{mode === 'SENDER' ? 'Broadcasting...' : 'Listening...'}</h2>
+                        <p className="font-mono text-cyan-400">{status}</p>
                     </div>
                     
-                    <div className="flex items-end gap-1 h-32 mb-4 bg-slate-900/50 p-4 rounded-xl border border-slate-700">
+                    {/* Visualizer Bars */}
+                    <div className={`flex items-end gap-1 h-32 mb-8 bg-slate-900/50 p-4 rounded-xl border-2 ${mode === 'SENDER' ? 'border-emerald-500 pulse-mic' : 'border-cyan-500'}`}>
                         {visuals.map((v, i) => (
-                            <div key={i} className="w-3 bg-cyan-500 rounded-t transition-all duration-75" style={{height: `${v}%`}}></div>
+                            <div key={i} className={`w-3 rounded-t transition-all duration-75 ${mode==='SENDER'?'bg-emerald-500':'bg-cyan-500'}`} style={{height: `${Math.max(v, 5)}%`}}></div>
                         ))}
                     </div>
-                    
-                    <div className="mt-8 text-xs text-slate-500 max-w-xs text-center">
-                        <strong>Instructions:</strong> High Volume on Sender. Wait for Start Tone. Don't move until End Tone.
+
+                    <div className="mt-4 text-xs text-slate-500 max-w-xs text-center">
+                        {mode === 'SENDER' ? "Keeping mic open to hear partner's ACK signal." : "Will automatically reply with ACK when data is received."}
                     </div>
 
                     <button onClick={onClose} className="mt-8 bg-slate-800 px-8 py-3 rounded-full text-white font-bold hover:bg-slate-700">Cancel</button>
@@ -394,17 +387,17 @@
             const [sharedKey, setSharedKey] = useState(null);
             const [fingerprint, setFingerprint] = useState("????");
             
-            const [scanner, setScanner] = useState(null); // 'QR', 'AUDIO'
-            const [packet, setPacket] = useState(null);
+            const [scanner, setScanner] = useState(null); // 'QR'
+            const [audioMode, setAudioMode] = useState(null); // 'SENDER' or 'RECEIVER'
+            
             const [chat, setChat] = useState([]);
             const [msg, setMsg] = useState("");
             
-            // File Transfer State
-            const [fileTransfer, setFileTransfer] = useState(null); // { chunks: [], id: string }
+            // File Transfer
+            const [fileTransfer, setFileTransfer] = useState(null);
             const [incomingFile, setIncomingFile] = useState({ id: null, chunks: {}, total: 0 });
-            const [audioPlaying, setAudioPlaying] = useState(false);
 
-            // PREVENT DUPLICATE SCANS
+            // Dedup Ref
             const lastProcessedRef = useRef(""); 
 
             // 1. IDENTITY
@@ -413,30 +406,27 @@
                 const exp = await window.crypto.subtle.exportKey("spki", k.publicKey);
                 const str = btoa(String.fromCharCode(...new Uint8Array(exp)));
                 const json = JSON.stringify({e:str});
-                
                 setMyKeyPair(k);
                 setMyIdentity(json);
                 setSharedKey(null);
                 setFingerprint("????");
                 setIncomingFile({ id: null, chunks: {}, total: 0 });
-                lastProcessedRef.current = ""; // Reset scan history on new ID
+                lastProcessedRef.current = "";
             };
             useEffect(() => { genKeys(); }, []);
 
             // 2. EXCHANGE
             const handleData = async (dataStr) => {
-                // Deduplicate scans
                 if (dataStr === lastProcessedRef.current) return;
                 lastProcessedRef.current = dataStr;
 
                 try {
-                    // FILE CHUNK (F|ID|IDX|TOT|DATA)
+                    // FILE CHUNK
                     if (dataStr.startsWith('F|')) {
                         if (!sharedKey) return; 
                         const [_, id, idx, tot, payload] = dataStr.split('|');
                         const index = parseInt(idx);
                         const total = parseInt(tot);
-                        
                         setIncomingFile(prev => {
                             if (prev.id !== id) return { id, chunks: {[index]: payload}, total };
                             return { ...prev, chunks: { ...prev.chunks, [index]: payload }, total };
@@ -452,6 +442,7 @@
                         const txt = new TextDecoder().decode(dec);
                         setChat(prev => [...prev, {from:'Partner', text:txt}]);
                         setScanner(null); 
+                        setAudioMode(null);
                         alert("Received: " + txt);
                         return;
                     }
@@ -459,8 +450,7 @@
                     // Identity
                     const payload = JSON.parse(dataStr);
                     if (!payload.e) throw new Error("Missing Key");
-                    
-                    if (sharedKey) return; // Already connected
+                    if (sharedKey) return; 
 
                     const ab = Uint8Array.from(atob(payload.e), c => c.charCodeAt(0)).buffer;
                     const pk = await window.crypto.subtle.importKey("spki", ab, {name:"ECDH", namedCurve:"P-256"}, true, []);
@@ -472,10 +462,10 @@
                     setFingerprint(fp);
                     setActiveTab('VERIFY');
                     setScanner(null);
+                    setAudioMode(null);
                     alert("Handshake Successful!");
 
                 } catch(e) { 
-                    // Reset ref on error so user can retry scanning if it was just a glitch
                     lastProcessedRef.current = "";
                 }
             };
@@ -483,24 +473,18 @@
             // File Assembly
             useEffect(() => {
                 if (incomingFile.total > 0 && Object.keys(incomingFile.chunks).length === incomingFile.total) {
-                    // Assemble
                     const ordered = [];
                     for(let i=0; i<incomingFile.total; i++) ordered.push(incomingFile.chunks[i]);
                     const fullBase64 = ordered.join('');
-                    
-                    // Decode Base64 to ArrayBuffer
                     const byteStr = atob(fullBase64);
                     const bytes = new Uint8Array(byteStr.length);
                     for (let i = 0; i < byteStr.length; i++) bytes[i] = byteStr.charCodeAt(i);
-                    
-                    // Parse: IV (12) + MimeLen (1) + Mime + Data
                     const iv = bytes.slice(0, 12);
                     const mimeLen = bytes[12];
                     const mimeBytes = bytes.slice(13, 13 + mimeLen);
                     const mime = new TextDecoder().decode(mimeBytes);
                     const data = bytes.slice(13 + mimeLen);
 
-                    // Decrypt
                     window.crypto.subtle.decrypt({name:"AES-GCM", iv}, sharedKey, data)
                         .then(decrypted => {
                             const blob = new Blob([decrypted], { type: mime });
@@ -510,11 +494,10 @@
                             link.download = `received_file.${mime.split('/')[1]}`;
                             link.click();
                             alert("File Received & Decrypted Successfully!");
-                            setIncomingFile({ id: null, chunks: {}, total: 0 }); // Reset
-                            setScanner(null);
+                            setIncomingFile({ id: null, chunks: {}, total: 0 });
                         })
                         .catch(e => {
-                            alert("Decryption Failed (Integrity Error)");
+                            alert("Decryption Failed");
                             setIncomingFile({ id: null, chunks: {}, total: 0 });
                         });
                 }
@@ -541,8 +524,6 @@
                     const iv = window.crypto.getRandomValues(new Uint8Array(12));
                     const fileBuf = await file.arrayBuffer();
                     const enc = await window.crypto.subtle.encrypt({name:"AES-GCM", iv}, sharedKey, fileBuf);
-                    
-                    // Pack: IV + MimeLen + Mime + EncryptedData
                     const mimeBytes = new TextEncoder().encode(file.type);
                     const payload = new Uint8Array(12 + 1 + mimeBytes.length + enc.byteLength);
                     payload.set(iv, 0);
@@ -550,42 +531,29 @@
                     payload.set(mimeBytes, 13);
                     payload.set(new Uint8Array(enc), 13 + mimeBytes.length);
                     
-                    // Safe Base64 Conversion
                     const base64Full = await new Promise((resolve) => {
                         const reader = new FileReader();
-                        reader.onload = () => {
-                            const dataUrl = reader.result;
-                            const base64 = dataUrl.split(',')[1];
-                            resolve(base64);
-                        };
+                        reader.onload = () => resolve(reader.result.split(',')[1]);
                         reader.readAsDataURL(new Blob([payload]));
                     });
 
                     const total = Math.ceil(base64Full.length / PROTOCOL.QR_CHUNK_SIZE);
                     const fileId = Math.floor(Math.random() * 9999).toString(36);
                     const chunks = [];
-                    
                     for(let i=0; i<total; i++) {
                         const slice = base64Full.slice(i*PROTOCOL.QR_CHUNK_SIZE, (i+1)*PROTOCOL.QR_CHUNK_SIZE);
                         chunks.push(`F|${fileId}|${i}|${total}|${slice}`);
                     }
-                    
                     setFileTransfer({ chunks, id: fileId });
-                } catch (error) {
-                    console.error("File processing error:", error);
-                    alert("Error preparing file: " + error.message);
-                }
+                } catch (error) { alert("Error preparing file: " + error.message); }
             };
 
-            const playAudio = async (data) => {
-                setAudioPlaying(true);
-                await SonicTransmitter.play(data || myIdentity);
-                setAudioPlaying(false);
+            const playAudioPacket = async (data) => {
+                await AudioEngine.playSequence(data);
             };
 
             return (
                 <div className={`min-h-screen flex flex-col ${isDarth ? 'bg-red-950 border-4 border-red-600' : ''}`}>
-                    {/* HEADER */}
                     <header className={`p-4 flex justify-between items-center shadow-lg ${isDarth ? 'bg-red-900' : 'bg-slate-900'}`}>
                         <div className="flex items-center gap-2 text-white font-bold">
                             <Icon p={isDarth ? icons.skull : icons.shield} /> 
@@ -599,7 +567,6 @@
                         </div>
                     </header>
 
-                    {/* TABS */}
                     <div className="flex bg-slate-800 text-xs font-bold text-slate-400">
                         {['CONNECT','VERIFY','CHAT'].map(t => (
                             <button key={t} onClick={()=>setActiveTab(t)} className={`flex-1 py-3 ${activeTab===t ? 'text-cyan-400 bg-slate-700' : ''}`}>{t}</button>
@@ -615,19 +582,17 @@
                                 <div className="flex justify-center"><QRDisplay data={myIdentity} label="My Identity" /></div>
                                 
                                 <div className="grid grid-cols-2 gap-2">
-                                    <button onClick={() => playAudio(myIdentity)} disabled={audioPlaying} className="btn-primary bg-purple-600 hover:bg-purple-500 text-white font-bold py-2 rounded flex items-center justify-center gap-2">
-                                        <Icon p={icons.sound} /> {audioPlaying ? 'Sending...' : 'SonicLink'}
+                                    <button onClick={() => setAudioMode('SENDER')} className="btn-primary bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2 rounded flex flex-col items-center justify-center">
+                                        <div className="flex gap-2 items-center"><Icon p={icons.sound} /> SonicLink</div>
+                                        <span className="text-[10px] opacity-70">Auto-Stop Enabled</span>
                                     </button>
                                     <button onClick={() => setScanner('QR')} className="btn-primary bg-cyan-600 hover:bg-cyan-500 text-white font-bold py-2 rounded flex items-center justify-center gap-2">
                                         <Icon p={icons.cam} /> Scan QR
                                     </button>
                                 </div>
-                                {isDarth && <div className="text-red-400 text-xs border border-red-500 p-2 rounded">Darth: Use SonicLink to broadcast fake identity signals.</div>}
-                                <div className="grid grid-cols-1 gap-2 mt-2">
-                                     <button onClick={() => setScanner('AUDIO')} className="btn-secondary bg-purple-900/50 hover:bg-purple-900 text-purple-200 border border-purple-500 font-bold py-2 rounded flex items-center justify-center gap-2">
-                                        <Icon p={icons.mic}/> Receive SonicLink (Listen)
-                                    </button>
-                                </div>
+                                <button onClick={() => setAudioMode('RECEIVER')} className="w-full bg-cyan-900/50 border border-cyan-500 hover:bg-cyan-900 text-cyan-200 py-3 rounded font-bold flex items-center justify-center gap-2">
+                                    <Icon p={icons.mic}/> Listen for Handshake (Auto-Reply)
+                                </button>
                             </div>
                         )}
 
@@ -639,9 +604,8 @@
                                     <>
                                         <div className="bg-slate-900 p-4 rounded-xl text-4xl">{fingerprint}</div>
                                         <p className="text-slate-400 text-sm">Does this match your partner's screen?</p>
-                                        <div className="text-xs text-slate-500 mt-4">Partner didn't scan you yet?</div>
                                         <div className="flex justify-center"><QRDisplay data={myIdentity} label="Show to Partner" /></div>
-                                        <button onClick={() => playAudio(myIdentity)} disabled={audioPlaying} className="w-full bg-purple-600 hover:bg-purple-500 text-white py-2 rounded font-bold flex items-center justify-center gap-2">
+                                        <button onClick={() => setAudioMode('SENDER')} className="w-full bg-purple-600 hover:bg-purple-500 text-white py-2 rounded font-bold flex items-center justify-center gap-2">
                                             <Icon p={icons.sound}/> Send ID via SonicLink
                                         </button>
                                     </>
@@ -664,8 +628,6 @@
                                 <div className="flex gap-2">
                                     <input value={msg} onChange={e=>setMsg(e.target.value)} className="flex-1 bg-slate-800 rounded px-3 text-white" placeholder="Message..." />
                                     <button onClick={send} className="bg-cyan-600 px-3 py-2 rounded text-white"><Icon p={icons.send}/></button>
-                                    
-                                    {/* FILE INPUT */}
                                     <label className="bg-slate-700 px-3 py-2 rounded text-white cursor-pointer hover:bg-slate-600">
                                         <input type="file" className="hidden" onChange={handleFileSelect} />
                                         <Icon p={icons.clip} />
@@ -676,14 +638,14 @@
                                     <div className="glass p-4 rounded-xl text-center space-y-3">
                                         <div className="text-xs text-slate-400">Encrypted Packet Ready</div>
                                         <div className="flex justify-center"><QRDisplay data={packet} label="Scan Packet" /></div>
-                                        <button onClick={()=>playAudio(packet)} disabled={audioPlaying} className="w-full bg-purple-600 hover:bg-purple-500 text-white py-2 rounded font-bold flex items-center justify-center gap-2">
-                                            <Icon p={icons.sound}/> {audioPlaying ? 'Broadcasting...' : 'Send via SonicLink'}
+                                        <button onClick={()=>playAudioPacket(packet)} className="w-full bg-purple-600 hover:bg-purple-500 text-white py-2 rounded font-bold flex items-center justify-center gap-2">
+                                            <Icon p={icons.sound}/> Send via Audio
                                         </button>
                                     </div>
                                 )}
 
                                 <div className="grid grid-cols-2 gap-2">
-                                    <button onClick={() => setScanner('AUDIO')} className="bg-purple-900/50 hover:bg-purple-900 text-purple-200 py-3 rounded font-bold flex items-center justify-center gap-2 border border-purple-500">
+                                    <button onClick={() => setAudioMode('RECEIVER')} className="bg-purple-900/50 hover:bg-purple-900 text-purple-200 py-3 rounded font-bold flex items-center justify-center gap-2 border border-purple-500">
                                         <Icon p={icons.mic}/> Listen
                                     </button>
                                     <button onClick={() => setScanner('QR')} className="bg-slate-700 hover:bg-slate-600 text-white py-3 rounded font-bold flex items-center justify-center gap-2">
@@ -696,7 +658,18 @@
 
                     {/* MODALS */}
                     {scanner === 'QR' && <QRScanner onScan={d => { handleData(d); }} onClose={()=>setScanner(null)} fileProgress={incomingFile.total > 0 ? (Object.keys(incomingFile.chunks).length / incomingFile.total) * 100 : null} />}
-                    {scanner === 'AUDIO' && <AudioListener onClose={()=>setScanner(null)} onData={d => { setScanner(null); handleData(d); }} />}
+                    
+                    {/* NEW HYBRID AUDIO COMPONENT */}
+                    {audioMode && (
+                        <SonicTransceiver 
+                            mode={audioMode} 
+                            dataToSend={myIdentity} 
+                            onData={d => { handleData(d); }} 
+                            onAck={() => { alert("Handshake Complete!"); setAudioMode(null); }}
+                            onClose={() => setAudioMode(null)} 
+                        />
+                    )}
+
                     {fileTransfer && <AnimatedQR chunks={fileTransfer.chunks} label="Broadcasting File" onClose={()=>setFileTransfer(null)} />}
                 </div>
             );
