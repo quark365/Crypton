@@ -48,7 +48,7 @@
             FFT_SIZE: 2048,
             THRESHOLD: 30,
             QR_FRAME_RATE: 150, // ms per frame for file transfer
-            QR_CHUNK_SIZE: 150  // chars per QR (Keep small for fast scanning)
+            QR_CHUNK_SIZE: 500  // Increased chunk size for faster transfer
         };
 
         // --- ICONS ---
@@ -523,31 +523,47 @@
             // 4. SEND FILE
             const handleFileSelect = async (e) => {
                 const file = e.target.files[0];
-                if (!file || !sharedKey) { alert("Connect first!"); return; }
+                if (!file) return;
+                if (!sharedKey) { alert("Connect & Verify Identity first!"); return; }
                 
-                const iv = window.crypto.getRandomValues(new Uint8Array(12));
-                const fileBuf = await file.arrayBuffer();
-                const enc = await window.crypto.subtle.encrypt({name:"AES-GCM", iv}, sharedKey, fileBuf);
-                
-                // Pack: IV + MimeLen + Mime + EncryptedData
-                const mimeBytes = new TextEncoder().encode(file.type);
-                const payload = new Uint8Array(12 + 1 + mimeBytes.length + enc.byteLength);
-                payload.set(iv, 0);
-                payload.set([mimeBytes.length], 12);
-                payload.set(mimeBytes, 13);
-                payload.set(new Uint8Array(enc), 13 + mimeBytes.length);
-                
-                const base64Full = btoa(String.fromCharCode(...payload));
-                const total = Math.ceil(base64Full.length / PROTOCOL.QR_CHUNK_SIZE);
-                const fileId = Math.floor(Math.random() * 9999).toString(36);
-                const chunks = [];
-                
-                for(let i=0; i<total; i++) {
-                    const slice = base64Full.slice(i*PROTOCOL.QR_CHUNK_SIZE, (i+1)*PROTOCOL.QR_CHUNK_SIZE);
-                    chunks.push(`F|${fileId}|${i}|${total}|${slice}`);
+                try {
+                    const iv = window.crypto.getRandomValues(new Uint8Array(12));
+                    const fileBuf = await file.arrayBuffer();
+                    const enc = await window.crypto.subtle.encrypt({name:"AES-GCM", iv}, sharedKey, fileBuf);
+                    
+                    // Pack: IV + MimeLen + Mime + EncryptedData
+                    const mimeBytes = new TextEncoder().encode(file.type);
+                    const payload = new Uint8Array(12 + 1 + mimeBytes.length + enc.byteLength);
+                    payload.set(iv, 0);
+                    payload.set([mimeBytes.length], 12);
+                    payload.set(mimeBytes, 13);
+                    payload.set(new Uint8Array(enc), 13 + mimeBytes.length);
+                    
+                    // Safe Base64 Conversion using FileReader (Avoids Stack Overflow)
+                    const base64Full = await new Promise((resolve) => {
+                        const reader = new FileReader();
+                        reader.onload = () => {
+                            const dataUrl = reader.result;
+                            const base64 = dataUrl.split(',')[1];
+                            resolve(base64);
+                        };
+                        reader.readAsDataURL(new Blob([payload]));
+                    });
+
+                    const total = Math.ceil(base64Full.length / PROTOCOL.QR_CHUNK_SIZE);
+                    const fileId = Math.floor(Math.random() * 9999).toString(36);
+                    const chunks = [];
+                    
+                    for(let i=0; i<total; i++) {
+                        const slice = base64Full.slice(i*PROTOCOL.QR_CHUNK_SIZE, (i+1)*PROTOCOL.QR_CHUNK_SIZE);
+                        chunks.push(`F|${fileId}|${i}|${total}|${slice}`);
+                    }
+                    
+                    setFileTransfer({ chunks, id: fileId });
+                } catch (error) {
+                    console.error("File processing error:", error);
+                    alert("Error preparing file: " + error.message);
                 }
-                
-                setFileTransfer({ chunks, id: fileId });
             };
 
             const playAudio = async (data) => {
@@ -650,7 +666,7 @@
                                         <div className="text-xs text-slate-400">Encrypted Packet Ready</div>
                                         <div className="flex justify-center"><QRDisplay data={packet} label="Scan Packet" /></div>
                                         <button onClick={()=>playAudio(packet)} disabled={audioPlaying} className="w-full bg-purple-600 hover:bg-purple-500 text-white py-2 rounded font-bold flex items-center justify-center gap-2">
-                                            <Icon p={icons.sound}/> {audioPlaying ? 'Sending...' : 'Send via SonicLink'}
+                                            <Icon p={icons.sound}/> {audioPlaying ? 'Broadcasting...' : 'Send via SonicLink'}
                                         </button>
                                     </div>
                                 )}
