@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CryptoVis: Real SonicLink FSK</title>
+    <title>CryptoVis: SonicLink + Video QR Transfer</title>
     
     <!-- React & Tailwind -->
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
@@ -37,17 +37,18 @@
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
 
-        // --- CONFIGURATION FOR ROBUST FSK ---
-        // Wider spacing (100Hz) to prevent bit-flips
+        // --- CONFIGURATION ---
         const PROTOCOL = {
             START_FREQ: 600,
             END_FREQ: 3200,
             BASE_FREQ: 1000,
-            STEP_FREQ: 100,  // 16 steps (0-F) -> 1000Hz to 2600Hz
-            CHAR_DURATION: 0.25, // 250ms per character (Very Robust)
+            STEP_FREQ: 100,  
+            CHAR_DURATION: 0.25, 
             HEADER_DURATION: 1.5,
             FFT_SIZE: 2048,
-            THRESHOLD: 30 // dB sensitivity
+            THRESHOLD: 30,
+            QR_FRAME_RATE: 150, // ms per frame for file transfer
+            QR_CHUNK_SIZE: 150  // chars per QR (Keep small for fast scanning)
         };
 
         // --- ICONS ---
@@ -65,7 +66,9 @@
             sound: <><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></>,
             mic: <><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></>,
             skull: <path d="M12 22s4-2 4-7V9c0-5-8-5-8 0v6c0 5 4 7 4 7z"/>,
-            refresh: <><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"/><path d="M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></>
+            refresh: <><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"/><path d="M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></>,
+            file: <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />,
+            clip: <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
         };
 
         // --- CRYPTO HELPERS ---
@@ -81,7 +84,7 @@
             return fp;
         };
 
-        // --- TRANSMITTER ---
+        // --- AUDIO TRANSMITTER ---
         const SonicTransmitter = {
             play: async (textData) => {
                 const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -91,19 +94,13 @@
                 gain.connect(ctx.destination);
                 osc.type = 'sawtooth'; 
 
-                // Convert to Hex
                 let hexData = "";
-                for (let i = 0; i < textData.length; i++) {
-                    hexData += textData.charCodeAt(i).toString(16).padStart(2, '0');
-                }
+                for (let i = 0; i < textData.length; i++) hexData += textData.charCodeAt(i).toString(16).padStart(2, '0');
 
                 const now = ctx.currentTime;
-                
-                // 1. START TONE (Long Header)
                 osc.frequency.setValueAtTime(PROTOCOL.START_FREQ, now);
                 gain.gain.setValueAtTime(0.5, now);
 
-                // 2. DATA
                 let startTime = now + PROTOCOL.HEADER_DURATION;
                 for (let i = 0; i < hexData.length; i++) {
                     const nibble = parseInt(hexData[i], 16);
@@ -111,12 +108,10 @@
                     osc.frequency.setValueAtTime(freq, startTime + (i * PROTOCOL.CHAR_DURATION));
                 }
 
-                // 3. END TONE
                 const endTime = startTime + (hexData.length * PROTOCOL.CHAR_DURATION);
                 osc.frequency.setValueAtTime(PROTOCOL.END_FREQ, endTime);
-                
                 osc.start(now);
-                osc.stop(endTime + 1.0); // 1s Footer
+                osc.stop(endTime + 1.0); 
 
                 return new Promise(r => setTimeout(r, (endTime + 1.0 - now) * 1000));
             }
@@ -138,7 +133,32 @@
             );
         };
 
-        const QRScanner = ({ onScan, onClose }) => {
+        const AnimatedQR = ({ chunks, label, onClose }) => {
+            const [index, setIndex] = useState(0);
+            
+            useEffect(() => {
+                if (!chunks || chunks.length === 0) return;
+                const interval = setInterval(() => {
+                    setIndex(prev => (prev + 1) % chunks.length);
+                }, PROTOCOL.QR_FRAME_RATE);
+                return () => clearInterval(interval);
+            }, [chunks]);
+
+            return (
+                <div className="fixed inset-0 z-50 bg-black/95 flex flex-col items-center justify-center p-4">
+                    <div className="bg-white p-4 rounded-2xl flex flex-col items-center shadow-[0_0_50px_rgba(6,182,212,0.5)]">
+                        <QRDisplay data={chunks[index]} label={`${label} (${index + 1}/${chunks.length})`} />
+                        <div className="w-full bg-gray-200 h-2 mt-4 rounded-full overflow-hidden">
+                            <div className="bg-blue-600 h-full transition-all" style={{width: `${((index+1)/chunks.length)*100}%`}}></div>
+                        </div>
+                    </div>
+                    <p className="text-cyan-400 mt-4 font-mono text-sm animate-pulse">Broadcasting File Stream...</p>
+                    <button onClick={onClose} className="mt-8 bg-slate-800 px-8 py-3 rounded-full text-white font-bold hover:bg-slate-700">Stop Broadcast</button>
+                </div>
+            );
+        };
+
+        const QRScanner = ({ onScan, onClose, fileProgress }) => {
             const videoRef = useRef(null);
             const canvasRef = useRef(null);
             const [error, setError] = useState("");
@@ -166,7 +186,7 @@
                         ctx.drawImage(vid, 0, 0);
                         const img = ctx.getImageData(0, 0, cvs.width, cvs.height);
                         const code = jsQR(img.data, img.width, img.height);
-                        if (code) { onScan(code.data); return; }
+                        if (code) { onScan(code.data); } // Continuous scanning
                     }
                     requestAnimationFrame(tick);
                 };
@@ -180,13 +200,26 @@
                         <canvas ref={canvasRef} className="hidden" />
                         <div className="scan-line"></div>
                         {error && <div className="absolute inset-0 flex items-center justify-center text-red-400 font-bold bg-black/80 text-center p-6">{error}</div>}
+                        
+                        {/* File Progress Overlay */}
+                        {fileProgress && (
+                            <div className="absolute bottom-0 left-0 right-0 bg-black/80 p-4">
+                                <div className="flex justify-between text-xs text-white mb-1">
+                                    <span>Downloading File...</span>
+                                    <span>{Math.round(fileProgress)}%</span>
+                                </div>
+                                <div className="w-full bg-slate-700 h-2 rounded-full overflow-hidden">
+                                    <div className="bg-emerald-500 h-full transition-all duration-100" style={{width: `${fileProgress}%`}}></div>
+                                </div>
+                            </div>
+                        )}
                     </div>
                     <button onClick={onClose} className="mt-8 bg-slate-800 text-white px-8 py-3 rounded-full font-bold hover:bg-slate-700 transition-colors">Cancel</button>
                 </div>
             );
         };
 
-        // --- ROBUST AUDIO DECODER (CAPTURE & ANALYZE) ---
+        // --- AUDIO RECEIVER ---
         const AudioListener = ({ onData, onClose }) => {
             const [status, setStatus] = useState("Initializing Mic...");
             const [visuals, setVisuals] = useState(new Array(16).fill(0));
@@ -194,7 +227,7 @@
             
             const analyzerRef = useRef(null);
             const rafRef = useRef(null);
-            const bufferRef = useRef([]); // Stores frequency history
+            const bufferRef = useRef([]); 
             const startTimeRef = useRef(0);
 
             useEffect(() => {
@@ -210,7 +243,7 @@
                         const source = audioContext.createMediaStreamSource(stream);
                         const analyzer = audioContext.createAnalyser();
                         analyzer.fftSize = PROTOCOL.FFT_SIZE;
-                        analyzer.smoothingTimeConstant = 0; // Raw data
+                        analyzer.smoothingTimeConstant = 0; 
                         source.connect(analyzer);
                         analyzerRef.current = analyzer;
 
@@ -218,69 +251,59 @@
                         const dataArray = new Uint8Array(bufferLength);
                         const binWidth = audioContext.sampleRate / analyzer.fftSize;
 
-                        // Helper to find dominant frequency index (0-15)
+                        const getFreqEnergy = (freq) => {
+                            const bin = Math.round(freq / binWidth);
+                            return (dataArray[bin-1] + dataArray[bin] + dataArray[bin+1]) / 3;
+                        };
+
                         const findDominantNibble = () => {
                             let maxE = 0, bestI = -1;
                             for(let i=0; i<16; i++) {
                                 const f = PROTOCOL.BASE_FREQ + (i * PROTOCOL.STEP_FREQ);
-                                const bin = Math.round(f/binWidth);
-                                // Check surrounding bins
-                                const e = dataArray[bin] + dataArray[bin-1] + dataArray[bin+1];
+                                const e = getFreqEnergy(f);
                                 if (e > maxE) { maxE = e; bestI = i; }
                             }
-                            // Threshold check
-                            if (maxE < (PROTOCOL.THRESHOLD * 3)) return -1; // Silence/Noise
+                            if (maxE < (PROTOCOL.THRESHOLD * 3)) return -1;
                             return bestI;
-                        };
-
-                        const checkFreqEnergy = (freq) => {
-                            const bin = Math.round(freq/binWidth);
-                            return dataArray[bin] + dataArray[bin-1] + dataArray[bin+1];
                         };
 
                         const loop = () => {
                             analyzer.getByteFrequencyData(dataArray);
                             const now = performance.now();
 
-                            // Visualization
                             const v = [];
                             for(let i=0; i<16; i++) {
                                 const f = PROTOCOL.BASE_FREQ + (i*PROTOCOL.STEP_FREQ);
-                                const bin = Math.round(f/binWidth);
-                                v.push((dataArray[bin]/255)*100);
+                                v.push((getFreqEnergy(f)/255)*100);
                             }
                             setVisuals(v);
 
-                            const startE = checkFreqEnergy(PROTOCOL.START_FREQ);
-                            const endE = checkFreqEnergy(PROTOCOL.END_FREQ);
+                            const startE = getFreqEnergy(PROTOCOL.START_FREQ);
+                            const endE = getFreqEnergy(PROTOCOL.END_FREQ);
 
                             if (!startTimeRef.current) {
-                                // Waiting for Start
                                 if (startE > (PROTOCOL.THRESHOLD * 4)) {
                                     startTimeRef.current = now;
                                     setRecording(true);
-                                    bufferRef.current = []; // Clear buffer
+                                    bufferRef.current = [];
                                     setStatus("Recording Signal... (Keep Quiet)");
                                 }
                             } else {
-                                // Recording Phase
                                 const currentNibble = findDominantNibble();
                                 bufferRef.current.push({ t: now, val: currentNibble });
 
-                                // Check for End Tone
                                 if (endE > (PROTOCOL.THRESHOLD * 4) && (now - startTimeRef.current > 2000)) {
                                     setStatus("End Detected. Decoding...");
                                     decodeSignal();
-                                    startTimeRef.current = 0; // Reset
-                                    return; // Stop RAF
+                                    startTimeRef.current = 0;
+                                    return; 
                                 }
                             }
-
                             rafRef.current = requestAnimationFrame(loop);
                         };
                         loop();
 
-                    } catch (e) { setStatus("Mic Error: " + e.message); }
+                    } catch (e) { setStatus("Microphone Error: " + e.message); }
                 };
 
                 initAudio();
@@ -292,55 +315,41 @@
                 };
             }, []);
 
-            // --- DECODING LOGIC (Offline Analysis) ---
             const decodeSignal = () => {
                 const rec = bufferRef.current;
                 if (rec.length < 10) return;
 
                 const startT = rec[0].t;
-                // We know HEADER is 1.5s
                 const dataStartT = startT + (PROTOCOL.HEADER_DURATION * 1000);
                 
                 let hex = "";
                 let timeCursor = dataStartT;
                 const charMs = PROTOCOL.CHAR_DURATION * 1000;
 
-                // Loop time slices
                 while (true) {
-                    // Filter samples in this time window
                     const samples = rec.filter(s => s.t >= timeCursor && s.t < timeCursor + charMs);
-                    
-                    if (samples.length === 0) break; // End of recording
+                    if (samples.length === 0) break; 
 
-                    // Majority Vote
                     const counts = {};
-                    samples.forEach(s => {
-                        if (s.val !== -1) counts[s.val] = (counts[s.val] || 0) + 1;
-                    });
+                    samples.forEach(s => { if (s.val !== -1) counts[s.val] = (counts[s.val] || 0) + 1; });
 
-                    // Find winner
                     let bestVal = -1, maxCount = 0;
                     for (const [val, count] of Object.entries(counts)) {
                         if (count > maxCount) { maxCount = count; bestVal = val; }
                     }
 
-                    // Append
                     if (bestVal !== -1) hex += parseInt(bestVal).toString(16);
-                    else hex += "?"; // Glitch
+                    else hex += "?"; 
 
                     timeCursor += charMs;
                 }
 
-                // Convert Hex to String
                 let str = "";
                 for(let i=0; i<hex.length; i+=2) {
                     const h = hex.substr(i, 2);
                     if (h.indexOf('?') === -1) str += String.fromCharCode(parseInt(h, 16));
                 }
 
-                console.log("Raw Decoded:", str);
-
-                // Attempt Recovery
                 try {
                     const first = str.indexOf('{');
                     const last = str.lastIndexOf('}');
@@ -369,10 +378,7 @@
                     </div>
                     
                     <div className="mt-8 text-xs text-slate-500 max-w-xs text-center">
-                        <strong>Instructions:</strong><br/>
-                        1. High Volume on Sender.<br/>
-                        2. Wait for Start Tone.<br/>
-                        3. Don't move until End Tone.
+                        <strong>Instructions:</strong> High Volume on Sender. Wait for Start Tone. Don't move until End Tone.
                     </div>
 
                     <button onClick={onClose} className="mt-8 bg-slate-800 px-8 py-3 rounded-full text-white font-bold hover:bg-slate-700">Cancel</button>
@@ -390,17 +396,20 @@
             const [sharedKey, setSharedKey] = useState(null);
             const [fingerprint, setFingerprint] = useState("????");
             
-            const [scanner, setScanner] = useState(null);
+            const [scanner, setScanner] = useState(null); // 'QR', 'AUDIO'
             const [packet, setPacket] = useState(null);
             const [chat, setChat] = useState([]);
             const [msg, setMsg] = useState("");
+            
+            // File Transfer State
+            const [fileTransfer, setFileTransfer] = useState(null); // { chunks: [], id: string }
+            const [incomingFile, setIncomingFile] = useState({ id: null, chunks: {}, total: 0 });
             const [audioPlaying, setAudioPlaying] = useState(false);
 
             // 1. IDENTITY
             const genKeys = async () => {
                 const k = await window.crypto.subtle.generateKey({name:"ECDH", namedCurve:"P-256"}, true, ["deriveKey", "deriveBits"]);
                 const exp = await window.crypto.subtle.exportKey("spki", k.publicKey);
-                // Compressed: Only sending ECDH key via Audio
                 const str = btoa(String.fromCharCode(...new Uint8Array(exp)));
                 const json = JSON.stringify({e:str});
                 
@@ -408,12 +417,27 @@
                 setMyIdentity(json);
                 setSharedKey(null);
                 setFingerprint("????");
+                setIncomingFile({ id: null, chunks: {}, total: 0 });
             };
             useEffect(() => { genKeys(); }, []);
 
             // 2. EXCHANGE
             const handleData = async (dataStr) => {
                 try {
+                    // FILE CHUNK (F|ID|IDX|TOT|DATA)
+                    if (dataStr.startsWith('F|')) {
+                        if (!sharedKey) return; // Silent ignore if not connected
+                        const [_, id, idx, tot, payload] = dataStr.split('|');
+                        const index = parseInt(idx);
+                        const total = parseInt(tot);
+                        
+                        setIncomingFile(prev => {
+                            if (prev.id !== id) return { id, chunks: {[index]: payload}, total };
+                            return { ...prev, chunks: { ...prev.chunks, [index]: payload }, total };
+                        });
+                        return;
+                    }
+
                     // Message
                     if (dataStr.includes('"iv":')) {
                         if(!sharedKey) { alert("Connect First!"); return; }
@@ -421,12 +445,14 @@
                         const dec = await window.crypto.subtle.decrypt({name:"AES-GCM", iv:hex2buf(p.iv)}, sharedKey, hex2buf(p.d));
                         const txt = new TextDecoder().decode(dec);
                         setChat(prev => [...prev, {from:'Partner', text:txt}]);
+                        setScanner(null); // Close scanner on single msg
                         alert("Received: " + txt);
                         return;
                     }
 
                     // Identity
                     const payload = JSON.parse(dataStr);
+                    if (!payload.e) throw new Error("Missing Key");
                     const ab = Uint8Array.from(atob(payload.e), c => c.charCodeAt(0)).buffer;
                     const pk = await window.crypto.subtle.importKey("spki", ab, {name:"ECDH", namedCurve:"P-256"}, true, []);
                     const sk = await window.crypto.subtle.deriveKey({name:"ECDH", public:pk}, myKeyPair.privateKey, {name:"AES-GCM", length:256}, true, ["encrypt","decrypt"]);
@@ -435,14 +461,55 @@
                     setSharedKey(sk);
                     setFingerprint(fp);
                     setActiveTab('VERIFY');
+                    setScanner(null);
                     alert("Handshake Successful!");
 
                 } catch(e) { 
-                    alert("Corrupted Data. Try again."); 
+                    // Ignore transient QR errors during stream
                 }
             };
 
-            // 3. SEND
+            // File Assembly
+            useEffect(() => {
+                if (incomingFile.total > 0 && Object.keys(incomingFile.chunks).length === incomingFile.total) {
+                    // Assemble
+                    const ordered = [];
+                    for(let i=0; i<incomingFile.total; i++) ordered.push(incomingFile.chunks[i]);
+                    const fullBase64 = ordered.join('');
+                    
+                    // Decode Base64 to ArrayBuffer
+                    const byteStr = atob(fullBase64);
+                    const bytes = new Uint8Array(byteStr.length);
+                    for (let i = 0; i < byteStr.length; i++) bytes[i] = byteStr.charCodeAt(i);
+                    
+                    // Parse: IV (12) + MimeLen (1) + Mime + Data
+                    const iv = bytes.slice(0, 12);
+                    const mimeLen = bytes[12];
+                    const mimeBytes = bytes.slice(13, 13 + mimeLen);
+                    const mime = new TextDecoder().decode(mimeBytes);
+                    const data = bytes.slice(13 + mimeLen);
+
+                    // Decrypt
+                    window.crypto.subtle.decrypt({name:"AES-GCM", iv}, sharedKey, data)
+                        .then(decrypted => {
+                            const blob = new Blob([decrypted], { type: mime });
+                            const url = URL.createObjectURL(blob);
+                            const link = document.createElement('a');
+                            link.href = url;
+                            link.download = `received_file.${mime.split('/')[1]}`;
+                            link.click();
+                            alert("File Received & Decrypted Successfully!");
+                            setIncomingFile({ id: null, chunks: {}, total: 0 }); // Reset
+                            setScanner(null);
+                        })
+                        .catch(e => {
+                            alert("Decryption Failed (Integrity Error)");
+                            setIncomingFile({ id: null, chunks: {}, total: 0 });
+                        });
+                }
+            }, [incomingFile, sharedKey]);
+
+            // 3. SEND MSG
             const send = async () => {
                 if(!sharedKey || !msg) return;
                 const iv = window.crypto.getRandomValues(new Uint8Array(12));
@@ -451,6 +518,36 @@
                 setPacket(pkt);
                 setChat(prev => [...prev, {from:'Me', text:msg}]);
                 setMsg("");
+            };
+
+            // 4. SEND FILE
+            const handleFileSelect = async (e) => {
+                const file = e.target.files[0];
+                if (!file || !sharedKey) { alert("Connect first!"); return; }
+                
+                const iv = window.crypto.getRandomValues(new Uint8Array(12));
+                const fileBuf = await file.arrayBuffer();
+                const enc = await window.crypto.subtle.encrypt({name:"AES-GCM", iv}, sharedKey, fileBuf);
+                
+                // Pack: IV + MimeLen + Mime + EncryptedData
+                const mimeBytes = new TextEncoder().encode(file.type);
+                const payload = new Uint8Array(12 + 1 + mimeBytes.length + enc.byteLength);
+                payload.set(iv, 0);
+                payload.set([mimeBytes.length], 12);
+                payload.set(mimeBytes, 13);
+                payload.set(new Uint8Array(enc), 13 + mimeBytes.length);
+                
+                const base64Full = btoa(String.fromCharCode(...payload));
+                const total = Math.ceil(base64Full.length / PROTOCOL.QR_CHUNK_SIZE);
+                const fileId = Math.floor(Math.random() * 9999).toString(36);
+                const chunks = [];
+                
+                for(let i=0; i<total; i++) {
+                    const slice = base64Full.slice(i*PROTOCOL.QR_CHUNK_SIZE, (i+1)*PROTOCOL.QR_CHUNK_SIZE);
+                    chunks.push(`F|${fileId}|${i}|${total}|${slice}`);
+                }
+                
+                setFileTransfer({ chunks, id: fileId });
             };
 
             const playAudio = async (data) => {
@@ -539,7 +636,13 @@
                                 </div>
                                 <div className="flex gap-2">
                                     <input value={msg} onChange={e=>setMsg(e.target.value)} className="flex-1 bg-slate-800 rounded px-3 text-white" placeholder="Message..." />
-                                    <button onClick={send} className="bg-cyan-600 px-4 py-2 rounded text-white"><Icon p={icons.send}/></button>
+                                    <button onClick={send} className="bg-cyan-600 px-3 py-2 rounded text-white"><Icon p={icons.send}/></button>
+                                    
+                                    {/* FILE INPUT */}
+                                    <label className="bg-slate-700 px-3 py-2 rounded text-white cursor-pointer hover:bg-slate-600">
+                                        <input type="file" className="hidden" onChange={handleFileSelect} />
+                                        <Icon p={icons.clip} />
+                                    </label>
                                 </div>
                                 
                                 {packet && (
@@ -565,8 +668,9 @@
                     </main>
 
                     {/* MODALS */}
-                    {scanner === 'QR' && <QRScanner onScan={d => { setScanner(null); handleData(d); }} onClose={()=>setScanner(null)} />}
+                    {scanner === 'QR' && <QRScanner onScan={d => { /* Don't close immediately if chunking */ handleData(d); }} onClose={()=>setScanner(null)} fileProgress={incomingFile.total > 0 ? (Object.keys(incomingFile.chunks).length / incomingFile.total) * 100 : null} />}
                     {scanner === 'AUDIO' && <AudioListener onClose={()=>setScanner(null)} onData={d => { setScanner(null); handleData(d); }} />}
+                    {fileTransfer && <AnimatedQR chunks={fileTransfer.chunks} label="Broadcasting File" onClose={()=>setFileTransfer(null)} />}
                 </div>
             );
         };
