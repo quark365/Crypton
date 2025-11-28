@@ -120,7 +120,8 @@
             bug: <><rect x="8" y="6" width="8" height="12" rx="4"/><path d="M12 12v.01"/><path d="M4 14h4"/><path d="M16 14h4"/><path d="M4 10h4"/><path d="M16 10h4"/><path d="M4 18h4"/><path d="M16 18h4"/></>,
             connect: <><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" /><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" /></>,
             message: <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />,
-            qr: <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+            qr: <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />,
+            scan: <><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/></>
         };
 
         // --- CRYPTO UTILS ---
@@ -483,8 +484,8 @@
                     </header>
 
                     {/* --- MAIN CONTENT AREA --- */}
-                    {/* UPDATED: Increased bottom padding from pb-48 to pb-64 to prevent overlap with floating pill */}
-                    <main className="flex-1 overflow-y-auto touch-scroll pt-20 pb-64 px-4 md:px-0">
+                    {/* UPDATED: Increased top padding for pill space at top */}
+                    <main className="flex-1 overflow-y-auto touch-scroll pt-48 pb-10 px-4 md:px-0">
                         <div className="max-w-md md:max-w-5xl mx-auto h-full flex flex-col">
                             
                             {/* TAB: CONNECT */}
@@ -630,9 +631,10 @@
                         </div>
                     </main>
 
-                    {/* --- FLOATING BOTTOM NAVIGATION (PILL) --- */}
+                    {/* --- FLOATING TOP NAVIGATION (PILL) --- */}
+                    {/* UPDATED: Moved to top */}
                     {mode === 'NORMAL' && (
-                        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 w-[90%] max-w-[340px] z-50">
+                        <div className="fixed top-24 left-1/2 -translate-x-1/2 w-[90%] max-w-[340px] z-50">
                             <nav className="nav-pill rounded-full p-2 flex items-center justify-between relative">
                                 {/* Connect Tab */}
                                 <button onClick={()=>setActiveTab('CONNECT')} className={`flex-1 flex flex-col items-center justify-center py-2 rounded-full transition-all duration-300 ${activeTab==='CONNECT' ? 'text-cyan-400' : 'text-slate-500 hover:text-slate-300'}`}>
@@ -640,10 +642,10 @@
                                     <span className={`text-[9px] font-bold mt-1 ${activeTab==='CONNECT' ? 'opacity-100' : 'opacity-0 h-0 overflow-hidden'}`}>CONNECT</span>
                                 </button>
 
-                                {/* Center Action Button (Scan) - FIXED: Removed negative margin */}
+                                {/* Center Action Button (Scan) - UPDATED: Changed Icon to Scan */}
                                 <div className="mx-2">
                                     <button onClick={()=>setScanner('QR')} className="w-12 h-12 rounded-full bg-cyan-500 flex items-center justify-center text-slate-900 shadow-[0_0_20px_rgba(6,182,212,0.4)] hover:scale-105 hover:bg-cyan-400 transition-all active:scale-95 border-2 border-slate-900">
-                                        <Icon p={icons.eye} size={24} />
+                                        <Icon p={icons.scan} size={24} />
                                     </button>
                                 </div>
 
