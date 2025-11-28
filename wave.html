@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VisualWave | Kinetic Data Sync</title>
+    <title>Wave-Share | Kinetic Data Sync</title>
    
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -32,6 +32,9 @@
                 linear-gradient(rgba(0, 243, 255, 0.03) 1px, transparent 1px),
                 linear-gradient(90deg, rgba(0, 243, 255, 0.03) 1px, transparent 1px);
             background-size: 30px 30px;
+            min-height: 100vh;
+            position: relative;
+            padding-bottom: 100px; /* Space for fixed button */
         }
         .mono { font-family: 'JetBrains Mono', monospace; }
         .glass-panel {
@@ -47,7 +50,10 @@
         }
         .scanner-beam {
             position: absolute;
-            top: 0; left: 0; width: 100%; height: 100%;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
             background: linear-gradient(to bottom, transparent, rgba(0, 243, 255, 0.2), transparent);
             animation: scanline 2s linear infinite;
             pointer-events: none;
@@ -67,6 +73,7 @@
     </style>
 </head>
 <body class="min-h-screen flex flex-col items-center justify-center p-4">
+
     <!-- Header -->
     <header class="mb-6 text-center z-10">
         <div class="flex items-center justify-center gap-3 mb-2">
@@ -82,17 +89,10 @@
     <!-- Main Card -->
     <main id="app-container" class="w-full max-w-md glass-panel rounded-3xl p-6 relative overflow-hidden transition-all duration-500 border-t border-white/10">
        
-        <!-- Back Button Component (injected by JS where needed) -->
-        <div id="back-button" class="hidden absolute top-5 left-5 z-50">
-            <button onclick="app.goBack()" class="p-3 bg-slate-800/80 hover:bg-slate-700 rounded-full border border-slate-600 backdrop-blur-sm transition-all shadow-lg">
-                <i data-lucide="arrow-left" class="w-5 h-5 text-slate-300"></i>
-            </button>
-        </div>
-
-        <!-- ================= MODE SELECTION ================= -->
+        <!-- MODE SELECTION -->
         <div id="view-mode" class="space-y-6">
             <div class="grid grid-cols-2 gap-4">
-                <button onclick="app.initSender()" class="group relative overflow-hidden rounded-2xl bg-slate-800/50 hover:bg-cyan-900/20 border border-slate-700 hover:border-cyan-500 transition-all duration-300 p-6 flex flex flex-col items-center gap-4">
+                <button onclick="app.initSender()" class="group relative overflow-hidden rounded-2xl bg-slate-800/50 hover:bg-cyan-900/20 border border-slate-700 hover:border-cyan-500 transition-all duration-300 p-6 flex flex-col items-center gap-4">
                     <div class="w-16 h-16 rounded-full bg-slate-900 flex items-center justify-center group-hover:scale-110 transition-transform shadow-lg shadow-cyan-900/20">
                         <i data-lucide="upload" class="w-8 h-8 text-cyan-400"></i>
                     </div>
@@ -102,7 +102,7 @@
                     </div>
                 </button>
                 <button onclick="app.initReceiver()" class="group relative overflow-hidden rounded-2xl bg-slate-800/50 hover:bg-purple-900/20 border border-slate-700 hover:border-purple-500 transition-all duration-300 p-6 flex flex-col items-center gap-4">
-                    <div class="w-16 h-16 rounded-full bg-slate-900 flex items-center justify-center group-hover:scale-110 transition-transform shadow-lg shadow-purple-900/20">
+                    <div class="w-16 h-16 rounded-full bg-slate-900 flex items-center justify-center justify-center group-hover:scale-110 transition-transform shadow-lg shadow-purple-900/20">
                         <i data-lucide="download" class="w-8 h-8 text-purple-400"></i>
                     </div>
                     <div class="text-center">
@@ -113,8 +113,12 @@
             </div>
         </div>
 
-        <!-- ================= SENDER: FILE PICK ================= -->
+        <!-- SENDER: FILE PICK -->
         <div id="view-file-pick" class="hidden space-y-6">
+            <div class="flex items-center gap-2 mb-4">
+                <button onclick="app.reset()" class="p-2 hover:bg-white/10 rounded-full"><i data-lucide="arrow-left" class="w-5 h-5 text-slate-400"></i></button>
+                <h2 class="text-xl font-bold text-white">Select Payload</h2>
+            </div>
             <div onclick="document.getElementById('fileInput').click()" class="border-2 border-dashed border-slate-700 hover:border-cyan-500 hover:bg-slate-800/30 rounded-2xl p-10 cursor-pointer transition-all group text-center">
                 <input type="file" id="fileInput" class="hidden" onchange="app.handleFile(this)">
                 <div class="w-16 h-16 mx-auto bg-slate-800 rounded-full flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
@@ -125,7 +129,7 @@
             </div>
         </div>
 
-        <!-- ================= SENDER: GENERATING / ANIMATING QR ================= -->
+        <!-- SENDER: GENERATING / ANIMATING QR -->
         <div id="view-sender-qr" class="hidden space-y-6">
             <div class="text-center space-y-1">
                 <h2 class="text-xl font-bold text-white">Establish Uplink</h2>
@@ -152,10 +156,11 @@
             </div>
         </div>
 
-        <!-- ================= RECEIVER: CAMERA SCANNER ================= -->
+        <!-- RECEIVER: CAMERA SCANNER -->
         <div id="view-receiver-scan" class="hidden space-y-4">
             <div class="flex items-center justify-between mb-2">
-                <div class="flex items-center gap-3">
+                <div class="flex items-center gap-2">
+                    <button onclick="app.reset()" class="p-2 hover:bg-white/10 rounded-full"><i data-lucide="arrow-left" class="w-5 h-5 text-slate-400"></i></button>
                     <h2 class="text-lg font-bold text-white">Align Scanner</h2>
                 </div>
                 <span class="text-xs font-mono px-2 py-1 bg-purple-900/50 text-purple-300 rounded border border-purple-500/30" id="scan-phase">PHASE 1/2</span>
@@ -187,7 +192,7 @@
             </div>
         </div>
 
-        <!-- ================= TRANSFER PROGRESS ================= -->
+        <!-- TRANSFER PROGRESS -->
         <div id="view-transfer" class="hidden py-8 text-center space-y-8">
             <div class="relative w-40 h-40 mx-auto">
                 <svg class="w-full h-full transform -rotate-90">
@@ -206,7 +211,7 @@
             </div>
         </div>
 
-        <!-- ================= SUCCESS ================= -->
+        <!-- SUCCESS -->
         <div id="view-success" class="hidden py-6 text-center space-y-6">
             <div class="w-24 h-24 bg-green-500/10 rounded-full flex items-center justify-center mx-auto ring-1 ring-green-500/50 shadow-[0_0_30px_rgba(34,197,94,0.2)]">
                 <i data-lucide="check" class="w-12 h-12 text-green-400"></i>
@@ -218,9 +223,18 @@
             <button id="download-btn" class="w-full py-4 rounded-xl bg-green-600 hover:bg-green-500 text-white font-bold shadow-lg shadow-green-900/50 transition-all flex items-center justify-center gap-2">
                 <i data-lucide="save"></i> Download File
             </button>
-            <button onclick="app.reset()" class="text-slate-500 hover:text-white text-sm mt-6">← Back to Start</button>
+            <button onclick="location.reload()" class="text-slate-500 hover:text-white text-sm mt-4">Start New Session</button>
         </div>
     </main>
+
+    <!-- BACK TO HOME BUTTON (Fixed at Bottom) -->
+    <div class="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-50">
+        <a href="index.html" 
+           class="group flex items-center gap-3 px-7 py-4 bg-slate-800/80 hover:bg-slate-700/90 backdrop-blur-lg border border-slate-600 hover:border-cyan-500 rounded-2xl text-cyan-300 hover:text-cyan-100 font-bold text-sm tracking-wider transition-all duration-300 shadow-2xl hover:shadow-cyan-500/30">
+            <i data-lucide="arrow-left-circle" class="w-6 h-6 group-hover:-translate-x-1 transition-transform"></i>
+            <span>BACK TO HOME</span>
+        </a>
+    </div>
 
     <!-- JS LOGIC -->
     <script>
@@ -232,7 +246,6 @@
 
         class VisualWaveApp {
             constructor() {
-                this.history = ['view-mode']; // Stack of views
                 this.pc = null;
                 this.dc = null;
                 this.file = null;
@@ -243,39 +256,15 @@
                 this.scannerStream = null;
                 this.capturedChunks = new Set();
                 this.totalChunksExpected = 0;
+                this.scanPhase = 1;
                 this.receivedBuffers = [];
                 this.receivedBytes = 0;
                 this.fileMeta = null;
             }
 
             showView(id) {
-                document.querySelectorAll('main > div[id^="view-"]').forEach(div => div.classList.add('hidden'));
+                document.querySelectorAll('main > div').forEach(div => div.classList.add('hidden'));
                 document.getElementById(id).classList.remove('hidden');
-
-                // Update history
-                if (this.history[this.history.length - 1] !== id) {
-                    this.history.push(id);
-                }
-
-                // Show/hide back button
-                const backBtn = document.getElementById('back-button');
-                if (id === 'view-mode') {
-                    backBtn.classList.add('hidden');
-                } else {
-                    backBtn.classList.remove('hidden');
-                    lucide.createIcons(); // Re-init icon inside button
-                }
-            }
-
-            goBack() {
-                this.history.pop(); // Remove current
-                const prev = this.history[this.history.length - 1] || 'view-mode';
-                this.showView(prev);
-
-                // Special case: if going back from scanner during answer phase
-                if (prev === 'view-sender-qr' && this.role === 'sender') {
-                    document.getElementById('senderStatusText').innerText = "INITIALIZING P2P PROTOCOLS...";
-                }
             }
 
             reset() {
@@ -293,13 +282,13 @@
             }
 
             handleFile(input) {
-                if (input.files.length) {
+                if(input.files.length) {
                     this.file = input.files[0];
                     document.getElementById('fileName').innerHTML = `
                         <span class="text-cyan-400 font-bold">${this.file.name}</span><br>
                         <span class="text-xs text-slate-500">${(this.file.size / 1024 / 1024).toFixed(2)} MB</span>
                     `;
-                    setTimeout(() => this.setupSenderPeer(), 600);
+                    setTimeout(() => this.setupSenderPeer(), 500);
                 }
             }
 
@@ -310,7 +299,7 @@
                 this.setupDataChannel(this.dc);
 
                 this.pc.onicecandidate = e => {
-                    if (!e.candidate) {
+                    if(!e.candidate) {
                         this.generateQRStream(this.pc.localDescription, "OFFER");
                     }
                 };
@@ -328,7 +317,7 @@
                 };
 
                 this.pc.onicecandidate = e => {
-                    if (!e.candidate) {
+                    if(!e.candidate) {
                         this.stopScanner();
                         this.showView('view-sender-qr');
                         document.getElementById('senderStatusText').innerText = "SCAN THIS ON SENDER DEVICE";
@@ -346,7 +335,7 @@
                 const chunks = [];
                 const total = Math.ceil(base64.length / CHUNK_SIZE);
 
-                for (let i = 0; i < total; i++) {
+                for(let i = 0; i < total; i++) {
                     const slice = base64.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
                     chunks.push(`VW:${type}:${i}:${total}:${slice}`);
                 }
@@ -375,63 +364,213 @@
                 };
 
                 renderFrame();
-                if (this.qrLoopInterval) clearInterval(this.qrLoopInterval);
+                if(this.qrLoopInterval) clearInterval(this.qrLoopInterval);
                 this.qrLoopInterval = setInterval(renderFrame, QR_FRAME_DELAY);
 
-                // Auto-add "Scan Reply" button only for sender after showing offer
-                if (type === 'OFFER' && this.role === 'sender') {
-                    setTimeout(() => {
-                        if (!document.getElementById('scan-reply-btn')) {
-                            const btn = document.createElement('button');
-                            btn.id = 'scan-reply-btn';
-                            btn.className = "w-full mt-4 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-400 font-mono text-sm border border-cyan-900 transition";
-                            btn.innerHTML = `<i data-lucide="scan-line" class="inline w-5 h-5 mr-2"></i>SCAN RECEIVER'S REPLY`;
-                            btn.onclick = () => {
-                                this.showView('view-receiver-scan');
-                                document.getElementById('scan-phase').innerText = "PHASE 2/2";
-                                this.startScanner('ANSWER');
-                            };
-                            document.querySelector('#view-sender-qr .space-y-3').after(btn);
-                            lucide.createIcons();
-                        }
-                    }, 800);
+                // Add "Scan Reply" button only when showing OFFER (sender side)
+                if(type === 'OFFER' && !document.getElementById('scan-reply-btn')) {
+                    const container = document.getElementById('view-sender-qr');
+                    const btn = document.createElement('button');
+                    btn.id = 'scan-reply-btn';
+                    btn.className = "w-full mt-6 py-4 rounded-xl bg-gradient-to-r from-cyan-900/50 to-purple-900/50 hover:from-cyan-800/70 hover:to-purple-800/70 text-cyan-300 font-bold text-sm tracking-wider border border-cyan-700/50 hover:border-cyan-400 transition-all";
+                    btn.innerHTML = `<i data-lucide="scan-line" class="inline w-5 h-5 mr-2"></i> SCAN RECEIVER'S REPLY QR`;
+                    btn.onclick = () => {
+                        app.showView('view-receiver-scan');
+                        document.getElementById('scan-phase').innerText = "PHASE 2/2";
+                        app.startScanner('ANSWER');
+                    };
+                    container.appendChild(btn);
+                    lucide.createIcons();
                 }
             }
 
-            // ... [rest of your methods: startScanner, handleScannedChunk, etc. remain unchanged] ...
+            async startScanner(expectedType) {
+                const video = document.getElementById('scan-video');
+                const canvas = document.getElementById('scan-canvas');
+                const ctx = canvas.getContext('2d');
+                const status = document.getElementById('scanner-status');
 
-            startScanner(expectedType) {
-                // ... same as your original ...
+                this.capturedChunks.clear();
+                this.totalChunksExpected = 0;
+
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+                    this.scannerStream = stream;
+                    video.srcObject = stream;
+                    video.play();
+                } catch(e) {
+                    alert("Camera access denied. Please allow camera and use HTTPS/localhost.");
+                    return;
+                }
+
+                const tick = () => {
+                    if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                        canvas.height = video.videoHeight;
+                        canvas.width = video.videoWidth;
+                        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                        const code = jsQR(imageData.data, imageData.width, imageData.height);
+                        if (code && code.data.startsWith('VW:')) {
+                            this.handleScannedChunk(code.data, expectedType);
+                            status.innerText = "CAPTURING...";
+                            status.classList.replace('text-cyan-400', 'text-green-400');
+                        } else {
+                            status.innerText = "SEARCHING FOR SIGNAL...";
+                            status.classList.replace('text-green-400', 'text-cyan-400');
+                        }
+                    }
+                    if(this.scannerStream) requestAnimationFrame(tick);
+                };
+
+                requestAnimationFrame(tick);
+            }
+
+            stopScanner() {
+                if(this.scannerStream) {
+                    this.scannerStream.getTracks().forEach(t => t.stop());
+                    this.scannerStream = null;
+                }
+            }
+
+            handleScannedChunk(raw, expectedType) {
+                const parts = raw.split(':');
+                if(parts.length < 5) return;
+
+                const [_, type, idxStr, totalStr, ...dataParts] = parts;
+                const index = parseInt(idxStr);
+                const total = parseInt(totalStr);
+                const data = dataParts.join(':');
+
+                if(type !== expectedType) return;
+
+                if(this.totalChunksExpected === 0) {
+                    this.totalChunksExpected = total;
+                    this.renderChunkGrid(total);
+                }
+
+                if(!this.capturedChunks.has(index)) {
+                    this.capturedChunks.add(index);
+                    this.storedData = this.storedData || new Array(total);
+                    this.storedData[index] = data;
+                    this.updateChunkGrid(index);
+
+                    const pct = Math.round((this.capturedChunks.size / total) * 100);
+                    document.getElementById('chunk-counter').innerText = `${pct}%`;
+
+                    if(this.capturedChunks.size === total) {
+                        this.processCompleteSignal(type);
+                    }
+                }
+            }
+
+            renderChunkGrid(total) {
+                const grid = document.getElementById('chunk-grid');
+                grid.innerHTML = '';
+                for(let i=0; i<total; i++) {
+                    const dot = document.createElement('div');
+                    dot.className = 'w-2 h-2 rounded-full bg-slate-700 chunk-dot';
+                    dot.id = `chunk-dot-${i}`;
+                    grid.appendChild(dot);
+                }
+            }
+
+            updateChunkGrid(index) {
+                const dot = document.getElementById(`chunk-dot-${index}`);
+                if(dot) dot.classList.add('active');
+            }
+
+            async processCompleteSignal(type) {
+                this.stopScanner();
+                const fullBase64 = this.storedData.join('');
+                const jsonStr = atob(fullBase64);
+                const sdp = JSON.parse(jsonStr);
+
+                if(type === 'OFFER') {
+                    await this.pc.setRemoteDescription(sdp);
+                    const answer = await this.pc.createAnswer();
+                    await this.pc.setLocalDescription(answer);
+                } else if(type === 'ANSWER') {
+                    await this.pc.setRemoteDescription(sdp);
+                }
             }
 
             setupDataChannel(dc) {
                 dc.onopen = () => {
-                    if (this.qrLoopInterval) clearInterval(this.qrLoopInterval);
+                    if(this.qrLoopInterval) clearInterval(this.qrLoopInterval);
                     this.stopScanner();
                     this.showView('view-transfer');
-                    if (this.role === 'sender') this.sendFile();
+                    if(this.role === 'sender') this.sendFile();
                 };
+
                 dc.onmessage = e => this.handleMessage(e.data);
             }
 
             sendFile() {
-                // ... unchanged ...
+                const CHUNK = 16384;
+                const meta = { name: this.file.name, size: this.file.size, type: this.file.type };
+                this.dc.send(JSON.stringify({ type: 'meta', data: meta }));
+
+                const reader = new FileReader();
+                let offset = 0;
+
+                reader.onload = e => {
+                    this.dc.send(e.target.result);
+                    offset += e.target.result.byteLength;
+                    this.updateProgress(offset, this.file.size);
+                    if(offset < this.file.size) {
+                        const slice = this.file.slice(offset, offset + CHUNK);
+                        reader.readAsArrayBuffer(slice);
+                    }
+                };
+
+                const slice = this.file.slice(0, CHUNK);
+                reader.readAsArrayBuffer(slice);
             }
 
             handleMessage(data) {
-                // ... unchanged ...
+                if(typeof data === 'string') {
+                    const msg = JSON.parse(data);
+                    if(msg.type === 'meta') {
+                        this.fileMeta = msg.data;
+                        this.receivedBuffers = [];
+                        this.receivedBytes = 0;
+                    }
+                } else {
+                    this.receivedBuffers.push(data);
+                    this.receivedBytes += data.byteLength;
+                    this.updateProgress(this.receivedBytes, this.fileMeta.size);
+
+                    if(this.receivedBytes >= this.fileMeta.size) {
+                        this.saveFile();
+                    }
+                }
+            }
+
+            updateProgress(current, total) {
+                const percent = Math.round((current / total) * 100);
+                const offset = 440 - (440 * percent) / 100;
+
+                document.getElementById('transfer-circle').style.strokeDashoffset = offset;
+                document.getElementById('transfer-percent').innerText = `${percent}%`;
             }
 
             saveFile() {
-                // ... unchanged ...
+                const blob = new Blob(this.receivedBuffers, { type: this.fileMeta.type || 'application/octet-stream' });
+                const url = URL.createObjectURL(blob);
+
                 this.showView('view-success');
+                document.getElementById('success-filename').innerText = this.fileMeta.name;
+
+                document.getElementById('download-btn').onclick = () => {
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = this.fileMeta.name;
+                    a.click();
+                };
             }
         }
 
         const app = new VisualWaveApp();
-
-        // Initial view
-        app.showView('view-mode');
     </script>
 </body>
 </html>
