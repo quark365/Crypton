@@ -3,314 +3,510 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🔊 Gibberlink Text Messenger (Fixed)</title>
+    <title>VisualWave Share</title>
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- QRCode.js for generating the visual signals -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <!-- HTML5-QRCode for scanning -->
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
     <style>
-        :root {
-            --bg: #f5f5f5;
-            --chat-bg: white;
-            --text: #333;
-            --sent-bg: #007bff;
-            --recv-bg: #e9ecef;
-            --btn-bg: #28a745;
-            --btn-hover: #218838;
-            --status: #666;
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap');
+        
+        body {
+            font-family: 'JetBrains Mono', monospace;
+            background-color: #0f172a;
+            color: #e2e8f0;
         }
-        [data-theme="dark"] {
-            --bg: #121212;
-            --chat-bg: #1e1e1e;
-            --text: #eee;
-            --sent-bg: #0056b3;
-            --recv-bg: #2d2d2d;
-            --btn-bg: #28a745;
-            --btn-hover: #218838;
-            --status: #aaa;
+
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(148, 163, 184, 0.1);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
         }
-        body { 
-            font-family: -apple-system, BlinkMacSystemFont, sans-serif; 
-            max-width: 600px; margin: 0 auto; padding: 20px; 
-            background: var(--bg); color: var(--text); transition: background 0.3s; 
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #0f172a; }
+        ::-webkit-scrollbar-thumb { background: #3b82f6; border-radius: 4px; }
+
+        .scan-line {
+            width: 100%;
+            height: 2px;
+            background: #10b981;
+            position: absolute;
+            animation: scan 2s linear infinite;
+            display: none;
         }
-        .chat-log { 
-            background: var(--chat-bg); border-radius: 10px; padding: 15px; 
-            height: 300px; overflow-y: auto; margin-bottom: 20px; 
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1); 
+
+        @keyframes scan {
+            0% { top: 0; opacity: 0; }
+            50% { opacity: 1; }
+            100% { top: 100%; opacity: 0; }
         }
-        .message { 
-            margin: 10px 0; padding: 12px 16px; border-radius: 18px; 
-            max-width: 80%; position: relative; animation: fadeIn 0.3s; 
+
+        .signal-box canvas {
+            width: 100%;
+            height: 100%;
         }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        .sent { background: var(--sent-bg); color: white; margin-left: auto; text-align: right; }
-        .received { background: var(--recv-bg); color: var(--text); }
-        .timestamp { font-size: 0.75em; opacity: 0.7; margin-top: 4px; }
-        #inputMsg { 
-            width: 60%; padding: 12px; border: 1px solid #ddd; border-radius: 20px; 
-            background: var(--chat-bg); color: var(--text); 
+
+        #qr-reader {
+            width: 100%;
+            max-width: 300px;
+            margin: 0 auto;
         }
-        button { 
-            padding: 12px 16px; background: var(--btn-bg); color: white; border: none; 
-            border-radius: 20px; cursor: pointer; margin: 0 5px; font-size: 16px; 
-            touch-action: manipulation; transition: background 0.2s; 
+
+        #qr-reader video {
+            width: 100%;
+            border-radius: 8px;
         }
-        button:hover { background: var(--btn-hover); }
-        button:disabled { background: #6c757d; cursor: not-allowed; }
-        .spinner { display: inline-block; width: 20px; height: 20px; border: 3px solid rgba(255,255,255,.3); border-radius: 50%; border-top-color: white; animation: spin 1s ease-in-out infinite; }
-        @keyframes spin { to { transform: rotate(360deg); } }
-        #status { font-size: 14px; color: var(--status); margin: 10px 0; text-align: center; }
-        .controls { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; margin-bottom: 20px; gap: 10px; }
-        .theme-toggle { background: #6c757d; }
-        .theme-toggle:hover { background: #5a6268; }
-        h1 { text-align: center; color: var(--text); margin-bottom: 10px; }
-        .actions { display: flex; gap: 10px; flex-wrap: wrap; }
-        #debug { font-size: 12px; color: #999; margin-top: 10px; }
     </style>
 </head>
-<body data-theme="light">
-    <h1>🔊 Gibberlink Text Messenger (Fixed!)</h1>
-    <div id="status">Loading ggwave... Check console (F12) for errors.</div>
-    <div id="debug"></div>
-    
-    <div class="chat-log" id="chatLog" role="log" aria-live="polite">
-        <div class="message received">
-            <div>Fixed version loaded! Type a message and 📤 send. Receiver: Tap 🎤 to listen.</div>
-            <div class="timestamp">Just now</div>
+<body class="min-h-screen flex flex-col items-center justify-center p-4">
+
+    <!-- Header -->
+    <header class="mb-8 text-center">
+        <div class="flex items-center justify-center gap-2 mb-2">
+            <i data-lucide="waves" class="w-8 h-8 text-cyan-400"></i>
+            <h1 class="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-blue-500">VisualWave</h1>
         </div>
-    </div>
-    
-    <div class="controls">
-        <input type="text" id="inputMsg" placeholder="Type your message (e.g., Hello!)" maxlength="50" aria-label="Message input">
-        <div class="actions">
-            <button id="sendBtn" onclick="sendMessage()" aria-label="Send message via sound">📤 Send</button>
-            <button id="listenBtn" onclick="toggleListening()" aria-label="Toggle listening">🎤 Listen</button>
-            <button onclick="clearChat()" aria-label="Clear chat">🗑️ Clear</button>
-            <button onclick="exportChat()" aria-label="Export chat log">📥 Share</button>
-            <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle dark mode">🌙</button>
-        </div>
-    </div>
+        <p class="text-slate-400 text-sm">Serverless WebRTC File Sharing</p>
+    </header>
 
-    <script src="ggwave.js"></script> <!-- Or CDN: https://cdn.jsdelivr.net/npm/ggwave@0.5.4/ggwave.js -->
-    <script>
-        let ggwaveInstance;
-        let audioContext;
-        let mediaStream;
-        let isListening = false;
-        let processor;
-        let chatLog = document.getElementById('chatLog');
-        let status = document.getElementById('status');
-        let debug = document.getElementById('debug');
-        let sendBtn = document.getElementById('sendBtn');
-        let listenBtn = document.getElementById('listenBtn');
-        let notificationPermission = Notification.permission;
-
-        function logDebug(msg) {
-            console.log(msg);
-            debug.textContent += msg + '\n';
-        }
-
-        // Convert Float32 to Int8Array for decode (from official example)
-        function convertTypedArray(input, TypedArray) {
-            const output = new TypedArray(input.length);
-            for (let i = 0; i < input.length; i++) {
-                output[i] = Math.max(-1, Math.min(1, input[i])) * 127;
-            }
-            return output;
-        }
-
-        // Init ggwave
-        async function initGgwave() {
-            if (typeof ggwave === 'undefined') {
-                status.textContent = 'Error: ggwave.js not loaded! Check src path.';
-                logDebug('ggwave undefined');
-                return false;
-            }
-            try {
-                const parameters = ggwave.getDefaultParameters();
-                ggwaveInstance = ggwave.init(parameters);
-                if (!ggwaveInstance) throw new Error('Init failed');
-                status.textContent = 'Ggwave initialized! Ready to chat. 🚀';
-                logDebug('ggwave init success');
-                return true;
-            } catch (err) {
-                status.textContent = `Init error: ${err.message}`;
-                logDebug(`Init error: ${err}`);
-                return false;
-            }
-        }
-
-        // Add message
-        function addMessage(text, isSent = false) {
-            const msg = document.createElement('div');
-            msg.className = `message ${isSent ? 'sent' : 'received'}`;
-            msg.innerHTML = `<div>${escapeHtml(text)}</div><div class="timestamp">${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>`;
-            chatLog.appendChild(msg);
-            chatLog.scrollTop = chatLog.scrollHeight;
-            if (!isSent) notifyUser(text);
-        }
-
-        function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
-        }
-
-        async function notifyUser(text) {
-            if (notificationPermission === 'granted') {
-                new Notification('New Sound Message!', { body: text, icon: '🔊' });
-            } else if (notificationPermission === 'default') {
-                notificationPermission = await Notification.requestPermission();
-            }
-        }
-
-        // Send message
-        async function sendMessage() {
-            const msg = document.getElementById('inputMsg').value.trim();
-            if (!msg) return;
-            if (!ggwaveInstance && !(await initGgwave())) return;
-
-            addMessage(msg, true);
-            document.getElementById('inputMsg').value = '';
-            const originalText = sendBtn.innerHTML;
-            sendBtn.innerHTML = '<span class="spinner"></span> Sending...';
-            sendBtn.disabled = true;
-
-            try {
-                const encoder = new TextEncoder();
-                const payloadBytes = encoder.encode(msg).length;
-                const waveform = ggwave.encode(ggwaveInstance, msg, ggwave.ProtocolId.GGWAVE_PROTOCOL_AUDIBLE_FAST, payloadBytes);
-                if (!waveform || waveform.length === 0) throw new Error('Empty waveform');
-
-                logDebug(`Encoded ${msg} to ${waveform.length} samples`);
-
-                // Convert Uint8 (0-255) to Float32 (-1 to 1) for playback
-                const floatSamples = new Float32Array(waveform.length);
-                for (let i = 0; i < waveform.length; i++) {
-                    floatSamples[i] = (waveform[i] - 128) / 128.0;  // Assume signed 8-bit packed as uint8
-                }
-
-                if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                const buffer = audioContext.createBuffer(1, floatSamples.length, 48000);
-                buffer.copyToChannel(floatSamples, 0);
-                const source = audioContext.createBufferSource();
-                source.buffer = buffer;
-                source.connect(audioContext.destination);
-                source.start();
-                status.textContent = `Playing sound for "${msg}"... (point mic at speaker) 🔊`;
-
-                source.onended = () => {
-                    status.textContent = 'Sent! Listen for replies. 📨';
-                    sendBtn.innerHTML = originalText;
-                    sendBtn.disabled = false;
-                };
-            } catch (err) {
-                status.textContent = `Send error: ${err.message}`;
-                logDebug(`Send error: ${err}`);
-                sendBtn.innerHTML = originalText;
-                sendBtn.disabled = false;
-            }
-        }
-
-        // Toggle listening
-        async function toggleListening() {
-            if (isListening) {
-                stopListening();
-                return;
-            }
-
-            if (!ggwaveInstance && !(await initGgwave())) return;
-
-            try {
-                mediaStream = await navigator.mediaDevices.getUserMedia({ audio: { sampleRate: 48000 } });
-                if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                const source = audioContext.createMediaStreamSource(mediaStream);
-
-                // Use ScriptProcessor for compatibility (AudioWorklet better but more code)
-                processor = audioContext.createScriptProcessor(4096, 1, 1);
-                processor.onaudioprocess = (e) => {
-                    const inputBuffer = e.inputBuffer.getChannelData(0);  // Float32Array
-                    const int8Data = convertTypedArray(inputBuffer, Int8Array);
-                    const decoded = ggwave.decode(ggwaveInstance, int8Data);
-                    if (decoded && decoded.length > 0) {
-                        const text = new TextDecoder('utf-8').decode(decoded).trim();
-                        if (text) {
-                            addMessage(text, false);
-                            status.textContent = `Decoded: "${text}" 🎉`;
-                            logDebug(`Decoded: ${text}`);
-                        }
-                    }
-                };
-                source.connect(processor);
-                processor.connect(audioContext.destination);  // Optional: echo for testing
-
-                isListening = true;
-                listenBtn.innerHTML = '<span class="spinner"></span> Stop';
-                status.textContent = 'Listening for sound... (play near mic) 🎤';
-                logDebug('Listening started');
-            } catch (err) {
-                status.textContent = `Mic error: ${err.message}. Enable in settings.`;
-                logDebug(`Listen error: ${err}`);
-            }
-        }
-
-        function stopListening() {
-            if (mediaStream) {
-                mediaStream.getTracks().forEach(track => track.stop());
-                mediaStream = null;
-            }
-            if (processor) {
-                processor.disconnect();
-                processor = null;
-            }
-            isListening = false;
-            listenBtn.innerHTML = '🎤 Listen';
-            status.textContent = 'Stopped listening. 😊';
-            logDebug('Listening stopped');
-        }
-
-        function clearChat() {
-            if (confirm('Clear chat?')) {
-                chatLog.innerHTML = '';
-                addMessage('Chat cleared! Start chatting. ✨', false);
-            }
-        }
-
-        function exportChat() {
-            const log = Array.from(chatLog.children).map(msg => msg.textContent).join('\n');
-            const blob = new Blob([log], { type: 'text/plain' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `gibberlink-chat-${new Date().toISOString().split('T')[0]}.txt`;
-            a.click();
-            URL.revokeObjectURL(url);
-            status.textContent = 'Chat exported! 📄';
-        }
-
-        function toggleTheme() {
-            const body = document.body;
-            const isDark = body.dataset.theme === 'dark';
-            body.dataset.theme = isDark ? 'light' : 'dark';
-            localStorage.setItem('theme', body.dataset.theme);
-        }
-
-        // Load & init
-        window.addEventListener('load', async () => {
-            const savedTheme = localStorage.getItem('theme') || 'light';
-            document.body.dataset.theme = savedTheme;
-            if ('Notification' in window) notificationPermission = Notification.permission;
-            await initGgwave();  // Auto-init
-            navigator.mediaDevices.getUserMedia({ audio: true }).catch(() => logDebug('Early perm check failed - grant when prompted'));
+    <!-- Main Container -->
+    <main id="app" class="w-full max-w-lg glass-panel rounded-2xl p-6 relative overflow-hidden transition-all duration-300">
+        
+        <!-- STEP 1: Mode Selection -->
+        <div id="step-mode" class="space-y-6">
+            <div class="text-center space-y-2">
+                <h2 class="text-xl font-bold text-white">Select Role</h2>
+                <p class="text-slate-400 text-sm">Are you sending or receiving?</p>
+            </div>
             
-            // Shortcuts
-            document.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter' && e.ctrlKey) sendMessage();
-                if (e.key === 'Escape') stopListening();
-            });
-        });
+            <div class="grid grid-cols-2 gap-4">
+                <button onclick="initSender()" class="group flex flex-col items-center justify-center p-6 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 transition-all hover:border-cyan-400">
+                    <i data-lucide="upload-cloud" class="w-10 h-10 mb-3 text-cyan-400 group-hover:scale-110 transition-transform"></i>
+                    <span class="font-bold">Send File</span>
+                </button>
+                <button onclick="initReceiver()" class="group flex flex-col items-center justify-center p-6 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 transition-all hover:border-green-400">
+                    <i data-lucide="download-cloud" class="w-10 h-10 mb-3 text-green-400 group-hover:scale-110 transition-transform"></i>
+                    <span class="font-bold">Receive File</span>
+                </button>
+            </div>
+        </div>
 
-        // Enter to send
-        document.getElementById('inputMsg').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter' && !e.shiftKey) sendMessage();
-        });
+        <!-- STEP 2 (Sender): File Selection -->
+        <div id="step-file" class="hidden space-y-6">
+            <div class="text-center">
+                <h2 class="text-xl font-bold text-white">Choose File</h2>
+            </div>
+            
+            <div class="relative border-2 border-dashed border-slate-600 rounded-xl p-8 hover:bg-slate-800/50 transition-colors text-center cursor-pointer" onclick="document.getElementById('fileInput').click()">
+                <input type="file" id="fileInput" class="hidden" onchange="handleFileSelect(this)">
+                <i data-lucide="file-plus" class="w-12 h-12 mx-auto text-slate-500 mb-2"></i>
+                <p class="text-sm text-slate-300 font-medium" id="fileNameDisplay">Click to browse</p>
+                <p class="text-xs text-slate-500 mt-1">Any file type, any size</p>
+            </div>
+            
+            <button id="genOfferBtn" disabled onclick="generateOffer()" class="w-full py-3 rounded-lg font-bold bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-white">
+                Generate Signal
+            </button>
+        </div>
+
+        <!-- STEP 3: Exchange Signals (Used by both) -->
+        <div id="step-signal" class="hidden space-y-6">
+            <div class="flex justify-between items-center border-b border-slate-700 pb-4">
+                <h2 class="text-lg font-bold text-white" id="signalTitle">Connection Signal</h2>
+                <button onclick="location.reload()" class="text-xs text-red-400 hover:text-red-300">Reset</button>
+            </div>
+
+            <!-- Loader -->
+            <div id="signalLoader" class="hidden flex-col items-center py-8">
+                <div class="w-8 h-8 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+                <p class="text-sm text-cyan-400 animate-pulse">Generating secure link...</p>
+            </div>
+
+            <!-- The QR / Code Display -->
+            <div id="signalOutput" class="hidden space-y-4">
+                <p class="text-xs text-slate-400 text-center">Scan this on the other device OR copy the code.</p>
+                
+                <div class="bg-white p-4 rounded-lg mx-auto w-fit">
+                    <div id="qrcode"></div>
+                </div>
+
+                <div class="relative">
+                    <textarea id="localSignalText" readonly class="w-full h-24 bg-slate-900 rounded-lg p-3 text-xs text-slate-400 font-mono resize-none border border-slate-700 focus:outline-none" onclick="this.select()"></textarea>
+                    <button onclick="copySignal()" class="absolute top-2 right-2 p-2 bg-slate-800 rounded hover:bg-slate-700 text-cyan-400" title="Copy to clipboard">
+                        <i data-lucide="copy" class="w-4 h-4"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- The Input Section -->
+            <div id="signalInputSection" class="pt-4 border-t border-slate-700 space-y-4">
+                <p class="text-sm text-white font-bold mb-2" id="remoteSignalLabel">Paste response from other device:</p>
+                
+                <!-- QR Scanner -->
+                <div id="qrScannerSection" class="hidden space-y-2">
+                    <div id="qr-reader"></div>
+                    <button id="stopScanBtn" onclick="stopQrScan()" class="w-full py-2 bg-red-600 hover:bg-red-500 text-white rounded text-sm">Stop Scan</button>
+                </div>
+                
+                <div class="flex gap-2">
+                    <textarea id="remoteSignalInput" placeholder="Paste the code from the other device here..." class="flex-1 h-24 bg-slate-900 rounded-lg p-3 text-xs text-slate-300 font-mono resize-none border border-slate-700 focus:border-cyan-500 focus:outline-none transition-colors"></textarea>
+                    <button onclick="startQrScan()" class="flex-shrink-0 p-2 bg-blue-600 hover:bg-blue-500 text-white rounded" title="Scan QR Code">
+                        <i data-lucide="camera" class="w-5 h-5"></i>
+                    </button>
+                </div>
+                
+                <button onclick="connectPeers()" class="w-full py-3 rounded-lg font-bold bg-green-600 hover:bg-green-500 transition-colors text-white flex items-center justify-center gap-2">
+                    <i data-lucide="link" class="w-4 h-4"></i>
+                    Connect
+                </button>
+            </div>
+        </div>
+
+        <!-- STEP 4: Transfer Progress -->
+        <div id="step-transfer" class="hidden space-y-6 py-4">
+            <div class="text-center">
+                <div class="w-20 h-20 bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-4 border-2 border-cyan-500 relative">
+                    <i data-lucide="arrow-right-left" class="w-8 h-8 text-cyan-400 animate-pulse"></i>
+                </div>
+                <h2 class="text-xl font-bold text-white mb-1">Transferring</h2>
+                <p class="text-sm text-slate-400" id="transferStatus">Initializing stream...</p>
+            </div>
+
+            <div class="bg-slate-800 rounded-full h-4 w-full overflow-hidden border border-slate-700">
+                <div id="progressBar" class="bg-gradient-to-r from-cyan-500 to-blue-600 h-full w-0 transition-all duration-300 ease-out"></div>
+            </div>
+            
+            <div class="text-center">
+                <span id="speedDisplay" class="text-xs font-mono text-slate-500">0 KB/s</span>
+            </div>
+        </div>
+
+        <!-- Success State -->
+        <div id="step-success" class="hidden text-center py-8 space-y-6">
+            <div class="w-20 h-20 bg-green-900/30 rounded-full flex items-center justify-center mx-auto mb-4 border-2 border-green-500">
+                <i data-lucide="check" class="w-10 h-10 text-green-400"></i>
+            </div>
+            <h2 class="text-2xl font-bold text-white">Transfer Complete!</h2>
+            <p id="finalFileName" class="text-slate-300"></p>
+            
+            <a id="downloadBtn" class="hidden w-full py-3 rounded-lg font-bold bg-blue-600 hover:bg-blue-500 text-white block">
+                Download File
+            </a>
+
+            <button onclick="location.reload()" class="text-slate-500 text-sm hover:text-white mt-4">Send another file</button>
+        </div>
+
+    </main>
+
+    <footer class="mt-8 text-slate-600 text-xs">
+        <p>Uses WebRTC. No data is sent to any server.</p>
+    </footer>
+
+    <script>
+        // --- GLOBALS ---
+        lucide.createIcons();
+        let pc; // PeerConnection
+        let dataChannel;
+        let fileToSend;
+        let receivedChunks = [];
+        let receivedSize = 0;
+        let fileMeta = {};
+        let html5QrCode; // QR Scanner instance
+        
+        // ICE Server configuration (Public STUN servers are usually enough for local/direct)
+        const rtcConfig = {
+            iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+        };
+
+        // --- UI NAVIGATION ---
+        function showStep(id) {
+            ['step-mode', 'step-file', 'step-signal', 'step-transfer', 'step-success'].forEach(s => {
+                document.getElementById(s).classList.add('hidden');
+            });
+            document.getElementById(id).classList.remove('hidden');
+        }
+
+        // --- FILE HANDLING (SENDER) ---
+        function handleFileSelect(input) {
+            if (input.files.length > 0) {
+                fileToSend = input.files[0];
+                document.getElementById('fileNameDisplay').innerText = `${fileToSend.name} (${formatBytes(fileToSend.size)})`;
+                document.getElementById('fileNameDisplay').classList.add('text-cyan-400');
+                document.getElementById('genOfferBtn').disabled = false;
+            }
+        }
+
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        // --- QR SCANNING ---
+        function startQrScan() {
+            const inputSection = document.getElementById('remoteSignalInput').parentElement;
+            const scannerSection = document.getElementById('qrScannerSection');
+            const scanBtn = document.querySelector('[onclick="startQrScan()"]');
+            
+            inputSection.style.display = 'none';
+            scannerSection.classList.remove('hidden');
+            scanBtn.style.display = 'none';
+            
+            html5QrCode = new Html5Qrcode("qr-reader");
+            const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+            
+            html5QrCode.start(
+                { facingMode: "environment" }, // Use back camera
+                config,
+                (decodedText) => {
+                    // On success
+                    document.getElementById('remoteSignalInput').value = decodedText;
+                    stopQrScan();
+                    connectPeers(); // Auto-connect if valid
+                },
+                (error) => {
+                    // Ignore scan errors
+                }
+            ).catch((err) => {
+                console.error('QR Scan Error:', err);
+                alert('Failed to start camera. Please allow camera access and try again.');
+                stopQrScan();
+            });
+        }
+
+        function stopQrScan() {
+            if (html5QrCode) {
+                html5QrCode.stop().then(() => {
+                    html5QrCode.clear();
+                    html5QrCode = null;
+                }).catch((err) => console.error('Stop QR Error:', err));
+            }
+            
+            const inputSection = document.getElementById('remoteSignalInput').parentElement;
+            const scannerSection = document.getElementById('qrScannerSection');
+            const scanBtn = document.querySelector('[onclick="startQrScan()"]');
+            
+            inputSection.style.display = 'flex';
+            scannerSection.classList.add('hidden');
+            scanBtn.style.display = 'block';
+        }
+
+        // --- WEBRTC CORE ---
+
+        // 1. Initialize Sender
+        async function initSender() {
+            showStep('step-file');
+            pc = new RTCPeerConnection(rtcConfig);
+            
+            // Create Data Channel
+            dataChannel = pc.createDataChannel("fileTransfer");
+            setupChannelListeners(dataChannel);
+
+            // Handle ICE Candidates
+            pc.onicecandidate = e => {
+                if (!e.candidate) {
+                    // Gathering complete - Show the OFFER code
+                    displaySignal(pc.localDescription, "Scan this on Receiver");
+                }
+            };
+        }
+
+        // 2. Generate Offer (Sender Click)
+        async function generateOffer() {
+            showStep('step-signal');
+            document.getElementById('signalLoader').classList.remove('hidden');
+            document.getElementById('signalTitle').innerText = "Sender: 1. Share Signal";
+            document.getElementById('remoteSignalLabel').innerText = "Sender: 2. Paste Receiver's Reply";
+            
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            // Wait for onicecandidate (null) to trigger displaySignal
+        }
+
+        // 3. Initialize Receiver
+        async function initReceiver() {
+            showStep('step-signal');
+            document.getElementById('signalOutput').classList.add('hidden'); // Hide output initially
+            document.getElementById('signalTitle').innerText = "Receiver: 1. Paste Sender's Signal";
+            document.getElementById('remoteSignalLabel').innerText = "Paste Sender's Code Here:";
+            
+            pc = new RTCPeerConnection(rtcConfig);
+            
+            pc.ondatachannel = e => {
+                dataChannel = e.channel;
+                setupChannelListeners(dataChannel);
+            };
+
+            pc.onicecandidate = e => {
+                if (!e.candidate) {
+                    // Gathering complete - Show the ANSWER code
+                    displaySignal(pc.localDescription, "Scan this on Sender");
+                }
+            };
+        }
+
+        // 4. Connect Peers (Both sides use this button logic differently)
+        async function connectPeers() {
+            const remoteDataStr = document.getElementById('remoteSignalInput').value;
+            if (!remoteDataStr) return alert("Please paste the code first!");
+
+            try {
+                // Decompress base64
+                const remoteDesc = JSON.parse(atob(remoteDataStr));
+
+                if (!pc.currentRemoteDescription) {
+                    await pc.setRemoteDescription(remoteDesc);
+
+                    if (remoteDesc.type === 'offer') {
+                        // If we are Receiver processing an offer, generate Answer
+                        document.getElementById('signalInputSection').classList.add('hidden'); // Hide input
+                        document.getElementById('signalLoader').classList.remove('hidden'); // Show loader
+                        document.getElementById('signalTitle').innerText = "Receiver: 2. Share Reply";
+                        
+                        const answer = await pc.createAnswer();
+                        await pc.setLocalDescription(answer);
+                        // Wait for ICE to finish, then displaySignal is called
+                    }
+                }
+            } catch (e) {
+                alert("Invalid code format. Please try scanning or pasting again.");
+            }
+        }
+
+        // --- SIGNALING HELPERS ---
+        function displaySignal(sdp, instructions) {
+            document.getElementById('signalLoader').classList.add('hidden');
+            document.getElementById('signalOutput').classList.remove('hidden');
+            
+            // Compress to Base64 to make it copy-pasteable
+            const signalString = btoa(JSON.stringify(sdp));
+            
+            document.getElementById('localSignalText').value = signalString;
+            
+            // Generate QR with higher error correction and larger size for better scannability
+            document.getElementById('qrcode').innerHTML = "";
+            new QRCode(document.getElementById("qrcode"), {
+                text: signalString,
+                width: 256,
+                height: 256,
+                colorDark : "#000000",
+                colorLight : "#ffffff",
+                correctLevel : QRCode.CorrectLevel.H  // High error correction for denser data
+            });
+        }
+
+        function copySignal() {
+            const copyText = document.getElementById("localSignalText");
+            copyText.select();
+            document.execCommand("copy"); // Fallback for older browsers
+            // Modern way: navigator.clipboard.writeText(copyText.value);
+            alert("Code copied!");
+        }
+
+        // --- DATA CHANNEL & TRANSFER ---
+        function setupChannelListeners(channel) {
+            channel.onopen = () => {
+                showStep('step-transfer');
+                if (fileToSend) {
+                    sendFile();
+                }
+            };
+            
+            channel.onmessage = handleDataMessage;
+        }
+
+        function sendFile() {
+            // Send Metadata first
+            const meta = {
+                name: fileToSend.name,
+                size: fileToSend.size,
+                type: fileToSend.type
+            };
+            dataChannel.send(JSON.stringify({ type: 'meta', data: meta }));
+
+            // Chunk and send
+            const chunkSize = 16384; // 16KB chunks
+            const fileReader = new FileReader();
+            let offset = 0;
+            
+            document.getElementById('transferStatus').innerText = `Sending ${meta.name}...`;
+
+            fileReader.onload = e => {
+                dataChannel.send(e.target.result);
+                offset += e.target.result.byteLength;
+                
+                // Update UI
+                const percent = (offset / fileToSend.size) * 100;
+                document.getElementById('progressBar').style.width = percent + '%';
+                
+                if (offset < fileToSend.size) {
+                    readSlice(offset);
+                } else {
+                     // Done
+                }
+            };
+
+            const readSlice = o => {
+                const slice = fileToSend.slice(offset, o + chunkSize);
+                fileReader.readAsArrayBuffer(slice);
+            };
+            
+            readSlice(0);
+        }
+
+        function handleDataMessage(event) {
+            const data = event.data;
+
+            if (typeof data === 'string') {
+                // It's metadata
+                const msg = JSON.parse(data);
+                if (msg.type === 'meta') {
+                    fileMeta = msg.data;
+                    document.getElementById('transferStatus').innerText = `Receiving ${fileMeta.name}...`;
+                }
+            } else {
+                // It's a file chunk (ArrayBuffer)
+                receivedChunks.push(data);
+                receivedSize += data.byteLength;
+                
+                // Update UI
+                if (fileMeta.size) {
+                    const percent = (receivedSize / fileMeta.size) * 100;
+                    document.getElementById('progressBar').style.width = percent + '%';
+                    
+                    if (receivedSize >= fileMeta.size) {
+                        saveFile();
+                    }
+                }
+            }
+        }
+
+        function saveFile() {
+            const blob = new Blob(receivedChunks, { type: fileMeta.type });
+            const url = URL.createObjectURL(blob);
+            
+            showStep('step-success');
+            document.getElementById('finalFileName').innerText = fileMeta.name;
+            
+            const btn = document.getElementById('downloadBtn');
+            btn.href = url;
+            btn.download = fileMeta.name;
+            btn.classList.remove('hidden');
+            btn.innerText = `Download ${fileMeta.name}`;
+
+            // Reset for next
+            receivedChunks = [];
+            receivedSize = 0;
+        }
     </script>
 </body>
 </html>
