@@ -1,680 +1,678 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>CryptoVis: GibberLink v2.2 (Material Expressive)</title>
-    
-    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <script src="https://cdn.tailwindcss.com"></script>
-    
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@400;600;800&display=swap');
-        
-        body {
-            font-family: 'Inter', sans-serif; /* Cleaner UI font */
-            background-color: #0f172a;
-            color: #e2e8f0;
-            overscroll-behavior-y: none;
-            height: 100dvh;
-            width: 100%;
-            overflow: hidden;
-        }
-        .font-mono { font-family: 'JetBrains Mono', monospace; }
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>CryptoVis: GibberLink v2.2 (Material Expressive)</title>
+    
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@400;600;800&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif; /* Cleaner UI font */
+            background-color: #0f172a;
+            color: #e2e8f0;
+            overscroll-behavior-y: none;
+            height: 100dvh;
+            width: 100%;
+            overflow: hidden;
+        }
+        .font-mono { font-family: 'JetBrains Mono', monospace; }
 
-        #root {
-            height: 100dvh;
-            width: 100%;
-            overflow: hidden;
-            display: flex;
-            flex-direction: column;
-        }
+        #root {
+            height: 100dvh;
+            width: 100%;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
 
-        /* Backgrounds & Glass */
-        .matrix-bg {
-            background-color: #020617;
-            background-image: 
-                radial-gradient(circle at 50% 0%, #1e293b 0%, transparent 70%),
-                radial-gradient(#1e293b 1px, transparent 1px);
-            background-size: 100% 100%, 30px 30px;
-        }
-        
-        .glass-panel {
-            background: rgba(15, 23, 42, 0.6);
-            backdrop-filter: blur(16px);
-            -webkit-backdrop-filter: blur(16px);
-            border: 1px solid rgba(255, 255, 255, 0.08);
-        }
+        /* Backgrounds & Glass */
+        .matrix-bg {
+            background-color: #020617;
+            background-image: 
+                radial-gradient(circle at 50% 0%, #1e293b 0%, transparent 70%),
+                radial-gradient(#1e293b 1px, transparent 1px);
+            background-size: 100% 100%, 30px 30px;
+        }
+        
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.6);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
 
-        .nav-pill {
-            background: rgba(2, 6, 23, 0.85);
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            box-shadow: 0 10px 40px -10px rgba(0,0,0,0.5);
-        }
+        .nav-pill {
+            background: rgba(2, 6, 23, 0.9);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 10px 40px -10px rgba(0,0,0,0.5);
+        }
 
-        .darth-mode .nav-pill {
-            background: rgba(20, 0, 0, 0.9);
-            border-color: rgba(239, 68, 68, 0.3);
-            box-shadow: 0 10px 40px -10px rgba(220, 38, 38, 0.2);
-        }
+        .darth-mode .nav-pill {
+            background: rgba(20, 0, 0, 0.9);
+            border-color: rgba(239, 68, 68, 0.3);
+            box-shadow: 0 10px 40px -10px rgba(220, 38, 38, 0.2);
+        }
 
-        /* Animations */
-        .scan-line {
-            width: 100%; height: 2px; background: #06b6d4; position: absolute;
-            animation: scan 2s linear infinite; box-shadow: 0 0 15px #06b6d4;
-        }
-        .darth-scan-line { background: #ef4444; box-shadow: 0 0 15px #ef4444; }
-        
-        @keyframes scan { 0% { top: 0%; opacity: 0; } 50% { opacity: 1; } 100% { top: 100%; opacity: 0; } }
-        
-        .anim-enter { animation: enterUp 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
-        .anim-pop { animation: popIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); }
-        
-        @keyframes enterUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-        @keyframes popIn { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: scale(1); } }
-        
-        /* Inputs & Sliders */
-        input[type=range] { -webkit-appearance: none; width: 100%; background: transparent; }
-        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; height: 16px; width: 16px; border-radius: 50%; background: currentColor; cursor: pointer; margin-top: -6px; box-shadow: 0 2px 6px rgba(0,0,0,0.3); }
-        input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 4px; cursor: pointer; background: rgba(255,255,255,0.1); border-radius: 2px; }
-        
-        .scrollbar-hide::-webkit-scrollbar { display: none; }
-        .touch-scroll { -webkit-overflow-scrolling: touch; }
+        /* Animations */
+        .scan-line {
+            width: 100%; height: 2px; background: #06b6d4; position: absolute;
+            animation: scan 2s linear infinite; box-shadow: 0 0 15px #06b6d4;
+        }
+        .darth-scan-line { background: #ef4444; box-shadow: 0 0 15px #ef4444; }
+        
+        @keyframes scan { 0% { top: 0%; opacity: 0; } 50% { opacity: 1; } 100% { top: 100%; opacity: 0; } }
+        
+        .anim-enter { animation: enterUp 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
+        .anim-pop { animation: popIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); }
+        
+        @keyframes enterUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes popIn { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: scale(1); } }
+        
+        /* Inputs & Sliders */
+        input[type=range] { -webkit-appearance: none; width: 100%; background: transparent; }
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; height: 16px; width: 16px; border-radius: 50%; background: currentColor; cursor: pointer; margin-top: -6px; box-shadow: 0 2px 6px rgba(0,0,0,0.3); }
+        input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 4px; cursor: pointer; background: rgba(255,255,255,0.1); border-radius: 2px; }
+        
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        .touch-scroll { -webkit-overflow-scrolling: touch; }
 
-        /* Typing */
-        .typing-animation { overflow: hidden; border-right: .15em solid #06b6d4; white-space: nowrap; animation: typing 3.5s steps(40, end), blink-caret .75s step-end infinite; }
-        @keyframes typing { from { width: 0 } to { width: 100% } }
-        @keyframes blink-caret { from, to { border-color: transparent } 50% { border-color: currentColor; } }
-    </style>
+        /* Typing */
+        .typing-animation { overflow: hidden; border-right: .15em solid #06b6d4; white-space: nowrap; animation: typing 3.5s steps(40, end), blink-caret .75s step-end infinite; }
+        @keyframes typing { from { width: 0 } to { width: 100% } }
+        @keyframes blink-caret { from, to { border-color: transparent } 50% { border-color: currentColor; } }
+    </style>
 </head>
 <body class="matrix-bg selection:bg-cyan-500 selection:text-white">
-    <div id="root"></div>
-    <script type="text/babel">
-        const { useState, useEffect, useRef, useMemo } = React;
-        
-        // --- CONSTANTS & CONFIG ---
-        const PROTOCOL = {
-            VERSION: '2.2',
-            QR_CHUNK_SIZE: 350,
-            DEFAULT_QR_FPS: 200
-        };
+    <div id="root"></div>
+    <script type="text/babel">
+        const { useState, useEffect, useRef, useMemo } = React;
+        
+        // --- CONSTANTS & CONFIG ---
+        const PROTOCOL = {
+            VERSION: '2.2',
+            QR_CHUNK_SIZE: 350,
+            DEFAULT_QR_FPS: 200
+        };
 
-        // --- ICONS ---
-        const Icon = ({ p, size=24, className="" }) => (
-            <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>{p}</svg>
-        );
-        const icons = {
-            shield: <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />,
-            skull: <><path d="M12 2c-4 0-8 3-8 8 0 1.5.5 3 1.5 4C4 16 3 22 3 22h18s-1-6-2.5-8c1-1 1.5-2.5 1.5-4 0-5-4-8-8-8z"/><path d="M8 10h.01"/><path d="M16 10h.01"/><path d="M10 14h4"/></>,
-            lock: <><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></>,
-            unlock: <><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 9.9-1" /></>,
-            eye: <><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></>,
-            send: <><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></>,
-            x: <><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>,
-            bug: <><rect x="8" y="6" width="8" height="12" rx="4"/><path d="M12 12v.01"/><path d="M4 14h4"/><path d="M16 14h4"/><path d="M4 10h4"/><path d="M16 10h4"/><path d="M4 18h4"/><path d="M16 18h4"/></>,
-            connect: <><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" /><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" /></>,
-            message: <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />,
-            qr: <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-        };
+        // --- ICONS ---
+        const Icon = ({ p, size=24, className="" }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>{p}</svg>
+        );
+        const icons = {
+            shield: <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />,
+            skull: <><path d="M12 2c-4 0-8 3-8 8 0 1.5.5 3 1.5 4C4 16 3 22 3 22h18s-1-6-2.5-8c1-1 1.5-2.5 1.5-4 0-5-4-8-8-8z"/><path d="M8 10h.01"/><path d="M16 10h.01"/><path d="M10 14h4"/></>,
+            lock: <><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></>,
+            unlock: <><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 9.9-1" /></>,
+            eye: <><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></>,
+            send: <><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></>,
+            x: <><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>,
+            bug: <><rect x="8" y="6" width="8" height="12" rx="4"/><path d="M12 12v.01"/><path d="M4 14h4"/><path d="M16 14h4"/><path d="M4 10h4"/><path d="M16 10h4"/><path d="M4 18h4"/><path d="M16 18h4"/></>,
+            connect: <><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" /><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" /></>,
+            message: <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />,
+            qr: <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+        };
 
-        // --- CRYPTO UTILS ---
-        const buf2hex = (buf) => [...new Uint8Array(buf)].map(x => x.toString(16).padStart(2, '0')).join('');
-        const hex2buf = (hex) => new Uint8Array(hex.match(/.{1,2}/g).map(byte => parseInt(byte, 16))).buffer;
-        const generateFingerprint = async (buffer) => {
-            const hash = await window.crypto.subtle.digest('SHA-256', buffer);
-            const arr = new Uint8Array(hash);
-            const emojis = ["🐶","🐱","🐭","🐹","🐰","🦊","🐻","🐼","🐨","🐯","🦁","🐮","🐷","🐸","🐵","🐔","🐧","🐦","🐤","🦆","🦅","🦉","🦇","🐺","🐗","🐴","🦄","🐝","🐛","🦋","🐌","🐞","🐜","🕷","🕸","🐢","🐍","🦎","🦂","🦀","🦑","🐙","🦐","🐠","🐟","🐡","🐬","🦈","🐳","🐋","🐊","🐆","🐅","🐃","🐂","🐄","🐪","🐫","🐘","🦏","🦍","🐎","🐖","🐐","🐏","🐑","🐕","🐩","🐈","🐓","🦃","🕊","🐇","🐁","🐀","🐿","🐾","🐉","🐲","🌵","🎄","🌲","🌳","🌴"];
-            let em = "";
-            for(let i=0; i<4; i++) em += emojis[arr[i] % emojis.length];
-            const hex = buf2hex(hash).substring(0, 8).toUpperCase();
-            return { emoji: em, hex: hex, full: buf2hex(hash) };
-        };
+        // --- CRYPTO UTILS ---
+        const buf2hex = (buf) => [...new Uint8Array(buf)].map(x => x.toString(16).padStart(2, '0')).join('');
+        const hex2buf = (hex) => new Uint8Array(hex.match(/.{1,2}/g).map(byte => parseInt(byte, 16))).buffer;
+        const generateFingerprint = async (buffer) => {
+            const hash = await window.crypto.subtle.digest('SHA-256', buffer);
+            const arr = new Uint8Array(hash);
+            const emojis = ["🐶","🐱","🐭","🐹","🐰","🦊","🐻","🐼","🐨","🐯","🦁","🐮","🐷","🐸","🐵","🐔","🐧","🐦","🐤","🦆","🦅","🦉","🦇","🐺","🐗","🐴","🦄","🐝","🐛","🦋","🐌","🐞","🐜","🕷","🕸","🐢","🐍","🦎","🦂","🦀","🦑","🐙","🦐","🐠","🐟","🐡","🐬","🦈","🐳","🐋","🐊","🐆","🐅","🐃","🐂","🐄","🐪","🐫","🐘","🦏","🦍","🐎","🐖","🐐","🐏","🐑","🐕","🐩","🐈","🐓","🦃","🕊","🐇","🐁","🐀","🐿","🐾","🐉","🐲","🌵","🎄","🌲","🌳","🌴"];
+            let em = "";
+            for(let i=0; i<4; i++) em += emojis[arr[i] % emojis.length];
+            const hex = buf2hex(hash).substring(0, 8).toUpperCase();
+            return { emoji: em, hex: hex, full: buf2hex(hash) };
+        };
 
-        // --- COMPONENTS ---
+        // --- COMPONENTS ---
 
-        const QRDisplay = ({ data, label, subLabel, color="black" }) => {
-            const canvasRef = useRef(null);
-            useEffect(() => {
-                if (canvasRef.current && data) {
-                    new QRious({ element: canvasRef.current, value: data, size: 256, level: 'L', foreground: 'black', background: 'white' });
-                }
-            }, [data, color]);
-            return (
-                <div className="bg-white p-3 rounded-2xl shadow-xl flex flex-col items-center anim-pop">
-                    <canvas ref={canvasRef} className="max-w-full h-auto border-4 border-white rounded-lg" />
-                    {label && (
-                        <div className="mt-3 text-center w-full">
-                            <p className="text-slate-900 font-bold text-sm tracking-tight">{label}</p>
-                            {subLabel && <p className="text-slate-400 text-[10px] font-mono uppercase truncate">{subLabel}</p>}
-                        </div>
-                    )}
-                </div>
-            );
-        };
+        const QRDisplay = ({ data, label, subLabel, color="black" }) => {
+            const canvasRef = useRef(null);
+            useEffect(() => {
+                if (canvasRef.current && data) {
+                    new QRious({ element: canvasRef.current, value: data, size: 256, level: 'L', foreground: 'black', background: 'white' });
+                }
+            }, [data, color]);
+            return (
+                <div className="bg-white p-3 rounded-2xl shadow-xl flex flex-col items-center anim-pop w-full">
+                    <canvas ref={canvasRef} className="max-w-full h-auto border-4 border-white rounded-lg" />
+                    {label && (
+                        <div className="mt-3 text-center w-full">
+                            <p className="text-slate-900 font-bold text-sm tracking-tight">{label}</p>
+                            {subLabel && <p className="text-slate-400 text-[10px] font-mono uppercase truncate">{subLabel}</p>}
+                        </div>
+                    )}
+                </div>
+            );
+        };
 
-        const AnimatedQR = ({ chunks, label, onClose, theme="cyan" }) => {
-            const [index, setIndex] = useState(0);
-            const [speed, setSpeed] = useState(PROTOCOL.DEFAULT_QR_FPS);
-            const [isPaused, setIsPaused] = useState(false);
-            const isMultiChunk = chunks.length > 1;
-            
-            useEffect(() => {
-                if (isPaused || !isMultiChunk) return;
-                const interval = setInterval(() => {
-                    setIndex(prev => (prev + 1) % chunks.length);
-                }, speed);
-                return () => clearInterval(interval);
-            }, [chunks, speed, isPaused, isMultiChunk]);
+        const AnimatedQR = ({ chunks, label, onClose, theme="cyan" }) => {
+            const [index, setIndex] = useState(0);
+            const [speed, setSpeed] = useState(PROTOCOL.DEFAULT_QR_FPS);
+            const [isPaused, setIsPaused] = useState(false);
+            const isMultiChunk = chunks.length > 1;
+            
+            useEffect(() => {
+                if (isPaused || !isMultiChunk) return;
+                const interval = setInterval(() => {
+                    setIndex(prev => (prev + 1) % chunks.length);
+                }, speed);
+                return () => clearInterval(interval);
+            }, [chunks, speed, isPaused, isMultiChunk]);
 
-            const btnClass = theme === "red" ? "bg-red-600 hover:bg-red-500" : "bg-cyan-600 hover:bg-cyan-500";
-            const accentText = theme === "red" ? "text-red-500" : "text-cyan-500";
+            const btnClass = theme === "red" ? "bg-red-600 hover:bg-red-500" : "bg-cyan-600 hover:bg-cyan-500";
+            const accentText = theme === "red" ? "text-red-500" : "text-cyan-500";
 
-            return (
-                <div className="fixed inset-0 z-[100] bg-slate-950/95 backdrop-blur-sm flex flex-col items-center justify-center p-6 anim-enter">
-                    <div className="relative w-full max-w-sm">
-                        <QRDisplay 
-                            data={chunks[index]} 
-                            label={label} 
-                            subLabel={isMultiChunk ? `Part ${index+1}/${chunks.length}` : 'Single Block'} 
-                        />
-                        
-                        {/* Only show controls if there are multiple chunks */}
-                        {isMultiChunk && (
-                            <div className="mt-6 bg-white/5 p-4 rounded-2xl border border-white/10 space-y-4 anim-enter">
-                                <div className="flex items-center gap-3">
-                                    <span className="text-[10px] font-bold text-slate-500 w-6">SCRUB</span>
-                                    <input type="range" min="0" max={chunks.length-1} value={index}
-                                        onChange={(e)=>{setIndex(parseInt(e.target.value)); setIsPaused(true);}}
-                                        className={theme === "red" ? "text-red-500" : "text-cyan-500"}
-                                    />
-                                </div>
-                                <div className="flex items-center gap-3">
-                                    <span className="text-[10px] font-bold text-slate-500 w-6">SPEED</span>
-                                    <input type="range" min="50" max="1000" step="50" value={speed}
-                                        onChange={(e)=>setSpeed(parseInt(e.target.value))}
-                                        className={theme === "red" ? "text-red-500" : "text-cyan-500"}
-                                    />
-                                </div>
-                                <div className="flex justify-center gap-6 pt-2">
-                                    <button onClick={()=>setIndex(prev=>(prev-1+chunks.length)%chunks.length)} className="p-2 rounded-full bg-slate-800 text-slate-300 hover:bg-slate-700 transition-colors"><Icon p={icons.send} className="rotate-180 scale-75"/></button>
-                                    <button onClick={()=>setIsPaused(!isPaused)} className={`p-4 rounded-full text-white shadow-lg transition-transform active:scale-95 ${btnClass}`}>
-                                        <Icon p={isPaused ? icons.send : icons.send} className={isPaused ? '' : 'rotate-12'} />
-                                    </button>
-                                    <button onClick={()=>setIndex(prev=>(prev+1)%chunks.length)} className="p-2 rounded-full bg-slate-800 text-slate-300 hover:bg-slate-700 transition-colors"><Icon p={icons.send} className="scale-75"/></button>
-                                </div>
-                            </div>
-                        )}
-                        
-                        <button onClick={onClose} className="mt-8 mx-auto w-12 h-12 rounded-full bg-slate-800/50 flex items-center justify-center text-white/50 hover:bg-slate-800 hover:text-white transition-all border border-white/10">
-                            <Icon p={icons.x} />
-                        </button>
-                    </div>
-                </div>
-            );
-        };
+            return (
+                <div className="fixed inset-0 z-[100] bg-slate-950/95 backdrop-blur-sm flex flex-col items-center justify-center p-6 anim-enter">
+                    <div className="relative w-full max-w-sm">
+                        <QRDisplay 
+                            data={chunks[index]} 
+                            label={label} 
+                            subLabel={isMultiChunk ? `Part ${index+1}/${chunks.length}` : 'Single Block'} 
+                        />
+                        
+                        {/* Only show controls if there are multiple chunks */}
+                        {isMultiChunk && (
+                            <div className="mt-6 bg-white/5 p-4 rounded-2xl border border-white/10 space-y-4 anim-enter">
+                                <div className="flex items-center gap-3">
+                                    <span className="text-[10px] font-bold text-slate-500 w-6">SCRUB</span>
+                                    <input type="range" min="0" max={chunks.length-1} value={index}
+                                        onChange={(e)=>{setIndex(parseInt(e.target.value)); setIsPaused(true);}}
+                                        className={theme === "red" ? "text-red-500" : "text-cyan-500"}
+                                    />
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    <span className="text-[10px] font-bold text-slate-500 w-6">SPEED</span>
+                                    <input type="range" min="50" max="1000" step="50" value={speed}
+                                        onChange={(e)=>setSpeed(parseInt(e.target.value))}
+                                        className={theme === "red" ? "text-red-500" : "text-cyan-500"}
+                                    />
+                                </div>
+                                <div className="flex justify-center gap-6 pt-2">
+                                    <button onClick={()=>setIndex(prev=>(prev-1+chunks.length)%chunks.length)} className="p-2 rounded-full bg-slate-800 text-slate-300 hover:bg-slate-700 transition-colors"><Icon p={icons.send} className="rotate-180 scale-75"/></button>
+                                    <button onClick={()=>setIsPaused(!isPaused)} className={`p-4 rounded-full text-white shadow-lg transition-transform active:scale-95 ${btnClass}`}>
+                                        <Icon p={isPaused ? icons.send : icons.send} className={isPaused ? '' : 'rotate-12'} />
+                                    </button>
+                                    <button onClick={()=>setIndex(prev=>(prev+1)%chunks.length)} className="p-2 rounded-full bg-slate-800 text-slate-300 hover:bg-slate-700 transition-colors"><Icon p={icons.send} className="scale-75"/></button>
+                                </div>
+                            </div>
+                        )}
+                        
+                        <button onClick={onClose} className="mt-8 mx-auto w-12 h-12 rounded-full bg-slate-800/50 flex items-center justify-center text-white/50 hover:bg-slate-800 hover:text-white transition-all border border-white/10">
+                            <Icon p={icons.x} />
+                        </button>
+                    </div>
+                </div>
+            );
+        };
 
-        const QRScanner = ({ onScan, onClose, isDarth }) => {
-            const videoRef = useRef(null);
-            const canvasRef = useRef(null);
-            const [error, setError] = useState(null);
+        const QRScanner = ({ onScan, onClose, isDarth }) => {
+            const videoRef = useRef(null);
+            const canvasRef = useRef(null);
+            const [error, setError] = useState(null);
 
-            useEffect(() => {
-                let stream;
-                let animFrame;
-                navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
-                    .then(s => {
-                        stream = s;
-                        if(videoRef.current) {
-                            videoRef.current.srcObject = s;
-                            videoRef.current.play();
-                            requestAnimationFrame(tick);
-                        }
-                    })
-                    .catch(err => setError("Camera access denied."));
+            useEffect(() => {
+                let stream;
+                let animFrame;
+                navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+                    .then(s => {
+                        stream = s;
+                        if(videoRef.current) {
+                            videoRef.current.srcObject = s;
+                            videoRef.current.play();
+                            requestAnimationFrame(tick);
+                        }
+                    })
+                    .catch(err => setError("Camera access denied."));
 
-                const tick = () => {
-                    if (videoRef.current && videoRef.current.readyState === 4) {
-                        const cvs = canvasRef.current;
-                        const vid = videoRef.current;
-                        cvs.width = vid.videoWidth;
-                        cvs.height = vid.videoHeight;
-                        const ctx = cvs.getContext("2d", {willReadFrequently: true});
-                        ctx.drawImage(vid, 0, 0);
-                        const img = ctx.getImageData(0, 0, cvs.width, cvs.height);
-                        const code = jsQR(img.data, img.width, img.height);
-                        if (code) onScan(code.data);
-                    }
-                    animFrame = requestAnimationFrame(tick);
-                };
-                return () => {
-                    if(stream) stream.getTracks().forEach(t => t.stop());
-                    cancelAnimationFrame(animFrame);
-                };
-            }, []);
+                const tick = () => {
+                    if (videoRef.current && videoRef.current.readyState === 4) {
+                        const cvs = canvasRef.current;
+                        const vid = videoRef.current;
+                        cvs.width = vid.videoWidth;
+                        cvs.height = vid.videoHeight;
+                        const ctx = cvs.getContext("2d", {willReadFrequently: true});
+                        ctx.drawImage(vid, 0, 0);
+                        const img = ctx.getImageData(0, 0, cvs.width, cvs.height);
+                        const code = jsQR(img.data, img.width, img.height);
+                        if (code) onScan(code.data);
+                    }
+                    animFrame = requestAnimationFrame(tick);
+                };
+                return () => {
+                    if(stream) stream.getTracks().forEach(t => t.stop());
+                    cancelAnimationFrame(animFrame);
+                };
+            }, []);
 
-            return (
-                <div className="fixed inset-0 z-[100] bg-black flex flex-col items-center justify-center p-4 anim-enter">
-                    {error ? (
-                        <div className="text-red-500 text-center bg-slate-900 p-6 rounded-2xl border border-red-900/50">
-                            <p className="mb-4 font-bold">{error}</p>
-                            <button onClick={onClose} className="bg-slate-800 px-6 py-2 rounded-full text-sm">Close</button>
-                        </div>
-                    ) : (
-                        <div className={`relative w-full max-w-sm aspect-square bg-slate-900 rounded-[2rem] overflow-hidden border-4 shadow-2xl ${isDarth ? 'border-red-500/50 shadow-red-900/40' : 'border-cyan-500/50 shadow-cyan-900/40'}`}>
-                            <video ref={videoRef} className="absolute inset-0 w-full h-full object-cover" playsInline muted />
-                            <canvas ref={canvasRef} className="hidden" />
-                            <div className={isDarth ? "scan-line darth-scan-line" : "scan-line"}></div>
-                            
-                            <div className="absolute inset-0 border-[30px] border-black/30 rounded-[2rem] pointer-events-none"></div>
-                            
-                            {/* Scanner Reticle Corners */}
-                            <div className="absolute top-6 left-6 w-8 h-8 border-t-4 border-l-4 border-white/80 rounded-tl-lg"></div>
-                            <div className="absolute top-6 right-6 w-8 h-8 border-t-4 border-r-4 border-white/80 rounded-tr-lg"></div>
-                            <div className="absolute bottom-6 left-6 w-8 h-8 border-b-4 border-l-4 border-white/80 rounded-bl-lg"></div>
-                            <div className="absolute bottom-6 right-6 w-8 h-8 border-b-4 border-r-4 border-white/80 rounded-br-lg"></div>
-                        </div>
-                    )}
-                    <button onClick={onClose} className="mt-8 px-6 py-3 rounded-full bg-white/10 backdrop-blur-md text-white font-semibold flex items-center gap-2 hover:bg-white/20 transition-all">
-                        <Icon p={icons.x} size={20} /> Cancel Scan
-                    </button>
-                </div>
-            );
-        };
+            return (
+                <div className="fixed inset-0 z-[100] bg-black flex flex-col items-center justify-center p-4 anim-enter">
+                    {error ? (
+                        <div className="text-red-500 text-center bg-slate-900 p-6 rounded-2xl border border-red-900/50">
+                            <p className="mb-4 font-bold">{error}</p>
+                            <button onClick={onClose} className="bg-slate-800 px-6 py-2 rounded-full text-sm">Close</button>
+                        </div>
+                    ) : (
+                        <div className={`relative w-full max-w-sm aspect-square bg-slate-900 rounded-[2rem] overflow-hidden border-4 shadow-2xl ${isDarth ? 'border-red-500/50 shadow-red-900/40' : 'border-cyan-500/50 shadow-cyan-900/40'}`}>
+                            <video ref={videoRef} className="absolute inset-0 w-full h-full object-cover" playsInline muted />
+                            <canvas ref={canvasRef} className="hidden" />
+                            <div className={isDarth ? "scan-line darth-scan-line" : "scan-line"}></div>
+                            
+                            <div className="absolute inset-0 border-[30px] border-black/30 rounded-[2rem] pointer-events-none"></div>
+                            
+                            {/* Scanner Reticle Corners */}
+                            <div className="absolute top-6 left-6 w-8 h-8 border-t-4 border-l-4 border-white/80 rounded-tl-lg"></div>
+                            <div className="absolute top-6 right-6 w-8 h-8 border-t-4 border-r-4 border-white/80 rounded-tr-lg"></div>
+                            <div className="absolute bottom-6 left-6 w-8 h-8 border-b-4 border-l-4 border-white/80 rounded-bl-lg"></div>
+                            <div className="absolute bottom-6 right-6 w-8 h-8 border-b-4 border-r-4 border-white/80 rounded-br-lg"></div>
+                        </div>
+                    )}
+                    <button onClick={onClose} className="mt-8 px-6 py-3 rounded-full bg-white/10 backdrop-blur-md text-white font-semibold flex items-center gap-2 hover:bg-white/20 transition-all">
+                        <Icon p={icons.x} size={20} /> Cancel Scan
+                    </button>
+                </div>
+            );
+        };
 
-        // --- MAIN APP ---
-        const App = () => {
-            const [mode, setMode] = useState('NORMAL');
-            const [activeTab, setActiveTab] = useState('CONNECT');
-            const [keys, setKeys] = useState(null);
-            const [identityPayload, setIdentityPayload] = useState(null);
-            const [handshakeReply, setHandshakeReply] = useState(null);
-            const [sessionKey, setSessionKey] = useState(null);
-            const [fingerprint, setFingerprint] = useState(null);
-            const [scanner, setScanner] = useState(null);
-            const [chat, setChat] = useState([]);
-            const [msg, setMsg] = useState("");
-            const [fileTransfer, setFileTransfer] = useState(null);
-            const [interceptedPacket, setInterceptedPacket] = useState(null);
-            const lastScanRef = useRef("");
-            const chatEndRef = useRef(null);
-            
-            useEffect(() => {
-                if (scanner) lastScanRef.current = "";
-            }, [scanner]);
-            
-            useEffect(() => {
-                chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-            }, [chat]);
+        // --- MAIN APP ---
+        const App = () => {
+            const [mode, setMode] = useState('NORMAL');
+            const [activeTab, setActiveTab] = useState('CONNECT');
+            const [keys, setKeys] = useState(null);
+            const [identityPayload, setIdentityPayload] = useState(null);
+            const [handshakeReply, setHandshakeReply] = useState(null);
+            const [sessionKey, setSessionKey] = useState(null);
+            const [fingerprint, setFingerprint] = useState(null);
+            const [scanner, setScanner] = useState(null);
+            const [chat, setChat] = useState([]);
+            const [msg, setMsg] = useState("");
+            const [fileTransfer, setFileTransfer] = useState(null);
+            const [interceptedPacket, setInterceptedPacket] = useState(null);
+            const lastScanRef = useRef("");
+            const chatEndRef = useRef(null);
+            
+            useEffect(() => {
+                if (scanner) lastScanRef.current = "";
+            }, [scanner]);
+            
+            useEffect(() => {
+                chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+            }, [chat]);
 
-            const genKeys = async () => {
-                setKeys(null); setSessionKey(null); setFingerprint(null); setChat([]);
-                const rsa = await window.crypto.subtle.generateKey(
-                    { name: "RSA-OAEP", modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: "SHA-256" },
-                    true, ["encrypt", "decrypt"]
-                );
-                const ecdh = await window.crypto.subtle.generateKey(
-                    { name: "ECDH", namedCurve: "P-256" },
-                    true, ["deriveKey", "deriveBits"]
-                );
-                setKeys({ rsa, ecdh });
-                const rsaExp = await window.crypto.subtle.exportKey("spki", rsa.publicKey);
-                const rsaStr = btoa(String.fromCharCode(...new Uint8Array(rsaExp)));
-                const myFp = await generateFingerprint(rsaExp);
-                setIdentityPayload({
-                    t: "ID",
-                    k: rsaStr,
-                    fp: myFp.hex
-                });
-            };
-            useEffect(() => { genKeys(); }, []);
-            
-            const handleScan = async (raw) => {
-                if (raw === lastScanRef.current) return;
-                lastScanRef.current = raw;
-                if (mode === 'DARTH') {
-                    setScanner(null);
-                    setInterceptedPacket({ raw, time: new Date().toLocaleTimeString() });
-                    return;
-                }
-                try {
-                    const p = JSON.parse(raw);
-                    if (p.t === "ID") {
-                        const kData = Uint8Array.from(atob(p.k), c => c.charCodeAt(0));
-                        const partnerRsa = await window.crypto.subtle.importKey(
-                            "spki", kData, { name: "RSA-OAEP", hash: "SHA-256" }, true, ["encrypt"]
-                        );
-                        const myEcdhRaw = await window.crypto.subtle.exportKey("raw", keys.ecdh.publicKey);
-                        const encEcdh = await window.crypto.subtle.encrypt(
-                            { name: "RSA-OAEP" }, partnerRsa, myEcdhRaw
-                        );
-                        const reply = { t: "HSH", d: buf2hex(encEcdh) };
-                        setHandshakeReply(JSON.stringify(reply));
-                        setScanner(null);
-                        alert(`Partner Identity Scanned!\nFingerprint: ${p.fp}\n\nVerify this matches their screen!`);
-                    }
-                    else if (p.t === "HSH") {
-                        if (!keys) return;
-                        const encBuf = hex2buf(p.d);
-                        const partnerEcdhRaw = await window.crypto.subtle.decrypt(
-                            { name: "RSA-OAEP" }, keys.rsa.privateKey, encBuf
-                        );
-                        const partnerEcdhKey = await window.crypto.subtle.importKey(
-                            "raw", partnerEcdhRaw, { name: "ECDH", namedCurve: "P-256" }, true, []
-                        );
-                        const sharedBits = await window.crypto.subtle.deriveBits(
-                            { name: "ECDH", public: partnerEcdhKey },
-                            keys.ecdh.privateKey,
-                            256
-                        );
-                        const hkdfKey = await window.crypto.subtle.importKey(
-                            "raw", sharedBits, { name: "HKDF" }, false, ["deriveKey"]
-                        );
-                        const sessionKey = await window.crypto.subtle.deriveKey(
-                            {
-                                name: "HKDF",
-                                hash: "SHA-256",
-                                salt: new Uint8Array(),
-                                info: new TextEncoder().encode("GibberLinkv2_Session")
-                            },
-                            hkdfKey,
-                            { name: "AES-GCM", length: 256 },
-                            false,
-                            ["encrypt", "decrypt"]
-                        );
-                        const fp = await generateFingerprint(sharedBits);
-                        setSessionKey(sessionKey);
-                        setFingerprint(fp);
-                        setScanner(null);
-                        setActiveTab('VERIFY');
-                        alert("Handshake Complete. Secure Tunnel Established.");
-                    }
-                    else if (p.iv) {
-                        if (!sessionKey) throw new Error("No secure session.");
-                        const iv = hex2buf(p.iv);
-                        const ct = hex2buf(p.d);
-                        const pt = await window.crypto.subtle.decrypt(
-                            { name: "AES-GCM", iv }, sessionKey, ct
-                        );
-                        const text = new TextDecoder().decode(pt);
-                        setChat(prev => [...prev, { from: 'Partner', text }]);
-                        setScanner(null);
-                        setActiveTab('CHAT');
-                    }
-                } catch (e) {
-                    console.error(e);
-                    alert("Scan Error or Decryption Failed.");
-                }
-            };
+            const genKeys = async () => {
+                setKeys(null); setSessionKey(null); setFingerprint(null); setChat([]);
+                const rsa = await window.crypto.subtle.generateKey(
+                    { name: "RSA-OAEP", modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: "SHA-256" },
+                    true, ["encrypt", "decrypt"]
+                );
+                const ecdh = await window.crypto.subtle.generateKey(
+                    { name: "ECDH", namedCurve: "P-256" },
+                    true, ["deriveKey", "deriveBits"]
+                );
+                setKeys({ rsa, ecdh });
+                const rsaExp = await window.crypto.subtle.exportKey("spki", rsa.publicKey);
+                const rsaStr = btoa(String.fromCharCode(...new Uint8Array(rsaExp)));
+                const myFp = await generateFingerprint(rsaExp);
+                setIdentityPayload({
+                    t: "ID",
+                    k: rsaStr,
+                    fp: myFp.hex
+                });
+            };
+            useEffect(() => { genKeys(); }, []);
+            
+            const handleScan = async (raw) => {
+                if (raw === lastScanRef.current) return;
+                lastScanRef.current = raw;
+                if (mode === 'DARTH') {
+                    setScanner(null);
+                    setInterceptedPacket({ raw, time: new Date().toLocaleTimeString() });
+                    return;
+                }
+                try {
+                    const p = JSON.parse(raw);
+                    if (p.t === "ID") {
+                        const kData = Uint8Array.from(atob(p.k), c => c.charCodeAt(0));
+                        const partnerRsa = await window.crypto.subtle.importKey(
+                            "spki", kData, { name: "RSA-OAEP", hash: "SHA-256" }, true, ["encrypt"]
+                        );
+                        const myEcdhRaw = await window.crypto.subtle.exportKey("raw", keys.ecdh.publicKey);
+                        const encEcdh = await window.crypto.subtle.encrypt(
+                            { name: "RSA-OAEP" }, partnerRsa, myEcdhRaw
+                        );
+                        const reply = { t: "HSH", d: buf2hex(encEcdh) };
+                        setHandshakeReply(JSON.stringify(reply));
+                        setScanner(null);
+                        alert(`Partner Identity Scanned!\nFingerprint: ${p.fp}\n\nVerify this matches their screen!`);
+                    }
+                    else if (p.t === "HSH") {
+                        if (!keys) return;
+                        const encBuf = hex2buf(p.d);
+                        const partnerEcdhRaw = await window.crypto.subtle.decrypt(
+                            { name: "RSA-OAEP" }, keys.rsa.privateKey, encBuf
+                        );
+                        const partnerEcdhKey = await window.crypto.subtle.importKey(
+                            "raw", partnerEcdhRaw, { name: "ECDH", namedCurve: "P-256" }, true, []
+                        );
+                        const sharedBits = await window.crypto.subtle.deriveBits(
+                            { name: "ECDH", public: partnerEcdhKey },
+                            keys.ecdh.privateKey,
+                            256
+                        );
+                        const hkdfKey = await window.crypto.subtle.importKey(
+                            "raw", sharedBits, { name: "HKDF" }, false, ["deriveKey"]
+                        );
+                        const sessionKey = await window.crypto.subtle.deriveKey(
+                            {
+                                name: "HKDF",
+                                hash: "SHA-256",
+                                salt: new Uint8Array(),
+                                info: new TextEncoder().encode("GibberLinkv2_Session")
+                            },
+                            hkdfKey,
+                            { name: "AES-GCM", length: 256 },
+                            false,
+                            ["encrypt", "decrypt"]
+                        );
+                        const fp = await generateFingerprint(sharedBits);
+                        setSessionKey(sessionKey);
+                        setFingerprint(fp);
+                        setScanner(null);
+                        setActiveTab('VERIFY');
+                        alert("Handshake Complete. Secure Tunnel Established.");
+                    }
+                    else if (p.iv) {
+                        if (!sessionKey) throw new Error("No secure session.");
+                        const iv = hex2buf(p.iv);
+                        const ct = hex2buf(p.d);
+                        const pt = await window.crypto.subtle.decrypt(
+                            { name: "AES-GCM", iv }, sessionKey, ct
+                        );
+                        const text = new TextDecoder().decode(pt);
+                        setChat(prev => [...prev, { from: 'Partner', text }]);
+                        setScanner(null);
+                        setActiveTab('CHAT');
+                    }
+                } catch (e) {
+                    console.error(e);
+                    alert("Scan Error or Decryption Failed.");
+                }
+            };
 
-            const sendMessage = async () => {
-                if (!msg || !sessionKey) return;
-                const iv = window.crypto.getRandomValues(new Uint8Array(12));
-                const enc = await window.crypto.subtle.encrypt(
-                    { name: "AES-GCM", iv }, sessionKey, new TextEncoder().encode(msg)
-                );
-                const packet = { iv: buf2hex(iv), d: buf2hex(enc) };
-                const json = JSON.stringify(packet);
-                // Chunk if necessary
-                const chunks = json.length > PROTOCOL.QR_CHUNK_SIZE ? 
-                    json.match(new RegExp(`.{1,${PROTOCOL.QR_CHUNK_SIZE}}`, 'g')) : [json];
-                setFileTransfer({ chunks, label: "Encrypted Message" });
-                setChat(prev => [...prev, { from: 'Me', text: msg, isTyping: true }]);
-                setMsg("");
-                setTimeout(() => {
-                    setChat(prev => prev.map(c => c.isTyping ? { ...c, isTyping: false } : c));
-                }, 1000);
-            };
+            const sendMessage = async () => {
+                if (!msg || !sessionKey) return;
+                const iv = window.crypto.getRandomValues(new Uint8Array(12));
+                const enc = await window.crypto.subtle.encrypt(
+                    { name: "AES-GCM", iv }, sessionKey, new TextEncoder().encode(msg)
+                );
+                const packet = { iv: buf2hex(iv), d: buf2hex(enc) };
+                const json = JSON.stringify(packet);
+                // Chunk if necessary
+                const chunks = json.length > PROTOCOL.QR_CHUNK_SIZE ? 
+                    json.match(new RegExp(`.{1,${PROTOCOL.QR_CHUNK_SIZE}}`, 'g')) : [json];
+                setFileTransfer({ chunks, label: "Encrypted Message" });
+                setChat(prev => [...prev, { from: 'Me', text: msg, isTyping: true }]);
+                setMsg("");
+                setTimeout(() => {
+                    setChat(prev => prev.map(c => c.isTyping ? { ...c, isTyping: false } : c));
+                }, 1000);
+            };
 
-            const darthTamper = () => {
-                if (!interceptedPacket) return;
-                let badRaw = interceptedPacket.raw.replace(/[a-fA-F0-9]/, "X");
-                try {
-                    const p = JSON.parse(interceptedPacket.raw);
-                    if (p.d) p.d = p.d.replace(/^../, "FF");
-                    badRaw = JSON.stringify(p);
-                } catch(e) {}
-                const id = Math.random().toString(36).substr(2,5);
-                setFileTransfer({ chunks: [badRaw], label: `Tampered Packet #${id}`, theme: "red" });
-            };
+            const darthTamper = () => {
+                if (!interceptedPacket) return;
+                let badRaw = interceptedPacket.raw.replace(/[a-fA-F0-9]/, "X");
+                try {
+                    const p = JSON.parse(interceptedPacket.raw);
+                    if (p.d) p.d = p.d.replace(/^../, "FF");
+                    badRaw = JSON.stringify(p);
+                } catch(e) {}
+                const id = Math.random().toString(36).substr(2,5);
+                setFileTransfer({ chunks: [badRaw], label: `Tampered Packet #${id}`, theme: "red" });
+            };
 
-            // UI HELPERS
-            const toggleMode = () => {
-                setMode(mode === 'NORMAL' ? 'DARTH' : 'NORMAL');
-                setScanner(null);
-                setInterceptedPacket(null);
-                if(mode === 'NORMAL') setActiveTab('DARTH'); // Switch tab context visually
-                else setActiveTab('CONNECT');
-            };
+            // UI HELPERS
+            const toggleMode = () => {
+                setMode(mode === 'NORMAL' ? 'DARTH' : 'NORMAL');
+                setScanner(null);
+                setInterceptedPacket(null);
+                if(mode === 'NORMAL') setActiveTab('DARTH'); // Switch tab context visually
+                else setActiveTab('CONNECT');
+            };
 
-            // COLORS
-            const themeColor = mode === 'DARTH' ? 'red' : 'cyan';
-            const bgClass = mode === 'DARTH' ? 'bg-red-500' : 'bg-cyan-500';
-            const textClass = mode === 'DARTH' ? 'text-red-400' : 'text-cyan-400';
-            const borderClass = mode === 'DARTH' ? 'border-red-500' : 'border-cyan-500';
+            // COLORS
+            const themeColor = mode === 'DARTH' ? 'red' : 'cyan';
+            const bgClass = mode === 'DARTH' ? 'bg-red-500' : 'bg-cyan-500';
+            const textClass = mode === 'DARTH' ? 'text-red-400' : 'text-cyan-400';
+            const borderClass = mode === 'DARTH' ? 'border-red-500' : 'border-cyan-500';
 
-            return (
-                <div className={`h-full w-full flex flex-col relative transition-colors duration-700 ${mode === 'DARTH' ? 'darth-mode' : ''}`}>
-                    
-                    {/* --- HEADER --- */}
-                    <header className="px-6 py-4 flex justify-between items-center z-20 backdrop-blur-md bg-slate-950/30 border-b border-white/5 absolute top-0 w-full">
-                        <div className="flex items-center gap-3">
-                            <div className={`p-2 rounded-xl bg-gradient-to-br ${mode==='DARTH' ? 'from-red-600 to-red-800' : 'from-cyan-500 to-blue-600'} text-white shadow-lg`}>
-                                <Icon p={mode==='DARTH' ? icons.skull : icons.shield} size={20} />
-                            </div>
-                            <div>
-                                <h1 className="font-bold text-lg leading-none tracking-tight">GibberLink</h1>
-                                <span className={`text-[10px] font-bold tracking-widest ${textClass} opacity-80`}>
-                                    {mode==='DARTH' ? 'INTERCEPTOR ACTIVE' : 'SECURE CHANNEL v2.2'}
-                                </span>
-                            </div>
-                        </div>
-                        <div className="flex items-center gap-4">
-                             <a href="wave.html" className={`text-xs font-bold ${textClass} hover:opacity-80 transition-opacity`}>File Share</a>
-                             <button onClick={toggleMode} className={`w-8 h-8 rounded-full flex items-center justify-center border ${borderClass} ${textClass} hover:bg-white/5 transition-all`}>
-                                <Icon p={icons.bug} size={16} />
-                             </button>
-                        </div>
-                    </header>
+            return (
+                <div className={`h-full w-full flex flex-col relative transition-colors duration-700 ${mode === 'DARTH' ? 'darth-mode' : ''}`}>
+                    
+                    {/* --- HEADER --- */}
+                    <header className="px-6 py-4 flex justify-between items-center z-20 backdrop-blur-md bg-slate-950/30 border-b border-white/5 absolute top-0 w-full">
+                        <div className="flex items-center gap-3">
+                            <div className={`p-2 rounded-xl bg-gradient-to-br ${mode==='DARTH' ? 'from-red-600 to-red-800' : 'from-cyan-500 to-blue-600'} text-white shadow-lg`}>
+                                <Icon p={mode==='DARTH' ? icons.skull : icons.shield} size={20} />
+                            </div>
+                            <div>
+                                <h1 className="font-bold text-lg leading-none tracking-tight">GibberLink</h1>
+                                <span className={`text-[10px] font-bold tracking-widest ${textClass} opacity-80`}>
+                                    {mode==='DARTH' ? 'INTERCEPTOR ACTIVE' : 'SECURE CHANNEL v2.2'}
+                                </span>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-4">
+                             <a href="wave.html" className={`text-xs font-bold ${textClass} hover:opacity-80 transition-opacity`}>File Share</a>
+                             <button onClick={toggleMode} className={`w-8 h-8 rounded-full flex items-center justify-center border ${borderClass} ${textClass} hover:bg-white/5 transition-all`}>
+                                <Icon p={icons.bug} size={16} />
+                             </button>
+                        </div>
+                    </header>
 
-                    {/* --- MAIN CONTENT AREA --- */}
-                    <main className="flex-1 overflow-y-auto touch-scroll pt-20 pb-36 px-4 md:px-0">
-                        <div className="max-w-md mx-auto h-full flex flex-col">
-                            
-                            {/* TAB: CONNECT */}
-                            {mode === 'NORMAL' && activeTab === 'CONNECT' && (
-                                <div className="space-y-6 anim-enter">
-                                    <div className="glass-panel p-6 rounded-3xl text-center space-y-4">
-                                        <div className="inline-block px-3 py-1 rounded-full bg-slate-800/50 border border-white/10 text-xs text-slate-400 font-mono mb-2">STEP 01</div>
-                                        <h2 className="text-2xl font-bold">Establish Identity</h2>
-                                        <p className="text-slate-400 text-sm leading-relaxed">
-                                            Show this QR code to your partner to exchange RSA public keys securely.
-                                        </p>
-                                        
-                                        <div className="flex justify-center py-2">
-                                            {identityPayload && (
-                                                <QRDisplay 
-                                                    data={JSON.stringify(identityPayload)} 
-                                                    label="MY IDENTITY" 
-                                                    subLabel={identityPayload.fp} 
-                                                />
-                                            )}
-                                        </div>
-                                    </div>
+                    {/* --- MAIN CONTENT AREA --- */}
+                    <main className="flex-1 overflow-y-auto touch-scroll pt-20 pb-48 px-4 md:px-0">
+                        <div className="max-w-md md:max-w-5xl mx-auto h-full flex flex-col">
+                            
+                            {/* TAB: CONNECT */}
+                            {mode === 'NORMAL' && activeTab === 'CONNECT' && (
+                                <div className={`grid grid-cols-1 ${handshakeReply ? 'lg:grid-cols-2' : ''} gap-6 anim-enter items-start`}>
+                                    <div className="glass-panel p-6 rounded-3xl text-center space-y-4 w-full">
+                                        <div className="inline-block px-3 py-1 rounded-full bg-slate-800/50 border border-white/10 text-xs text-slate-400 font-mono mb-2">STEP 01</div>
+                                        <h2 className="text-2xl font-bold">Establish Identity</h2>
+                                        <p className="text-slate-400 text-sm leading-relaxed">
+                                            Show this QR code to your partner to exchange RSA public keys securely.
+                                        </p>
+                                        
+                                        <div className="flex justify-center py-2">
+                                            {identityPayload && (
+                                                <QRDisplay 
+                                                    data={JSON.stringify(identityPayload)} 
+                                                    label="MY IDENTITY" 
+                                                    subLabel={identityPayload.fp} 
+                                                />
+                                            )}
+                                        </div>
+                                    </div>
 
-                                    {handshakeReply && (
-                                        <div className="bg-emerald-900/20 border border-emerald-500/30 p-6 rounded-3xl text-center space-y-4 anim-enter">
-                                            <div className="inline-block px-3 py-1 rounded-full bg-emerald-500/20 text-xs text-emerald-400 font-bold mb-2">STEP 02</div>
-                                            <h2 className="text-xl font-bold text-emerald-100">Handshake Reply</h2>
-                                            <div className="flex justify-center">
-                                                <QRDisplay data={handshakeReply} label="SESSION DATA" color="black" />
-                                            </div>
-                                            <p className="text-emerald-400/60 text-xs">Show this back to partner</p>
-                                        </div>
-                                    )}
-                                </div>
-                            )}
+                                    {handshakeReply && (
+                                        <div className="bg-emerald-900/20 border border-emerald-500/30 p-6 rounded-3xl text-center space-y-4 anim-enter w-full">
+                                            <div className="inline-block px-3 py-1 rounded-full bg-emerald-500/20 text-xs text-emerald-400 font-bold mb-2">STEP 02</div>
+                                            <h2 className="text-xl font-bold text-emerald-100">Handshake Reply</h2>
+                                            <div className="flex justify-center">
+                                                <QRDisplay data={handshakeReply} label="SESSION DATA" color="black" />
+                                            </div>
+                                            <p className="text-emerald-400/60 text-xs">Show this back to partner</p>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
 
-                            {/* TAB: VERIFY */}
-                            {mode === 'NORMAL' && activeTab === 'VERIFY' && (
-                                <div className="space-y-6 anim-enter h-full flex flex-col justify-center">
-                                    <div className="glass-panel p-8 rounded-[2.5rem] text-center space-y-6 shadow-2xl">
-                                        <div className={`w-20 h-20 mx-auto rounded-full flex items-center justify-center text-3xl shadow-lg ${sessionKey ? 'bg-emerald-500 text-emerald-950' : 'bg-slate-800 text-slate-500'}`}>
-                                            <Icon p={sessionKey ? icons.lock : icons.unlock} size={36} />
-                                        </div>
-                                        
-                                        <div>
-                                            <h2 className="text-2xl font-bold mb-1">Status Report</h2>
-                                            <p className={`font-mono text-xs tracking-widest ${sessionKey ? "text-emerald-400" : "text-red-400"}`}>
-                                                {sessionKey ? "AES-GCM-256 ENCRYPTED" : "NO ACTIVE SESSION"}
-                                            </p>
-                                        </div>
+                            {/* TAB: VERIFY */}
+                            {mode === 'NORMAL' && activeTab === 'VERIFY' && (
+                                <div className="space-y-6 anim-enter h-full flex flex-col justify-center max-w-md mx-auto w-full">
+                                    <div className="glass-panel p-8 rounded-[2.5rem] text-center space-y-6 shadow-2xl">
+                                        <div className={`w-20 h-20 mx-auto rounded-full flex items-center justify-center text-3xl shadow-lg ${sessionKey ? 'bg-emerald-500 text-emerald-950' : 'bg-slate-800 text-slate-500'}`}>
+                                            <Icon p={sessionKey ? icons.lock : icons.unlock} size={36} />
+                                        </div>
+                                        
+                                        <div>
+                                            <h2 className="text-2xl font-bold mb-1">Status Report</h2>
+                                            <p className={`font-mono text-xs tracking-widest ${sessionKey ? "text-emerald-400" : "text-red-400"}`}>
+                                                {sessionKey ? "AES-GCM-256 ENCRYPTED" : "NO ACTIVE SESSION"}
+                                            </p>
+                                        </div>
 
-                                        {sessionKey && fingerprint && (
-                                            <div className="bg-black/40 p-6 rounded-2xl border border-white/5 space-y-3">
-                                                <p className="text-[10px] text-slate-500 uppercase tracking-widest font-bold">Safety Fingerprint</p>
-                                                <div className="text-5xl animate-pulse">{fingerprint.emoji}</div>
-                                                <div className="font-mono text-xl text-yellow-500 tracking-[0.2em]">{fingerprint.hex}</div>
-                                                <p className="text-xs text-slate-400 leading-relaxed pt-2 border-t border-white/5">
-                                                    Visually compare with partner.<br/>Matching icons = No Man-in-the-Middle.
-                                                </p>
-                                            </div>
-                                        )}
-                                        
-                                        {sessionKey && (
-                                            <button onClick={()=>setActiveTab('CHAT')} className="w-full bg-white text-black font-bold py-4 rounded-xl shadow-xl hover:bg-slate-200 transition-colors">
-                                                Start Secure Chat
-                                            </button>
-                                        )}
-                                    </div>
-                                </div>
-                            )}
+                                        {sessionKey && fingerprint && (
+                                            <div className="bg-black/40 p-6 rounded-2xl border border-white/5 space-y-3">
+                                                <p className="text-[10px] text-slate-500 uppercase tracking-widest font-bold">Safety Fingerprint</p>
+                                                <div className="text-5xl animate-pulse">{fingerprint.emoji}</div>
+                                                <div className="font-mono text-xl text-yellow-500 tracking-[0.2em]">{fingerprint.hex}</div>
+                                                <p className="text-xs text-slate-400 leading-relaxed pt-2 border-t border-white/5">
+                                                    Visually compare with partner.<br/>Matching icons = No Man-in-the-Middle.
+                                                </p>
+                                            </div>
+                                        )}
+                                        
+                                        {sessionKey && (
+                                            <button onClick={()=>setActiveTab('CHAT')} className="w-full bg-white text-black font-bold py-4 rounded-xl shadow-xl hover:bg-slate-200 transition-colors">
+                                                Start Secure Chat
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
 
-                            {/* TAB: CHAT */}
-                            {mode === 'NORMAL' && activeTab === 'CHAT' && (
-                                <div className="flex flex-col h-full anim-enter">
-                                    <div className="flex-1 overflow-y-auto space-y-3 pb-4 scrollbar-hide">
-                                        {chat.length === 0 && (
-                                            <div className="text-center py-20 opacity-30">
-                                                <Icon p={icons.shield} size={64} className="mx-auto mb-4"/>
-                                                <p>History is never stored.</p>
-                                            </div>
-                                        )}
-                                        {chat.map((c, i) => (
-                                            <div key={i} className={`flex ${c.from==='Me'?'justify-end':''} anim-pop`}>
-                                                <div className={`max-w-[85%] px-5 py-3 rounded-2xl text-sm leading-relaxed shadow-sm ${c.from==='Me' ? 'bg-cyan-600 text-white rounded-br-none' : 'glass-panel text-slate-200 rounded-bl-none'}`}>
-                                                    {c.isTyping ? <div className="typing-animation opacity-70">Encrypting...</div> : c.text}
-                                                </div>
-                                            </div>
-                                        ))}
-                                        <div ref={chatEndRef} />
-                                    </div>
-                                    
-                                    {/* Integrated Input Area */}
-                                    <div className="glass-panel p-2 rounded-[2rem] flex items-center gap-2 mt-auto">
-                                        <button onClick={()=>setScanner('QR')} className="w-10 h-10 rounded-full bg-slate-800 text-slate-400 flex items-center justify-center hover:bg-slate-700 transition-colors">
-                                            <Icon p={icons.qr} size={20} />
-                                        </button>
-                                        <input 
-                                            value={msg} 
-                                            onChange={e=>setMsg(e.target.value)}
-                                            className="flex-1 bg-transparent border-none outline-none text-white px-2 placeholder-slate-600"
-                                            placeholder="Type a secure message..."
-                                        />
-                                        <button onClick={sendMessage} disabled={!msg} className="w-10 h-10 rounded-full bg-cyan-500 text-black flex items-center justify-center hover:bg-cyan-400 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-cyan-500/20">
-                                            <Icon p={icons.send} size={18} />
-                                        </button>
-                                    </div>
-                                </div>
-                            )}
+                            {/* TAB: CHAT */}
+                            {mode === 'NORMAL' && activeTab === 'CHAT' && (
+                                <div className="flex flex-col h-full anim-enter max-w-md mx-auto w-full">
+                                    <div className="flex-1 overflow-y-auto space-y-3 pb-4 scrollbar-hide">
+                                        {chat.length === 0 && (
+                                            <div className="text-center py-20 opacity-30">
+                                                <Icon p={icons.shield} size={64} className="mx-auto mb-4"/>
+                                                <p>History is never stored.</p>
+                                            </div>
+                                        )}
+                                        {chat.map((c, i) => (
+                                            <div key={i} className={`flex ${c.from==='Me'?'justify-end':''} anim-pop`}>
+                                                <div className={`max-w-[85%] px-5 py-3 rounded-2xl text-sm leading-relaxed shadow-sm ${c.from==='Me' ? 'bg-cyan-600 text-white rounded-br-none' : 'glass-panel text-slate-200 rounded-bl-none'}`}>
+                                                    {c.isTyping ? <div className="typing-animation opacity-70">Encrypting...</div> : c.text}
+                                                </div>
+                                            </div>
+                                        ))}
+                                        <div ref={chatEndRef} />
+                                    </div>
+                                    
+                                    {/* Integrated Input Area */}
+                                    <div className="glass-panel p-2 rounded-[2rem] flex items-center gap-2 mt-auto">
+                                        <button onClick={()=>setScanner('QR')} className="w-10 h-10 rounded-full bg-slate-800 text-slate-400 flex items-center justify-center hover:bg-slate-700 transition-colors">
+                                            <Icon p={icons.qr} size={20} />
+                                        </button>
+                                        <input 
+                                            value={msg} 
+                                            onChange={e=>setMsg(e.target.value)}
+                                            className="flex-1 bg-transparent border-none outline-none text-white px-2 placeholder-slate-600"
+                                            placeholder="Type a secure message..."
+                                        />
+                                        <button onClick={sendMessage} disabled={!msg} className="w-10 h-10 rounded-full bg-cyan-500 text-black flex items-center justify-center hover:bg-cyan-400 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-cyan-500/20">
+                                            <Icon p={icons.send} size={18} />
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
 
-                            {/* DARTH MODE CONTENT */}
-                            {mode === 'DARTH' && (
-                                <div className="space-y-6 anim-enter">
-                                    <div className="p-6 rounded-3xl bg-red-950/40 border border-red-900/50 backdrop-blur-xl relative overflow-hidden">
-                                        <div className="absolute top-0 right-0 p-8 text-red-600 opacity-20"><Icon p={icons.bug} size={120} /></div>
-                                        <h2 className="text-2xl font-bold text-red-100 mb-1">Packet Sniffer</h2>
-                                        <p className="text-red-400/60 text-xs mb-8">Intercept. Analyze. Corrupt.</p>
-                                        
-                                        {!interceptedPacket ? (
-                                            <button onClick={()=>setScanner('QR')} className="w-full aspect-[4/3] border-2 border-dashed border-red-800 rounded-2xl flex flex-col items-center justify-center text-red-500/50 hover:bg-red-900/10 hover:border-red-500 hover:text-red-400 transition-all gap-3">
-                                                <Icon p={icons.eye} size={48} />
-                                                <span className="font-mono text-sm tracking-widest">TAP TO INTERCEPT</span>
-                                            </button>
-                                        ) : (
-                                            <div className="space-y-4">
-                                                <div className="bg-black/60 p-4 rounded-xl font-mono text-[10px] break-all border-l-2 border-red-500 text-red-300/80">
-                                                    {interceptedPacket.raw}
-                                                </div>
-                                                <div className="grid grid-cols-2 gap-3">
-                                                    <button onClick={()=>{alert("Brute Force Failed: AES-256 Entropy too high.");}} className="py-3 rounded-xl bg-red-900/30 text-red-300 text-xs font-bold border border-red-900/50">BRUTE FORCE</button>
-                                                    <button onClick={darthTamper} className="py-3 rounded-xl bg-red-600 text-white text-xs font-bold shadow-lg shadow-red-900/50">TAMPER & REPLAY</button>
-                                                </div>
-                                                <button onClick={()=>setInterceptedPacket(null)} className="w-full py-2 text-xs text-red-500/50">Discard Packet</button>
-                                            </div>
-                                        )}
-                                    </div>
-                                    <p className="text-center text-xs text-red-500/30 max-w-xs mx-auto">
-                                        DARTH mode simulates MITM attacks. Tampered packets will fail GCM auth tags on receiver devices.
-                                    </p>
-                                </div>
-                            )}
+                            {/* DARTH MODE CONTENT */}
+                            {mode === 'DARTH' && (
+                                <div className="space-y-6 anim-enter max-w-md mx-auto w-full">
+                                    <div className="p-6 rounded-3xl bg-red-950/40 border border-red-900/50 backdrop-blur-xl relative overflow-hidden">
+                                        <div className="absolute top-0 right-0 p-8 text-red-600 opacity-20"><Icon p={icons.bug} size={120} /></div>
+                                        <h2 className="text-2xl font-bold text-red-100 mb-1">Packet Sniffer</h2>
+                                        <p className="text-red-400/60 text-xs mb-8">Intercept. Analyze. Corrupt.</p>
+                                        
+                                        {!interceptedPacket ? (
+                                            <button onClick={()=>setScanner('QR')} className="w-full aspect-[4/3] border-2 border-dashed border-red-800 rounded-2xl flex flex-col items-center justify-center text-red-500/50 hover:bg-red-900/10 hover:border-red-500 hover:text-red-400 transition-all gap-3">
+                                                <Icon p={icons.eye} size={48} />
+                                                <span className="font-mono text-sm tracking-widest">TAP TO INTERCEPT</span>
+                                            </button>
+                                        ) : (
+                                            <div className="space-y-4">
+                                                <div className="bg-black/60 p-4 rounded-xl font-mono text-[10px] break-all border-l-2 border-red-500 text-red-300/80">
+                                                    {interceptedPacket.raw}
+                                                </div>
+                                                <div className="grid grid-cols-2 gap-3">
+                                                    <button onClick={()=>{alert("Brute Force Failed: AES-256 Entropy too high.");}} className="py-3 rounded-xl bg-red-900/30 text-red-300 text-xs font-bold border border-red-900/50">BRUTE FORCE</button>
+                                                    <button onClick={darthTamper} className="py-3 rounded-xl bg-red-600 text-white text-xs font-bold shadow-lg shadow-red-900/50">TAMPER & REPLAY</button>
+                                                </div>
+                                                <button onClick={()=>setInterceptedPacket(null)} className="w-full py-2 text-xs text-red-500/50">Discard Packet</button>
+                                            </div>
+                                        )}
+                                    </div>
+                                    <p className="text-center text-xs text-red-500/30 max-w-xs mx-auto">
+                                        DARTH mode simulates MITM attacks. Tampered packets will fail GCM auth tags on receiver devices.
+                                    </p>
+                                </div>
+                            )}
 
-                        </div>
-                    </main>
+                        </div>
+                    </main>
 
-                    {/* --- FLOATING BOTTOM NAVIGATION (PILL) --- */}
-                    {mode === 'NORMAL' && (
-                        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 w-[90%] max-w-[340px] z-50">
-                            <nav className="nav-pill rounded-full p-2 flex items-center justify-between relative">
-                                {/* Connect Tab */}
-                                <button onClick={()=>setActiveTab('CONNECT')} className={`flex-1 flex flex-col items-center justify-center py-2 rounded-full transition-all duration-300 ${activeTab==='CONNECT' ? 'text-cyan-400' : 'text-slate-500 hover:text-slate-300'}`}>
-                                    <Icon p={icons.connect} size={24} className={activeTab==='CONNECT' ? 'drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]' : ''} />
-                                    <span className={`text-[9px] font-bold mt-1 ${activeTab==='CONNECT' ? 'opacity-100' : 'opacity-0 h-0 overflow-hidden'}`}>CONNECT</span>
-                                </button>
+                    {/* --- FLOATING BOTTOM NAVIGATION (PILL) --- */}
+                    {mode === 'NORMAL' && (
+                        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 w-[90%] max-w-[340px] z-50">
+                            <nav className="nav-pill rounded-full p-2 flex items-center justify-between relative">
+                                {/* Connect Tab */}
+                                <button onClick={()=>setActiveTab('CONNECT')} className={`flex-1 flex flex-col items-center justify-center py-2 rounded-full transition-all duration-300 ${activeTab==='CONNECT' ? 'text-cyan-400' : 'text-slate-500 hover:text-slate-300'}`}>
+                                    <Icon p={icons.connect} size={24} className={activeTab==='CONNECT' ? 'drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]' : ''} />
+                                    <span className={`text-[9px] font-bold mt-1 ${activeTab==='CONNECT' ? 'opacity-100' : 'opacity-0 h-0 overflow-hidden'}`}>CONNECT</span>
+                                </button>
 
-                                {/* Center Action Button (Scan) */}
-                                <div className="mx-2 -mt-8">
-                                    <button onClick={()=>setScanner('QR')} className="w-16 h-16 rounded-full bg-cyan-500 flex items-center justify-center text-slate-900 shadow-[0_0_30px_rgba(6,182,212,0.6)] hover:scale-110 hover:bg-cyan-400 transition-all active:scale-95 border-4 border-slate-900">
-                                        <Icon p={icons.eye} size={28} />
-                                    </button>
-                                </div>
+                                {/* Center Action Button (Scan) - FIXED: Removed negative margin */}
+                                <div className="mx-2">
+                                    <button onClick={()=>setScanner('QR')} className="w-12 h-12 rounded-full bg-cyan-500 flex items-center justify-center text-slate-900 shadow-[0_0_20px_rgba(6,182,212,0.4)] hover:scale-105 hover:bg-cyan-400 transition-all active:scale-95 border-2 border-slate-900">
+                                        <Icon p={icons.eye} size={24} />
+                                    </button>
+                                </div>
 
-                                {/* Verify Tab */}
-                                <button onClick={()=>setActiveTab('VERIFY')} className={`flex-1 flex flex-col items-center justify-center py-2 rounded-full transition-all duration-300 ${activeTab==='VERIFY' ? 'text-emerald-400' : 'text-slate-500 hover:text-slate-300'}`}>
-                                    <Icon p={icons.shield} size={24} className={activeTab==='VERIFY' ? 'drop-shadow-[0_0_8px_rgba(52,211,153,0.5)]' : ''} />
-                                    <span className={`text-[9px] font-bold mt-1 ${activeTab==='VERIFY' ? 'opacity-100' : 'opacity-0 h-0 overflow-hidden'}`}>VERIFY</span>
-                                </button>
-                                
-                                {/* Chat Tab */}
-                                <button onClick={()=>setActiveTab('CHAT')} className={`flex-1 flex flex-col items-center justify-center py-2 rounded-full transition-all duration-300 ${activeTab==='CHAT' ? 'text-white' : 'text-slate-500 hover:text-slate-300'}`}>
-                                    <Icon p={icons.message} size={24} className={activeTab==='CHAT' ? 'drop-shadow-[0_0_8px_rgba(255,255,255,0.5)]' : ''} />
-                                    <span className={`text-[9px] font-bold mt-1 ${activeTab==='CHAT' ? 'opacity-100' : 'opacity-0 h-0 overflow-hidden'}`}>CHAT</span>
-                                </button>
-                            </nav>
-                        </div>
-                    )}
+                                {/* Verify Tab */}
+                                <button onClick={()=>setActiveTab('VERIFY')} className={`flex-1 flex flex-col items-center justify-center py-2 rounded-full transition-all duration-300 ${activeTab==='VERIFY' ? 'text-emerald-400' : 'text-slate-500 hover:text-slate-300'}`}>
+                                    <Icon p={icons.shield} size={24} className={activeTab==='VERIFY' ? 'drop-shadow-[0_0_8px_rgba(52,211,153,0.5)]' : ''} />
+                                    <span className={`text-[9px] font-bold mt-1 ${activeTab==='VERIFY' ? 'opacity-100' : 'opacity-0 h-0 overflow-hidden'}`}>VERIFY</span>
+                                </button>
+                                
+                                {/* Chat Tab */}
+                                <button onClick={()=>setActiveTab('CHAT')} className={`flex-1 flex flex-col items-center justify-center py-2 rounded-full transition-all duration-300 ${activeTab==='CHAT' ? 'text-white' : 'text-slate-500 hover:text-slate-300'}`}>
+                                    <Icon p={icons.message} size={24} className={activeTab==='CHAT' ? 'drop-shadow-[0_0_8px_rgba(255,255,255,0.5)]' : ''} />
+                                    <span className={`text-[9px] font-bold mt-1 ${activeTab==='CHAT' ? 'opacity-100' : 'opacity-0 h-0 overflow-hidden'}`}>CHAT</span>
+                                </button>
+                            </nav>
+                        </div>
+                    )}
 
-                    {/* --- MODALS --- */}
-                    {scanner === 'QR' && (
-                        <QRScanner onScan={handleScan} onClose={()=>setScanner(null)} isDarth={mode==='DARTH'} />
-                    )}
-                    {fileTransfer && (
-                        <AnimatedQR chunks={fileTransfer.chunks} label={fileTransfer.label} theme={fileTransfer.theme} onClose={()=>setFileTransfer(null)} />
-                    )}
-                </div>
-            );
-        };
+                    {/* --- MODALS --- */}
+                    {scanner === 'QR' && (
+                        <QRScanner onScan={handleScan} onClose={()=>setScanner(null)} isDarth={mode==='DARTH'} />
+                    )}
+                    {fileTransfer && (
+                        <AnimatedQR chunks={fileTransfer.chunks} label={fileTransfer.label} theme={fileTransfer.theme} onClose={()=>setFileTransfer(null)} />
+                    )}
+                </div>
+            );
+        };
 
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<App />);
-    </script>
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
 </body>
 </html>
-
-improve this ui make it responsive dont change any functionalieties and all make it better in ui like adding some paddinga nad stuffs make it better for both landscape and portrait mode
