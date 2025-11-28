@@ -494,15 +494,15 @@
                                     <div className="glass-panel p-6 rounded-3xl text-center space-y-4 w-full">
                                         <div className="inline-block px-3 py-1 rounded-full bg-slate-800/50 border border-white/10 text-xs text-slate-400 font-mono mb-2">STEP 01</div>
                                         <h2 className="text-2xl font-bold">Establish Identity</h2>
-                                        <p className="text-slate-400 text-sm leading-relaxed">
-                                            Show this QR code to your partner to exchange RSA public keys securely.
-                                        </p>
+                                        // <p className="text-slate-400 text-sm leading-relaxed">
+                                        //     Show this QR code to your partner to exchange RSA public keys securely.
+                                        // </p>
                                         
                                         <div className="flex justify-center py-2">
                                             {identityPayload && (
                                                 <QRDisplay 
                                                     data={JSON.stringify(identityPayload)} 
-                                                    label="MY IDENTITY" 
+                                                    label="MY RSA IDENTITY" 
                                                     subLabel={identityPayload.fp} 
                                                 />
                                             )}
@@ -515,8 +515,9 @@
                                             <h2 className="text-xl font-bold text-emerald-100">Handshake Reply</h2>
                                             <div className="flex justify-center">
                                                 <QRDisplay data={handshakeReply} label="SESSION DATA" color="black" />
+                                                <p className="text-emerald-400/60 text-xs">Show this back to partner</p>
                                             </div>
-                                            <p className="text-emerald-400/60 text-xs">Show this back to partner</p>
+                                            
                                         </div>
                                     )}
                                 </div>
