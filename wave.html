@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🔊 Gibberlink Text Messenger</title>
+    <style>
+        :root {
+            --bg: #f5f5f5;
+            --chat-bg: white;
+            --text: #333;
+            --sent-bg: #007bff;
+            --recv-bg: #e9ecef;
+            --btn-bg: #28a745;
+            --btn-hover: #218838;
+            --status: #666;
+        }
+        [data-theme="dark"] {
+            --bg: #121212;
+            --chat-bg: #1e1e1e;
+            --text: #eee;
+            --sent-bg: #0056b3;
+            --recv-bg: #2d2d2d;
+            --btn-bg: #28a745;
+            --btn-hover: #218838;
+            --status: #aaa;
+        }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif; 
+            max-width: 600px; margin: 0 auto; padding: 20px; 
+            background: var(--bg); color: var(--text); transition: background 0.3s; 
+        }
+        .chat-log { 
+            background: var(--chat-bg); border-radius: 10px; padding: 15px; 
+            height: 300px; overflow-y: auto; margin-bottom: 20px; 
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1); 
+        }
+        .message { 
+            margin: 10px 0; padding: 12px 16px; border-radius: 18px; 
+            max-width: 80%; position: relative; animation: fadeIn 0.3s; 
+        }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .sent { background: var(--sent-bg); color: white; margin-left: auto; text-align: right; }
+        .received { background: var(--recv-bg); color: var(--text); }
+        .timestamp { font-size: 0.75em; opacity: 0.7; margin-top: 4px; }
+        #inputMsg { 
+            width: 60%; padding: 12px; border: 1px solid #ddd; border-radius: 20px; 
+            background: var(--chat-bg); color: var(--text); 
+        }
+        button { 
+            padding: 12px 16px; background: var(--btn-bg); color: white; border: none; 
+            border-radius: 20px; cursor: pointer; margin: 0 5px; font-size: 16px; 
+            touch-action: manipulation; transition: background 0.2s; 
+        }
+        button:hover { background: var(--btn-hover); }
+        button:disabled { background: #6c757d; cursor: not-allowed; }
+        .spinner { display: inline-block; width: 20px; height: 20px; border: 3px solid rgba(255,255,255,.3); border-radius: 50%; border-top-color: white; animation: spin 1s ease-in-out infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        #status { font-size: 14px; color: var(--status); margin: 10px 0; text-align: center; }
+        .controls { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; margin-bottom: 20px; gap: 10px; }
+        .theme-toggle { background: #6c757d; }
+        .theme-toggle:hover { background: #5a6268; }
+        h1 { text-align: center; color: var(--text); margin-bottom: 10px; }
+        .actions { display: flex; gap: 10px; flex-wrap: wrap; }
+    </style>
+</head>
+<body data-theme="light">
+    <h1>🔊 Gibberlink Text Messenger</h1>
+    <div id="status">Ready to chat via sound! Use two devices. 🌟</div>
+    
+    <div class="chat-log" id="chatLog" role="log" aria-live="polite">
+        <div class="message received">
+            <div>Welcome! Type a message and 📤 send via sound. Receiver: Tap 🎤 to listen.</div>
+            <div class="timestamp">Just now</div>
+        </div>
+    </div>
+    
+    <div class="controls">
+        <input type="text" id="inputMsg" placeholder="Type your message..." maxlength="100" aria-label="Message input">
+        <div class="actions">
+            <button onclick="sendMessage()" aria-label="Send message via sound">📤 Send</button>
+            <button id="listenBtn" onclick="toggleListening()" aria-label="Toggle listening">🎤 Listen</button>
+            <button onclick="clearChat()" aria-label="Clear chat">🗑️ Clear</button>
+            <button onclick="exportChat()" aria-label="Export chat log">📥 Share</button>
+            <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle dark mode">🌙</button>
+        </div>
+    </div>
+
+    <script src="ggwave.js"></script> <!-- From ggwave repo: examples/ggwave-js -->
+    <script>
+        let ggwaveInstance;
+        let audioContext;
+        let mediaStream;
+        let isListening = false;
+        let analyser, dataArray;
+        let chatLog = document.getElementById('chatLog');
+        let status = document.getElementById('status');
+        let listenBtn = document.getElementById('listenBtn');
+        let notificationPermission = Notification.permission;
+
+        // Init ggwave
+        function initGgwave() {
+            const params = { sampleRate: 48000, isCaptureThreadEnabled: true, isTransmitThreadEnabled: true };
+            ggwaveInstance = ggwave.init(params);
+            if (!ggwaveInstance) {
+                alert('Failed to init ggwave. Check ggwave.js/WASM.');
+                return false;
+            }
+            status.textContent = 'Ggwave ready! 🚀';
+            return true;
+        }
+
+        // Add message to chat log with timestamp
+        function addMessage(text, isSent = false) {
+            const msg = document.createElement('div');
+            msg.className = `message ${isSent ? 'sent' : 'received'}`;
+            msg.innerHTML = `<div>${escapeHtml(text)}</div><div class="timestamp">${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>`;
+            chatLog.appendChild(msg);
+            chatLog.scrollTop = chatLog.scrollHeight;
+            if (!isSent) notifyUser(text); // Notify on receive
+        }
+
+        // Escape HTML for safety
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Browser notification
+        async function notifyUser(text) {
+            if (notificationPermission === 'granted') {
+                new Notification('New Message via Sound!', { body: text, icon: '🔊' });
+            } else if (notificationPermission === 'default') {
+                notificationPermission = await Notification.requestPermission();
+            }
+        }
+
+        // Send: Encode & play
+        async function sendMessage() {
+            const msg = document.getElementById('inputMsg').value.trim();
+            if (!msg) return;
+            if (!ggwaveInstance && !initGgwave()) return;
+
+            addMessage(msg, true);
+            document.getElementById('inputMsg').value = '';
+            const sendBtn = event?.target || document.querySelector('button[onclick="sendMessage()"]');
+            const originalText = sendBtn.innerHTML;
+            sendBtn.innerHTML = '<span class="spinner"></span> Sending...';
+            sendBtn.disabled = true;
+
+            const payload = ggwave.encode(ggwaveInstance, msg);
+            if (!payload || payload.length === 0) {
+                status.textContent = 'Encoding failed! 😕';
+                resetSendBtn(sendBtn, originalText);
+                return;
+            }
+
+            const floatSamples = new Float32Array(payload.length);
+            for (let i = 0; i < payload.length; i++) {
+                floatSamples[i] = (payload[i] - 128) / 128.0;
+            }
+
+            if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const buffer = audioContext.createBuffer(1, floatSamples.length, 48000);
+            buffer.copyToChannel(floatSamples, 0);
+            const source = audioContext.createBufferSource();
+            source.buffer = buffer;
+            source.connect(audioContext.destination);
+            source.start();
+            status.textContent = `Beaming "${msg}" via sound... (hold near mic) 🔊`;
+
+            source.onended = () => {
+                status.textContent = 'Sent! Awaiting reply... 📨';
+                resetSendBtn(sendBtn, originalText);
+            };
+        }
+
+        function resetSendBtn(btn, text) {
+            btn.innerHTML = text;
+            btn.disabled = false;
+        }
+
+        // Toggle listening
+        async function toggleListening() {
+            if (isListening) {
+                stopListening();
+                return;
+            }
+
+            if (!ggwaveInstance && !initGgwave()) return;
+
+            try {
+                mediaStream = await navigator.mediaDevices.getUserMedia({ audio: { sampleRate: 48000 } });
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                const source = audioContext.createMediaStreamSource(mediaStream);
+                analyser = audioContext.createAnalyser();
+                analyser.fftSize = 2048;
+                dataArray = new Uint8Array(analyser.fftSize);
+                source.connect(analyser);
+
+                const processor = audioContext.createScriptProcessor(4096, 1, 1);
+                processor.onaudioprocess = (e) => {
+                    const inputBuffer = e.inputBuffer.getChannelData(0);
+                    const int16Data = new Int16Array(inputBuffer.length);
+                    for (let i = 0; i < inputBuffer.length; i++) {
+                        int16Data[i] = inputBuffer[i] * 32767;
+                    }
+                    const decoded = ggwave.decode(ggwaveInstance, int16Data.buffer);
+                    if (decoded && decoded.length > 0) {
+                        const text = new TextDecoder().decode(decoded).trim();
+                        if (text) {
+                            addMessage(text, false);
+                            status.textContent = `Caught: "${text}" 🎉`;
+                        }
+                    }
+                };
+                source.connect(processor);
+                processor.connect(audioContext.destination);
+
+                isListening = true;
+                listenBtn.innerHTML = '<span class="spinner"></span> Stop';
+                status.textContent = 'Ears open... Listening for sound! 🎤';
+            } catch (err) {
+                status.textContent = 'Mic access denied. Check settings. 🔒';
+                console.error(err);
+            }
+        }
+
+        function stopListening() {
+            if (mediaStream) {
+                mediaStream.getTracks().forEach(track => track.stop());
+            }
+            if (audioContext) {
+                audioContext.close();
+                audioContext = null;
+            }
+            isListening = false;
+            listenBtn.innerHTML = '🎤 Listen';
+            status.textContent = 'Stopped. Ready to send or listen again. 😊';
+        }
+
+        // Clear chat
+        function clearChat() {
+            if (confirm('Clear the chat log?')) {
+                chatLog.innerHTML = '';
+                addMessage('Chat cleared. Start fresh! ✨', false);
+            }
+        }
+
+        // Export chat as TXT
+        function exportChat() {
+            const log = Array.from(chatLog.children).map(msg => msg.textContent).join('\n');
+            const blob = new Blob([log], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `gibberlink-chat-${new Date().toISOString().split('T')[0]}.txt`;
+            a.click();
+            URL.revokeObjectURL(url);
+            status.textContent = 'Chat exported! 📄';
+        }
+
+        // Toggle dark mode
+        function toggleTheme() {
+            const body = document.body;
+            const isDark = body.dataset.theme === 'dark';
+            body.dataset.theme = isDark ? 'light' : 'dark';
+            localStorage.setItem('theme', body.dataset.theme);
+        }
+
+        // Load theme & init
+        window.addEventListener('load', () => {
+            const savedTheme = localStorage.getItem('theme') || 'light';
+            document.body.dataset.theme = savedTheme;
+            if ('Notification' in window) notificationPermission = Notification.permission;
+            navigator.mediaDevices.getUserMedia({ audio: true }).catch(() => {});
+            // Keyboard shortcuts
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && e.ctrlKey) sendMessage();
+                if (e.key === 'Escape') stopListening();
+            });
+        });
+
+        // Enter to send
+        document.getElementById('inputMsg').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) sendMessage();
+        });
+    </script>
+</body>
+</html>
