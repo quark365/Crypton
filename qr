@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VisualWave Share</title>
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- QRCode.js for generating the visual signals -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap');
+        
+        body {
+            font-family: 'JetBrains Mono', monospace;
+            background-color: #0f172a;
+            color: #e2e8f0;
+        }
+
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(148, 163, 184, 0.1);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #0f172a; }
+        ::-webkit-scrollbar-thumb { background: #3b82f6; border-radius: 4px; }
+
+        .scan-line {
+            width: 100%;
+            height: 2px;
+            background: #10b981;
+            position: absolute;
+            animation: scan 2s linear infinite;
+            display: none;
+        }
+
+        @keyframes scan {
+            0% { top: 0; opacity: 0; }
+            50% { opacity: 1; }
+            100% { top: 100%; opacity: 0; }
+        }
+
+        .signal-box canvas {
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center p-4">
+
+    <!-- Header -->
+    <header class="mb-8 text-center">
+        <div class="flex items-center justify-center gap-2 mb-2">
+            <i data-lucide="waves" class="w-8 h-8 text-cyan-400"></i>
+            <h1 class="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-blue-500">VisualWave</h1>
+        </div>
+        <p class="text-slate-400 text-sm">Serverless WebRTC File Sharing</p>
+    </header>
+
+    <!-- Main Container -->
+    <main id="app" class="w-full max-w-lg glass-panel rounded-2xl p-6 relative overflow-hidden transition-all duration-300">
+        
+        <!-- STEP 1: Mode Selection -->
+        <div id="step-mode" class="space-y-6">
+            <div class="text-center space-y-2">
+                <h2 class="text-xl font-bold text-white">Select Role</h2>
+                <p class="text-slate-400 text-sm">Are you sending or receiving?</p>
+            </div>
+            
+            <div class="grid grid-cols-2 gap-4">
+                <button onclick="initSender()" class="group flex flex-col items-center justify-center p-6 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 transition-all hover:border-cyan-400">
+                    <i data-lucide="upload-cloud" class="w-10 h-10 mb-3 text-cyan-400 group-hover:scale-110 transition-transform"></i>
+                    <span class="font-bold">Send File</span>
+                </button>
+                <button onclick="initReceiver()" class="group flex flex-col items-center justify-center p-6 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 transition-all hover:border-green-400">
+                    <i data-lucide="download-cloud" class="w-10 h-10 mb-3 text-green-400 group-hover:scale-110 transition-transform"></i>
+                    <span class="font-bold">Receive File</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- STEP 2 (Sender): File Selection -->
+        <div id="step-file" class="hidden space-y-6">
+            <div class="text-center">
+                <h2 class="text-xl font-bold text-white">Choose File</h2>
+            </div>
+            
+            <div class="relative border-2 border-dashed border-slate-600 rounded-xl p-8 hover:bg-slate-800/50 transition-colors text-center cursor-pointer" onclick="document.getElementById('fileInput').click()">
+                <input type="file" id="fileInput" class="hidden" onchange="handleFileSelect(this)">
+                <i data-lucide="file-plus" class="w-12 h-12 mx-auto text-slate-500 mb-2"></i>
+                <p class="text-sm text-slate-300 font-medium" id="fileNameDisplay">Click to browse</p>
+                <p class="text-xs text-slate-500 mt-1">Any file type, any size</p>
+            </div>
+            
+            <button id="genOfferBtn" disabled onclick="generateOffer()" class="w-full py-3 rounded-lg font-bold bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-white">
+                Generate Signal
+            </button>
+        </div>
+
+        <!-- STEP 3: Exchange Signals (Used by both) -->
+        <div id="step-signal" class="hidden space-y-6">
+            <div class="flex justify-between items-center border-b border-slate-700 pb-4">
+                <h2 class="text-lg font-bold text-white" id="signalTitle">Connection Signal</h2>
+                <button onclick="location.reload()" class="text-xs text-red-400 hover:text-red-300">Reset</button>
+            </div>
+
+            <!-- Loader -->
+            <div id="signalLoader" class="hidden flex-col items-center py-8">
+                <div class="w-8 h-8 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+                <p class="text-sm text-cyan-400 animate-pulse">Generating secure link...</p>
+            </div>
+
+            <!-- The QR / Code Display -->
+            <div id="signalOutput" class="hidden space-y-4">
+                <p class="text-xs text-slate-400 text-center">Scan this on the other device OR copy the code.</p>
+                
+                <div class="bg-white p-4 rounded-lg mx-auto w-fit">
+                    <div id="qrcode"></div>
+                </div>
+
+                <div class="relative">
+                    <textarea id="localSignalText" readonly class="w-full h-24 bg-slate-900 rounded-lg p-3 text-xs text-slate-400 font-mono resize-none border border-slate-700 focus:outline-none" onclick="this.select()"></textarea>
+                    <button onclick="copySignal()" class="absolute top-2 right-2 p-2 bg-slate-800 rounded hover:bg-slate-700 text-cyan-400" title="Copy to clipboard">
+                        <i data-lucide="copy" class="w-4 h-4"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- The Input Section -->
+            <div id="signalInputSection" class="pt-4 border-t border-slate-700 space-y-4">
+                <p class="text-sm text-white font-bold mb-2" id="remoteSignalLabel">Paste response from other device:</p>
+                <textarea id="remoteSignalInput" placeholder="Paste the code from the other device here..." class="w-full h-24 bg-slate-900 rounded-lg p-3 text-xs text-slate-300 font-mono resize-none border border-slate-700 focus:border-cyan-500 focus:outline-none transition-colors"></textarea>
+                <button onclick="connectPeers()" class="w-full py-3 rounded-lg font-bold bg-green-600 hover:bg-green-500 transition-colors text-white flex items-center justify-center gap-2">
+                    <i data-lucide="link" class="w-4 h-4"></i>
+                    Connect
+                </button>
+            </div>
+        </div>
+
+        <!-- STEP 4: Transfer Progress -->
+        <div id="step-transfer" class="hidden space-y-6 py-4">
+            <div class="text-center">
+                <div class="w-20 h-20 bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-4 border-2 border-cyan-500 relative">
+                    <i data-lucide="arrow-right-left" class="w-8 h-8 text-cyan-400 animate-pulse"></i>
+                </div>
+                <h2 class="text-xl font-bold text-white mb-1">Transferring</h2>
+                <p class="text-sm text-slate-400" id="transferStatus">Initializing stream...</p>
+            </div>
+
+            <div class="bg-slate-800 rounded-full h-4 w-full overflow-hidden border border-slate-700">
+                <div id="progressBar" class="bg-gradient-to-r from-cyan-500 to-blue-600 h-full w-0 transition-all duration-300 ease-out"></div>
+            </div>
+            
+            <div class="text-center">
+                <span id="speedDisplay" class="text-xs font-mono text-slate-500">0 KB/s</span>
+            </div>
+        </div>
+
+        <!-- Success State -->
+        <div id="step-success" class="hidden text-center py-8 space-y-6">
+            <div class="w-20 h-20 bg-green-900/30 rounded-full flex items-center justify-center mx-auto mb-4 border-2 border-green-500">
+                <i data-lucide="check" class="w-10 h-10 text-green-400"></i>
+            </div>
+            <h2 class="text-2xl font-bold text-white">Transfer Complete!</h2>
+            <p id="finalFileName" class="text-slate-300"></p>
+            
+            <a id="downloadBtn" class="hidden w-full py-3 rounded-lg font-bold bg-blue-600 hover:bg-blue-500 text-white block">
+                Download File
+            </a>
+
+            <button onclick="location.reload()" class="text-slate-500 text-sm hover:text-white mt-4">Send another file</button>
+        </div>
+
+    </main>
+
+    <footer class="mt-8 text-slate-600 text-xs">
+        <p>Uses WebRTC. No data is sent to any server.</p>
+    </footer>
+
+    <script>
+        // --- GLOBALS ---
+        lucide.createIcons();
+        let pc; // PeerConnection
+        let dataChannel;
+        let fileToSend;
+        let receivedChunks = [];
+        let receivedSize = 0;
+        let fileMeta = {};
+        
+        // ICE Server configuration (Public STUN servers are usually enough for local/direct)
+        const rtcConfig = {
+            iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+        };
+
+        // --- UI NAVIGATION ---
+        function showStep(id) {
+            ['step-mode', 'step-file', 'step-signal', 'step-transfer', 'step-success'].forEach(s => {
+                document.getElementById(s).classList.add('hidden');
+            });
+            document.getElementById(id).classList.remove('hidden');
+        }
+
+        // --- FILE HANDLING (SENDER) ---
+        function handleFileSelect(input) {
+            if (input.files.length > 0) {
+                fileToSend = input.files[0];
+                document.getElementById('fileNameDisplay').innerText = `${fileToSend.name} (${formatBytes(fileToSend.size)})`;
+                document.getElementById('fileNameDisplay').classList.add('text-cyan-400');
+                document.getElementById('genOfferBtn').disabled = false;
+            }
+        }
+
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        // --- WEBRTC CORE ---
+
+        // 1. Initialize Sender
+        async function initSender() {
+            showStep('step-file');
+            pc = new RTCPeerConnection(rtcConfig);
+            
+            // Create Data Channel
+            dataChannel = pc.createDataChannel("fileTransfer");
+            setupChannelListeners(dataChannel);
+
+            // Handle ICE Candidates
+            pc.onicecandidate = e => {
+                if (!e.candidate) {
+                    // Gathering complete - Show the OFFER code
+                    displaySignal(pc.localDescription, "Scan this on Receiver");
+                }
+            };
+        }
+
+        // 2. Generate Offer (Sender Click)
+        async function generateOffer() {
+            showStep('step-signal');
+            document.getElementById('signalLoader').classList.remove('hidden');
+            document.getElementById('signalTitle').innerText = "Sender: 1. Share Signal";
+            document.getElementById('remoteSignalLabel').innerText = "Sender: 2. Paste Receiver's Reply";
+            
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            // Wait for onicecandidate (null) to trigger displaySignal
+        }
+
+        // 3. Initialize Receiver
+        async function initReceiver() {
+            showStep('step-signal');
+            document.getElementById('signalOutput').classList.add('hidden'); // Hide output initially
+            document.getElementById('signalTitle').innerText = "Receiver: 1. Paste Sender's Signal";
+            document.getElementById('remoteSignalLabel').innerText = "Paste Sender's Code Here:";
+            
+            pc = new RTCPeerConnection(rtcConfig);
+            
+            pc.ondatachannel = e => {
+                dataChannel = e.channel;
+                setupChannelListeners(dataChannel);
+            };
+
+            pc.onicecandidate = e => {
+                if (!e.candidate) {
+                    // Gathering complete - Show the ANSWER code
+                    displaySignal(pc.localDescription, "Scan this on Sender");
+                }
+            };
+        }
+
+        // 4. Connect Peers (Both sides use this button logic differently)
+        async function connectPeers() {
+            const remoteDataStr = document.getElementById('remoteSignalInput').value;
+            if (!remoteDataStr) return alert("Please paste the code first!");
+
+            // Decompress base64
+            const remoteDesc = JSON.parse(atob(remoteDataStr));
+
+            if (!pc.currentRemoteDescription) {
+                await pc.setRemoteDescription(remoteDesc);
+
+                if (remoteDesc.type === 'offer') {
+                    // If we are Receiver processing an offer, generate Answer
+                    document.getElementById('signalInputSection').classList.add('hidden'); // Hide input
+                    document.getElementById('signalLoader').classList.remove('hidden'); // Show loader
+                    document.getElementById('signalTitle').innerText = "Receiver: 2. Share Reply";
+                    
+                    const answer = await pc.createAnswer();
+                    await pc.setLocalDescription(answer);
+                    // Wait for ICE to finish, then displaySignal is called
+                }
+            }
+        }
+
+        // --- SIGNALING HELPERS ---
+        function displaySignal(sdp, instructions) {
+            document.getElementById('signalLoader').classList.add('hidden');
+            document.getElementById('signalOutput').classList.remove('hidden');
+            
+            // Compress to Base64 to make it copy-pasteable
+            const signalString = btoa(JSON.stringify(sdp));
+            
+            document.getElementById('localSignalText').value = signalString;
+            
+            // Generate QR
+            document.getElementById('qrcode').innerHTML = "";
+            new QRCode(document.getElementById("qrcode"), {
+                text: signalString,
+                width: 180,
+                height: 180,
+                colorDark : "#000000",
+                colorLight : "#ffffff",
+                correctLevel : QRCode.CorrectLevel.L
+            });
+        }
+
+        function copySignal() {
+            const copyText = document.getElementById("localSignalText");
+            copyText.select();
+            document.execCommand("copy"); // Fallback for older browsers
+            // Modern way: navigator.clipboard.writeText(copyText.value);
+            alert("Code copied!");
+        }
+
+        // --- DATA CHANNEL & TRANSFER ---
+        function setupChannelListeners(channel) {
+            channel.onopen = () => {
+                showStep('step-transfer');
+                if (fileToSend) {
+                    sendFile();
+                }
+            };
+            
+            channel.onmessage = handleDataMessage;
+        }
+
+        function sendFile() {
+            // Send Metadata first
+            const meta = {
+                name: fileToSend.name,
+                size: fileToSend.size,
+                type: fileToSend.type
+            };
+            dataChannel.send(JSON.stringify({ type: 'meta', data: meta }));
+
+            // Chunk and send
+            const chunkSize = 16384; // 16KB chunks
+            const fileReader = new FileReader();
+            let offset = 0;
+            
+            document.getElementById('transferStatus').innerText = `Sending ${meta.name}...`;
+
+            fileReader.onload = e => {
+                dataChannel.send(e.target.result);
+                offset += e.target.result.byteLength;
+                
+                // Update UI
+                const percent = (offset / fileToSend.size) * 100;
+                document.getElementById('progressBar').style.width = percent + '%';
+                
+                if (offset < fileToSend.size) {
+                    readSlice(offset);
+                } else {
+                     // Done
+                }
+            };
+
+            const readSlice = o => {
+                const slice = fileToSend.slice(offset, o + chunkSize);
+                fileReader.readAsArrayBuffer(slice);
+            };
+            
+            readSlice(0);
+        }
+
+        function handleDataMessage(event) {
+            const data = event.data;
+
+            if (typeof data === 'string') {
+                // It's metadata
+                const msg = JSON.parse(data);
+                if (msg.type === 'meta') {
+                    fileMeta = msg.data;
+                    document.getElementById('transferStatus').innerText = `Receiving ${fileMeta.name}...`;
+                }
+            } else {
+                // It's a file chunk (ArrayBuffer)
+                receivedChunks.push(data);
+                receivedSize += data.byteLength;
+                
+                // Update UI
+                if (fileMeta.size) {
+                    const percent = (receivedSize / fileMeta.size) * 100;
+                    document.getElementById('progressBar').style.width = percent + '%';
+                    
+                    if (receivedSize >= fileMeta.size) {
+                        saveFile();
+                    }
+                }
+            }
+        }
+
+        function saveFile() {
+            const blob = new Blob(receivedChunks, { type: fileMeta.type });
+            const url = URL.createObjectURL(blob);
+            
+            showStep('step-success');
+            document.getElementById('finalFileName').innerText = fileMeta.name;
+            
+            const btn = document.getElementById('downloadBtn');
+            btn.href = url;
+            btn.download = fileMeta.name;
+            btn.classList.remove('hidden');
+            btn.innerText = `Download ${fileMeta.name}`;
+
+            // Reset for next
+            receivedChunks = [];
+            receivedSize = 0;
+        }
+    </script>
+</body>
+</html>
