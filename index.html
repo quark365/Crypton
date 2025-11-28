@@ -3,273 +3,301 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>CryptoVis: GibberLink v2.1 (QR Secure)</title>
-   
+    <title>GibberLink v3.0 // Neural Link</title>
+    
+    <!-- React & Tailwind -->
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
-   
+    
+    <!-- QR Libraries -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+    
+    <!-- Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap');
-       
+        @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Space+Mono:wght@400;700&display=swap');
+
+        :root {
+            --primary: #06b6d4;
+            --primary-glow: rgba(6, 182, 212, 0.5);
+            --danger: #ef4444;
+            --danger-glow: rgba(239, 68, 68, 0.5);
+            --bg: #030712;
+            --glass: rgba(17, 24, 39, 0.7);
+        }
+
         body {
-            font-family: 'JetBrains Mono', monospace;
-            background-color: #0f172a;
-            color: #e2e8f0;
-            overscroll-behavior-y: none;
-            height: 100dvh;
-            width: 100%;
-            overflow: auto; /* Enable scrolling for mobile */
+            font-family: 'Outfit', sans-serif;
+            background-color: var(--bg);
+            color: #f8fafc;
+            overflow: hidden; /* App-like feel */
+            touch-action: manipulation;
         }
-        #root {
-            height: 100dvh;
-            width: 100%;
-            overflow: auto; /* Enable scrolling */
+
+        .font-mono { font-family: 'Space Mono', monospace; }
+
+        /* Custom Animations */
+        @keyframes scanline {
+            0% { transform: translateY(-100%); }
+            100% { transform: translateY(100vh); }
         }
-        .glass { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(12px); border: 1px solid rgba(148, 163, 184, 0.1); }
-        .darth-glass { background: rgba(69, 10, 10, 0.85); backdrop-filter: blur(12px); border: 1px solid rgba(239, 68, 68, 0.3); }
-       
-        .scan-line {
-            width: 100%; height: 2px; background: #06b6d4; position: absolute;
-            animation: scan 2s linear infinite; box-shadow: 0 0 10px #06b6d4;
+        .scan-overlay::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(to bottom, transparent, var(--primary-glow), transparent);
+            height: 100px;
+            opacity: 0.1;
+            animation: scanline 4s linear infinite;
+            pointer-events: none;
         }
-        .darth-scan-line { background: #ef4444; box-shadow: 0 0 10px #ef4444; }
-       
-        @keyframes scan { 0% { top: 0%; opacity: 0; } 50% { opacity: 1; } 100% { top: 100%; opacity: 0; } }
-       
-        .matrix-bg {
-            background-image: radial-gradient(#1e293b 1px, transparent 1px), radial-gradient(#1e293b 1px, transparent 1px);
-            background-size: 20px 20px;
-            background-position: 0 0, 10px 10px;
-            background-color: #020617;
+
+        @keyframes pulse-ring {
+            0% { transform: scale(0.8); opacity: 0.5; }
+            100% { transform: scale(2); opacity: 0; }
         }
-       
-        input[type=range] { -webkit-appearance: none; width: 100%; background: transparent; }
-        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; height: 16px; width: 16px; border-radius: 50%; background: currentColor; cursor: pointer; margin-top: -6px; }
-        input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 4px; cursor: pointer; background: #334155; border-radius: 2px; }
-       
-        .scrollbar-hide::-webkit-scrollbar { display: none; }
-        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
-       
-        .touch-scroll { -webkit-overflow-scrolling: touch; }
-        .anim-fade { animation: fadeIn 0.5s ease-out; } /* Slower fade for better feel */
-        .anim-slide-up { animation: slideUp 0.4s ease-out; }
-        .anim-pulse { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
-        .typing-animation { overflow: hidden; border-right: .15em solid #06b6d4; white-space: nowrap; margin: 0 auto; letter-spacing: .15em; animation: typing 3.5s steps(40, end), blink-caret .75s step-end infinite; }
-        @keyframes typing {
-            from { width: 0 }
-            to { width: 100% }
+        .pulse-effect::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            border-radius: 50%;
+            background: var(--primary);
+            z-index: -1;
+            animation: pulse-ring 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
         }
-        @keyframes blink-caret {
-            from, to { border-color: transparent }
-            50% { border-color: #06b6d4; }
+
+        @keyframes message-in {
+            from { opacity: 0; transform: translateY(10px) scale(0.95); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
         }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-        @keyframes slideUp { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: translateY(0); } }
-        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
-       
-        /* Mobile scroll fix */
-        @media (max-width: 768px) {
-            body, #root { overflow-y: auto; height: auto; min-height: 100dvh; }
+        .msg-anim { animation: message-in 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
+
+        /* Scrollbar Hide */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+        /* Glassmorphism Classes */
+        .glass-panel {
+            background: var(--glass);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        
+        /* Darth Mode Overrides */
+        .mode-darth {
+            --primary: #ef4444;
+            --primary-glow: rgba(239, 68, 68, 0.6);
+        }
+        .mode-darth .glass-panel {
+            border-color: rgba(239, 68, 68, 0.2);
+            background: rgba(20, 0, 0, 0.8);
         }
     </style>
 </head>
-<body class="matrix-bg selection:bg-cyan-500 selection:text-white">
+<body>
     <div id="root"></div>
+
     <script type="text/babel">
-        const { useState, useEffect, useRef, useMemo } = React;
-        // --- CONSTANTS & CONFIG ---
-        const PROTOCOL = {
-            VERSION: '2.1',
-            QR_CHUNK_SIZE: 350,
-            DEFAULT_QR_FPS: 200
-        };
-        // --- ICONS ---
-        const Icon = ({ p, size=24, className="" }) => (
-            <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>{p}</svg>
-        );
-        const icons = {
-            shield: <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />,
-            skull: <><path d="M12 2c-4 0-8 3-8 8 0 1.5.5 3 1.5 4C4 16 3 22 3 22h18s-1-6-2.5-8c1-1 1.5-2.5 1.5-4 0-5-4-8-8-8z"/><path d="M8 10h.01"/><path d="M16 10h.01"/><path d="M10 14h4"/></>,
-            lock: <><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></>,
-            unlock: <><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 9.9-1" /></>,
-            eye: <><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></>,
-            send: <><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></>,
-            x: <><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>,
-            bug: <><rect x="8" y="6" width="8" height="12" rx="4"/><path d="M12 12v.01"/><path d="M4 14h4"/><path d="M16 14h4"/><path d="M4 10h4"/><path d="M16 10h4"/><path d="M4 18h4"/><path d="M16 18h4"/></>,
-            check: <path d="M20 6L9 17l-5-5"/>
-        };
-        // --- CRYPTO UTILS ---
+        const { useState, useEffect, useRef, useMemo, useCallback } = React;
+
+        // --- CRYPTO ENGINE (Unchanged Logic, optimized implementation) ---
+        const PROTOCOL = { VERSION: '3.0', CHUNK_SIZE: 250 }; // Smaller chunks for faster QR animations
+
         const buf2hex = (buf) => [...new Uint8Array(buf)].map(x => x.toString(16).padStart(2, '0')).join('');
         const hex2buf = (hex) => new Uint8Array(hex.match(/.{1,2}/g).map(byte => parseInt(byte, 16))).buffer;
+
         const generateFingerprint = async (buffer) => {
             const hash = await window.crypto.subtle.digest('SHA-256', buffer);
             const arr = new Uint8Array(hash);
-            const emojis = ["🐶","🐱","🐭","🐹","🐰","🦊","🐻","🐼","🐨","🐯","🦁","🐮","🐷","🐸","🐵","🐔","🐧","🐦","🐤","🦆","🦅","🦉","🦇","🐺","🐗","🐴","🦄","🐝","🐛","🦋","🐌","🐞","🐜","🕷","🕸","🐢","🐍","🦎","🦂","🦀","🦑","🐙","🦐","🐠","🐟","🐡","🐬","🦈","🐳","🐋","🐊","🐆","🐅","🐃","🐂","🐄","🐪","🐫","🐘","🦏","🦍","🐎","🐖","🐐","🐏","🐑","🐕","🐩","🐈","🐓","🦃","🕊","🐇","🐁","🐀","🐿","🐾","🐉","🐲","🌵","🎄","🌲","🌳","🌴"];
-            let em = "";
-            for(let i=0; i<4; i++) em += emojis[arr[i] % emojis.length];
-            const hex = buf2hex(hash).substring(0, 8).toUpperCase();
-            return { emoji: em, hex: hex, full: buf2hex(hash) };
+            const emojis = ["🔮","🌀","⚡","🔥","🧬","🛡️","💎","🧿","🗝️","🪐","🐉","🕸️","🎲","🧩","🚀","🛸"];
+            return {
+                emoji: Array.from({length: 4}, (_, i) => emojis[arr[i] % emojis.length]).join(''),
+                hex: buf2hex(hash).substring(0, 8).toUpperCase()
+            };
         };
-        // --- COMPONENTS ---
-        const QRDisplay = ({ data, label, subLabel, color="black" }) => {
+
+        // --- UI COMPONENTS ---
+
+        // 1. Icon Component (Lucide Wrapper)
+        const Icon = ({ name, size = 24, className = "" }) => {
+            return <i data-lucide={name} width={size} height={size} className={className}></i>;
+        };
+
+        // 2. Smart QR Component
+        const SmartQR = ({ data, label, subLabel, color }) => {
             const canvasRef = useRef(null);
+            const [chunks, setChunks] = useState([]);
+            const [currentIndex, setCurrentIndex] = useState(0);
+
+            // Chunking Logic
             useEffect(() => {
-                if (canvasRef.current && data) {
-                    new QRious({ element: canvasRef.current, value: data, size: 256, level: 'L', foreground: 'black', background: 'white' });
-                }
-            }, [data, color]);
-            return (
-                <div className="bg-white p-3 rounded-xl shadow-2xl flex flex-col items-center anim-slide-up">
-                    <canvas ref={canvasRef} className="max-w-full h-auto border-4 border-white" />
-                    <div className="mt-2 text-center">
-                        <p className="text-slate-900 font-bold text-sm truncate max-w-[200px]">{label}</p>
-                        {subLabel && <p className="text-slate-500 text-xs font-mono">{subLabel}</p>}
-                    </div>
-                </div>
-            );
-        };
-        const AnimatedQR = ({ chunks, label, onClose, theme="cyan" }) => {
-            const [index, setIndex] = useState(0);
-            const [speed, setSpeed] = useState(PROTOCOL.DEFAULT_QR_FPS);
-            const [isPaused, setIsPaused] = useState(false);
-           
+                if (!data) return;
+                const c = data.length > PROTOCOL.CHUNK_SIZE 
+                    ? data.match(new RegExp(`.{1,${PROTOCOL.CHUNK_SIZE}}`, 'g')) 
+                    : [data];
+                setChunks(c);
+                setCurrentIndex(0);
+            }, [data]);
+
+            // Animation Loop (Only if multiple chunks)
             useEffect(() => {
-                if (isPaused) return;
+                if (chunks.length <= 1) return;
                 const interval = setInterval(() => {
-                    setIndex(prev => (prev + 1) % chunks.length);
-                }, speed);
+                    setCurrentIndex(prev => (prev + 1) % chunks.length);
+                }, 250); // Fast 4fps cycle
                 return () => clearInterval(interval);
-            }, [chunks, speed, isPaused]);
-            const btnClass = theme === "red" ? "bg-red-600 hover:bg-red-500" : "bg-cyan-600 hover:bg-cyan-500";
+            }, [chunks]);
+
+            // Drawing Logic
+            useEffect(() => {
+                if (canvasRef.current && chunks[currentIndex]) {
+                    new QRious({
+                        element: canvasRef.current,
+                        value: chunks[currentIndex],
+                        size: 300,
+                        level: 'L',
+                        foreground: color,
+                        background: 'white'
+                    });
+                }
+            }, [chunks, currentIndex, color]);
+
             return (
-                <div className="fixed inset-0 z-50 bg-black/95 flex flex-col items-center justify-center p-4 anim-fade">
-                    <div className="bg-white p-4 rounded-2xl w-full max-w-sm shadow-[0_0_50px_rgba(255,255,255,0.1)] anim-slide-up">
-                        <QRDisplay data={chunks[index]} label={label} subLabel={`Chunk ${index+1}/${chunks.length}`} color="black" />
-                        <div className="mt-6 space-y-4">
-                            <div className="flex items-center gap-2">
-                                <span className="text-xs font-bold text-slate-400 w-8">POS</span>
-                                <input type="range" min="0" max={chunks.length-1} value={index}
-                                    onChange={(e)=>{setIndex(parseInt(e.target.value)); setIsPaused(true);}}
-                                    className="accent-slate-800"
-                                />
+                <div className="flex flex-col items-center justify-center p-6 bg-white rounded-3xl shadow-[0_0_40px_rgba(0,0,0,0.3)] mx-4 transform transition-all hover:scale-[1.02]">
+                    <div className="relative">
+                        <canvas ref={canvasRef} className="max-w-full h-auto rounded-lg" />
+                        {chunks.length > 1 && (
+                            <div className="absolute top-2 right-2 bg-black/80 text-white text-[10px] font-mono px-2 py-1 rounded-full backdrop-blur-md">
+                                {currentIndex + 1}/{chunks.length}
                             </div>
-                            <div className="flex items-center gap-2">
-                                <span className="text-xs font-bold text-slate-400 w-8">SPD</span>
-                                <input type="range" min="50" max="1000" step="50" value={speed}
-                                    onChange={(e)=>setSpeed(parseInt(e.target.value))}
-                                    className="accent-slate-800"
-                                />
-                                <span className="text-xs font-mono text-slate-500 w-12 text-right">{speed}ms</span>
-                            </div>
-                            <div className="flex justify-center gap-4">
-                                <button onClick={()=>setIndex(prev=>(prev-1+chunks.length)%chunks.length)} className="p-2 rounded-full bg-slate-100 text-slate-800"><Icon p={icons.send} className="rotate-180 scale-75"/></button>
-                                <button onClick={()=>setIsPaused(!isPaused)} className={`p-4 rounded-full text-white shadow-lg transition-transform active:scale-95 ${btnClass}`}>
-                                    <Icon p={isPaused ? icons.send : icons.send} className={isPaused ? '' : 'rotate-12'} />
-                                </button>
-                                <button onClick={()=>setIndex(prev=>(prev+1)%chunks.length)} className="p-2 rounded-full bg-slate-100 text-slate-800"><Icon p={icons.send} className="scale-75"/></button>
-                            </div>
-                        </div>
+                        )}
                     </div>
-                    <button onClick={onClose} className="mt-8 text-white/50 hover:text-white flex items-center gap-2 anim-pulse">
-                        <Icon p={icons.x} /> Stop Broadcast
-                    </button>
+                    <div className="mt-4 text-center">
+                        <h3 className="text-slate-900 font-bold text-lg tracking-tight">{label}</h3>
+                        <p className="text-slate-500 text-xs font-mono mt-1">{subLabel}</p>
+                    </div>
                 </div>
             );
         };
-        const QRScanner = ({ onScan, onClose, isDarth }) => {
+
+        // 3. Scanner Overlay
+        const ScannerOverlay = ({ onScan, onClose, mode }) => {
             const videoRef = useRef(null);
-            const canvasRef = useRef(null);
             const [error, setError] = useState(null);
+
             useEffect(() => {
                 let stream;
                 let animFrame;
-                navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
-                    .then(s => {
-                        stream = s;
+                const startCamera = async () => {
+                    try {
+                        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
                         if(videoRef.current) {
-                            videoRef.current.srcObject = s;
+                            videoRef.current.srcObject = stream;
                             videoRef.current.play();
                             requestAnimationFrame(tick);
                         }
-                    })
-                    .catch(err => setError("Camera access denied or unavailable."));
+                    } catch(e) { setError("Camera Access Denied"); }
+                };
+
                 const tick = () => {
                     if (videoRef.current && videoRef.current.readyState === 4) {
-                        const cvs = canvasRef.current;
-                        const vid = videoRef.current;
-                        cvs.width = vid.videoWidth;
-                        cvs.height = vid.videoHeight;
-                        const ctx = cvs.getContext("2d", {willReadFrequently: true});
-                        ctx.drawImage(vid, 0, 0);
-                        const img = ctx.getImageData(0, 0, cvs.width, cvs.height);
+                        const canvas = document.createElement('canvas');
+                        canvas.width = videoRef.current.videoWidth;
+                        canvas.height = videoRef.current.videoHeight;
+                        const ctx = canvas.getContext('2d', {willReadFrequently: true});
+                        ctx.drawImage(videoRef.current, 0, 0);
+                        const img = ctx.getImageData(0,0, canvas.width, canvas.height);
                         const code = jsQR(img.data, img.width, img.height);
-                        if (code) onScan(code.data);
+                        if(code) {
+                            // Haptic feedback
+                            if (navigator.vibrate) navigator.vibrate(50);
+                            onScan(code.data);
+                            return; // Stop scanning loop on success (wait for parent to close)
+                        }
                     }
                     animFrame = requestAnimationFrame(tick);
-                };
+                }
+
+                startCamera();
                 return () => {
                     if(stream) stream.getTracks().forEach(t => t.stop());
                     cancelAnimationFrame(animFrame);
                 };
             }, []);
+
             return (
-                <div className="fixed inset-0 z-50 bg-black flex flex-col items-center justify-center p-4 anim-fade">
+                <div className="fixed inset-0 z-50 bg-black flex flex-col items-center justify-center">
+                    <div className="absolute inset-0 opacity-20 bg-[url('https://grainy-gradients.vercel.app/noise.svg')]"></div>
+                    
                     {error ? (
-                        <div className="text-red-500 text-center anim-slide-up">{error} <br/><button onClick={onClose} className="mt-4 bg-slate-800 px-4 py-2 rounded">Close</button></div>
-                    ) : (
-                        <div className={`relative w-full max-w-sm aspect-square bg-slate-900 rounded-3xl overflow-hidden border-2 shadow-[0_0_50px_rgba(0,0,0,0.5)] ${isDarth ? 'border-red-500 shadow-red-900/50' : 'border-cyan-500 shadow-cyan-900/50'} anim-slide-up`}>
-                            <video ref={videoRef} className="absolute inset-0 w-full h-full object-cover" playsInline muted />
-                            <canvas ref={canvasRef} className="hidden" />
-                            <div className={isDarth ? "scan-line darth-scan-line" : "scan-line"}></div>
-                            <div className="absolute top-4 left-0 right-0 text-center pointer-events-none">
-                                <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-widest ${isDarth ? 'bg-red-600 text-white' : 'bg-cyan-500 text-slate-900'}`}>
-                                    {isDarth ? 'INTERCEPTOR ACTIVE' : 'SECURE SCANNER'}
-                                </span>
-                            </div>
+                        <div className="text-red-500 text-center p-4">
+                            <Icon name="alert-triangle" size={48} className="mx-auto mb-4"/>
+                            <p>{error}</p>
+                            <button onClick={onClose} className="mt-4 px-6 py-2 bg-slate-800 rounded-full">Close</button>
                         </div>
+                    ) : (
+                        <>
+                            <video ref={videoRef} className="absolute inset-0 w-full h-full object-cover opacity-60" playsInline muted />
+                            
+                            {/* Scanning UI */}
+                            <div className="relative w-72 h-72 border-2 border-[var(--primary)] rounded-3xl z-10 overflow-hidden shadow-[0_0_100px_var(--primary-glow)]">
+                                <div className="absolute top-0 left-0 w-full h-1 bg-[var(--primary)] animate-[scanline_2s_linear_infinite] shadow-[0_0_15px_var(--primary)]"></div>
+                                <div className="absolute inset-0 border-[40px] border-black/50"></div>
+                            </div>
+                            
+                            <div className="z-10 mt-12 text-center">
+                                <div className="text-[var(--primary)] font-mono text-xs tracking-[0.3em] uppercase animate-pulse">
+                                    {mode === 'DARTH' ? 'Intercepting...' : 'Searching Target...'}
+                                </div>
+                                <button onClick={onClose} className="mt-8 bg-black/60 backdrop-blur text-white px-6 py-3 rounded-full flex items-center gap-2 border border-white/10 hover:bg-white/10 transition-colors">
+                                    <Icon name="x" size={18} /> Cancel
+                                </button>
+                            </div>
+                        </>
                     )}
-                    <button onClick={onClose} className="mt-8 text-white/70 hover:text-white font-bold flex items-center gap-2 anim-pulse">
-                        <Icon p={icons.x} /> Cancel Scan
-                    </button>
                 </div>
             );
         };
-        // --- MAIN APP ---
+
+        // --- MAIN APP COMPONENT ---
         const App = () => {
-            const [mode, setMode] = useState('NORMAL');
-            const [activeTab, setActiveTab] = useState('CONNECT');
+            const [mode, setMode] = useState('NORMAL'); // NORMAL | DARTH
+            const [view, setView] = useState('HOME'); // HOME | CHAT | SETTINGS
+            
+            // Crypto State
             const [keys, setKeys] = useState(null);
-            const [identityPayload, setIdentityPayload] = useState(null);
-            const [handshakeReply, setHandshakeReply] = useState(null);
-            const [sessionKey, setSessionKey] = useState(null);
-            const [fingerprint, setFingerprint] = useState(null);
-            const [scanner, setScanner] = useState(null);
+            const [identity, setIdentity] = useState(null); // { t: 'ID', k: '...', fp: '...' }
+            const [session, setSession] = useState(null); // { key: CryptoKey, fp: '...' }
+            
+            // Interaction State
+            const [showScanner, setShowScanner] = useState(false);
+            const [qrPayload, setQrPayload] = useState(null); // Data to show in QR modal
             const [chat, setChat] = useState([]);
-            const [msg, setMsg] = useState("");
-            const [fileTransfer, setFileTransfer] = useState(null);
-            const [interceptedPacket, setInterceptedPacket] = useState(null);
-            const lastScanRef = useRef("");
+            const [inputMsg, setInputMsg] = useState("");
+            const [isListening, setIsListening] = useState(false);
+            
+            // Darth State
+            const [intercepted, setIntercepted] = useState(null);
+
             const chatEndRef = useRef(null);
-            const chatContainerRef = useRef(null);
-           
+
+            // 1. Initialization
             useEffect(() => {
-                if (scanner) lastScanRef.current = "";
-            }, [scanner]);
-           
+                lucide.createIcons();
+                initKeys();
+            }, []);
+
             useEffect(() => {
-                if (chatContainerRef.current) {
-                    chatContainerRef.current.scrollTo({
-                        top: chatContainerRef.current.scrollHeight,
-                        behavior: 'smooth'
-                    });
-                }
-            }, [chat]);
-            const genKeys = async () => {
-                setKeys(null); setSessionKey(null); setFingerprint(null); setChat([]);
+                lucide.createIcons();
+                if(chatEndRef.current) chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
+            }, [chat, view, mode, showScanner, qrPayload]); // Re-run icons on render updates
+
+            const initKeys = async () => {
                 const rsa = await window.crypto.subtle.generateKey(
                     { name: "RSA-OAEP", modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: "SHA-256" },
                     true, ["encrypt", "decrypt"]
@@ -278,341 +306,319 @@
                     { name: "ECDH", namedCurve: "P-256" },
                     true, ["deriveKey", "deriveBits"]
                 );
-                setKeys({ rsa, ecdh });
                 const rsaExp = await window.crypto.subtle.exportKey("spki", rsa.publicKey);
-                const rsaStr = btoa(String.fromCharCode(...new Uint8Array(rsaExp)));
-                const myFp = await generateFingerprint(rsaExp);
-                setIdentityPayload({
-                    t: "ID",
-                    k: rsaStr,
-                    fp: myFp.hex
+                const fp = await generateFingerprint(rsaExp);
+                
+                setKeys({ rsa, ecdh });
+                setIdentity({
+                    t: 'ID',
+                    k: btoa(String.fromCharCode(...new Uint8Array(rsaExp))),
+                    fp: fp.hex,
+                    emoji: fp.emoji
                 });
             };
-            useEffect(() => { genKeys(); }, []);
-           
-            const handleScan = async (raw) => {
-                if (raw === lastScanRef.current) return;
-                lastScanRef.current = raw;
-                if (mode === 'DARTH') {
-                    setScanner(null);
-                    setInterceptedPacket({ raw, time: new Date().toLocaleTimeString() });
-                    return;
-                }
+
+            // 2. Handshake Logic
+            const processScan = async (raw) => {
                 try {
-                    const p = JSON.parse(raw);
-                    if (p.t === "ID") {
-                        const kData = Uint8Array.from(atob(p.k), c => c.charCodeAt(0));
-                        const partnerRsa = await window.crypto.subtle.importKey(
-                            "spki", kData, { name: "RSA-OAEP", hash: "SHA-256" }, true, ["encrypt"]
-                        );
-                        const myEcdhRaw = await window.crypto.subtle.exportKey("raw", keys.ecdh.publicKey);
-                        const encEcdh = await window.crypto.subtle.encrypt(
-                            { name: "RSA-OAEP" }, partnerRsa, myEcdhRaw
-                        );
-                        const reply = { t: "HSH", d: buf2hex(encEcdh) };
-                        setHandshakeReply(JSON.stringify(reply));
-                        setScanner(null);
-                        alert(`Partner Identity Scanned!\nFingerprint: ${p.fp}\n\nVerify this matches their screen!`);
+                    // DARTH MODE INTERCEPTION
+                    if (mode === 'DARTH') {
+                        setIntercepted({ 
+                            raw, 
+                            time: new Date().toLocaleTimeString(),
+                            id: Math.random().toString(36).substr(2,6).toUpperCase()
+                        });
+                        setShowScanner(false);
+                        return;
                     }
-                    else if (p.t === "HSH") {
-                        if (!keys) return;
-                        const encBuf = hex2buf(p.d);
-                        const partnerEcdhRaw = await window.crypto.subtle.decrypt(
-                            { name: "RSA-OAEP" }, keys.rsa.privateKey, encBuf
+
+                    // NORMAL MODE
+                    const data = JSON.parse(raw);
+                    
+                    if (data.t === 'ID') {
+                        // Received Public Identity -> Generate Session Key
+                        const partnerRsa = await window.crypto.subtle.importKey(
+                            "spki", 
+                            Uint8Array.from(atob(data.k), c => c.charCodeAt(0)), 
+                            { name: "RSA-OAEP", hash: "SHA-256" }, 
+                            true, ["encrypt"]
                         );
+                        
+                        // Encrypt my ECDH public key with their RSA
+                        const myEcdhRaw = await window.crypto.subtle.exportKey("raw", keys.ecdh.publicKey);
+                        const encEcdh = await window.crypto.subtle.encrypt({ name: "RSA-OAEP" }, partnerRsa, myEcdhRaw);
+                        
+                        // Show Response QR
+                        setQrPayload({
+                            data: JSON.stringify({ t: 'HSH', d: buf2hex(encEcdh) }),
+                            label: "HANDSHAKE RESPONSE",
+                            subLabel: "Show this to your partner"
+                        });
+                        setShowScanner(false);
+                    } 
+                    else if (data.t === 'HSH') {
+                        // Received Handshake Response -> Derive Session
+                        const encBuf = hex2buf(data.d);
+                        const partnerEcdhRaw = await window.crypto.subtle.decrypt({ name: "RSA-OAEP" }, keys.rsa.privateKey, encBuf);
+                        
                         const partnerEcdhKey = await window.crypto.subtle.importKey(
                             "raw", partnerEcdhRaw, { name: "ECDH", namedCurve: "P-256" }, true, []
                         );
+
                         const sharedBits = await window.crypto.subtle.deriveBits(
-                            { name: "ECDH", public: partnerEcdhKey },
-                            keys.ecdh.privateKey,
-                            256
+                            { name: "ECDH", public: partnerEcdhKey }, keys.ecdh.privateKey, 256
                         );
-                        const hkdfKey = await window.crypto.subtle.importKey(
-                            "raw", sharedBits, { name: "HKDF" }, false, ["deriveKey"]
-                        );
+
+                        const hkdfKey = await window.crypto.subtle.importKey("raw", sharedBits, { name: "HKDF" }, false, ["deriveKey"]);
                         const sessionKey = await window.crypto.subtle.deriveKey(
-                            {
-                                name: "HKDF",
-                                hash: "SHA-256",
-                                salt: new Uint8Array(),
-                                info: new TextEncoder().encode("GibberLinkv2_Session")
-                            },
+                            { name: "HKDF", hash: "SHA-256", salt: new Uint8Array(), info: new TextEncoder().encode("GibberLinkv3") },
                             hkdfKey,
                             { name: "AES-GCM", length: 256 },
-                            false,
-                            ["encrypt", "decrypt"]
+                            false, ["encrypt", "decrypt"]
                         );
+
                         const fp = await generateFingerprint(sharedBits);
-                        setSessionKey(sessionKey);
-                        setFingerprint(fp);
-                        setScanner(null);
-                        setActiveTab('VERIFY');
-                        alert("Handshake Complete. Secure Tunnel Established.");
+                        setSession({ key: sessionKey, fp });
+                        setShowScanner(false);
+                        setView('CHAT');
+                        setChat([{ from: 'sys', text: `Secure Tunnel Established.\nFingerprint: ${fp.emoji} ${fp.hex}` }]);
                     }
-                    else if (p.iv) {
-                        if (!sessionKey) throw new Error("No secure session.");
-                        const iv = hex2buf(p.iv);
-                        const ct = hex2buf(p.d);
+                    else if (data.iv) {
+                        // Received Message
+                        if (!session) throw new Error("No session");
                         const pt = await window.crypto.subtle.decrypt(
-                            { name: "AES-GCM", iv }, sessionKey, ct
+                            { name: "AES-GCM", iv: hex2buf(data.iv) }, session.key, hex2buf(data.d)
                         );
                         const text = new TextDecoder().decode(pt);
-                        setChat(prev => [...prev, { from: 'Partner', text }]);
-                        setScanner(null);
-                        setActiveTab('CHAT');
-                        alert("New Message Received");
+                        setChat(prev => [...prev, { from: 'them', text, time: new Date().toLocaleTimeString() }]);
+                        setShowScanner(false);
+                        setView('CHAT');
                     }
                 } catch (e) {
+                    alert("Handshake Failed or Invalid Key");
                     console.error(e);
                 }
             };
+
+            // 3. Message Logic
             const sendMessage = async () => {
-                if (!msg || !sessionKey) return;
+                if (!inputMsg.trim() || !session) return;
+                
                 const iv = window.crypto.getRandomValues(new Uint8Array(12));
                 const enc = await window.crypto.subtle.encrypt(
-                    { name: "AES-GCM", iv }, sessionKey, new TextEncoder().encode(msg)
+                    { name: "AES-GCM", iv }, session.key, new TextEncoder().encode(inputMsg)
                 );
-                const packet = { iv: buf2hex(iv), d: buf2hex(enc) };
-                const json = JSON.stringify(packet);
-                // Chunk if necessary, but for messages, often single chunk
-                const chunks = json.length > PROTOCOL.QR_CHUNK_SIZE ? 
-                    json.match(new RegExp(`.{1,${PROTOCOL.QR_CHUNK_SIZE}}`, 'g')) : [json];
-                setFileTransfer({ chunks, label: "Encrypted Message" });
-                setChat(prev => [...prev, { from: 'Me', text: msg, isTyping: true }]);
-                setMsg("");
-                // Simulate typing animation end
-                setTimeout(() => {
-                    setChat(prev => prev.map(c => c.isTyping ? { ...c, isTyping: false } : c));
-                }, 3500);
+                
+                const payload = JSON.stringify({ iv: buf2hex(iv), d: buf2hex(enc) });
+                setChat(prev => [...prev, { from: 'me', text: inputMsg, time: new Date().toLocaleTimeString() }]);
+                setInputMsg("");
+                
+                setQrPayload({
+                    data: payload,
+                    label: "ENCRYPTED PACKET",
+                    subLabel: "Scan to decrypt"
+                });
             };
-            const darthTamper = () => {
-                if (!interceptedPacket) return;
-                let badRaw = interceptedPacket.raw.replace(/[a-fA-F0-9]/, "X");
-                try {
-                    const p = JSON.parse(interceptedPacket.raw);
-                    if (p.d) p.d = p.d.replace(/^../, "FF");
-                    badRaw = JSON.stringify(p);
-                } catch(e) {}
-                const id = Math.random().toString(36).substr(2,5);
-                setFileTransfer({ chunks: [badRaw], label: `Tampered Packet #${id}`, theme: "red" });
+
+            // 4. Voice Logic
+            const toggleVoice = () => {
+                if (!('webkitSpeechRecognition' in window)) {
+                    alert("Voice not supported in this browser.");
+                    return;
+                }
+                if (isListening) return;
+
+                const recognition = new window.webkitSpeechRecognition();
+                recognition.continuous = false;
+                recognition.interimResults = false;
+                
+                recognition.onstart = () => setIsListening(true);
+                recognition.onend = () => setIsListening(false);
+                recognition.onresult = (e) => {
+                    const transcript = e.results[0][0].transcript;
+                    setInputMsg(prev => prev + (prev ? " " : "") + transcript);
+                };
+                
+                recognition.start();
             };
+
+            // 5. Render Helpers
+            const themeClass = mode === 'DARTH' ? 'mode-darth' : '';
+
             return (
-                <div className={`h-full w-full flex flex-col transition-colors duration-500 ${mode === 'DARTH' ? 'bg-slate-950' : 'bg-slate-900'}`}>
-                    {/* Header with file link */}
-                    <header className={`p-4 flex-shrink-0 flex justify-between items-center z-10 ${mode === 'DARTH' ? 'bg-red-950 border-b border-red-900' : 'bg-slate-800 border-b border-cyan-900'}`}>
+                <div className={`h-[100dvh] w-full flex flex-col relative ${themeClass}`}>
+                    {/* BACKGROUND ELEMENTS */}
+                    <div className="absolute inset-0 z-0 bg-gradient-to-b from-[var(--bg)] to-slate-900 pointer-events-none"></div>
+                    <div className="absolute inset-0 z-0 opacity-20 pointer-events-none" 
+                         style={{backgroundImage: 'radial-gradient(circle at 50% 50%, var(--primary-glow) 0%, transparent 50%)'}}></div>
+
+                    {/* TOP NAV */}
+                    <header className="z-10 px-6 py-4 flex justify-between items-center glass-panel m-4 rounded-2xl mb-2">
                         <div className="flex items-center gap-3">
-                            <div className={`p-2 rounded-lg ${mode==='DARTH' ? 'bg-red-600 text-white' : 'bg-cyan-500 text-black'}`}>
-                                <Icon p={mode==='DARTH' ? icons.skull : icons.shield} />
-                            </div>
-                            <div>
-                                <h1 className="font-bold text-lg leading-none text-white tracking-tighter">GibberLink <span className="text-xs opacity-50">v2.1</span></h1>
-                                <div className={`text-[10px] font-mono ${mode==='DARTH' ? 'text-red-400' : 'text-cyan-400'}`}>
-                                    {mode==='DARTH' ? 'INTERCEPTOR MODE' : 'SECURE CHANNEL'}
-                                </div>
-                            </div>
+                            <div className={`w-2 h-2 rounded-full animate-pulse ${mode==='DARTH' ? 'bg-red-500' : 'bg-cyan-500'}`}></div>
+                            <h1 className="font-bold tracking-widest text-sm flex flex-col leading-none">
+                                GIBBERLINK
+                                <span className="text-[10px] font-mono text-slate-400 opacity-70">V3.0 // {mode}</span>
+                            </h1>
                         </div>
-                        <div className="flex gap-2 items-center">
-                            <a href="wave.html" target="_self" className="text-xs text-cyan-400 hover:text-cyan-300 font-bold underline underline-offset-2">File Share →</a>
-                            <button onClick={()=>{setMode(mode==='NORMAL'?'DARTH':'NORMAL'); setScanner(null); setInterceptedPacket(null);}}
-                                className={`px-3 py-1 rounded border text-xs font-bold transition-all ${mode==='NORMAL' ? 'border-red-900 text-red-900 hover:bg-red-900 hover:text-white opacity-30 hover:opacity-100' : 'bg-cyan-500 text-black border-cyan-500'}`}>
-                                {mode==='NORMAL' ? 'ACTIVATE DARTH' : 'EXIT DARTH'}
-                            </button>
-                        </div>
+                        <button onClick={() => setMode(m => m === 'NORMAL' ? 'DARTH' : 'NORMAL')} 
+                                className="p-2 rounded-full hover:bg-white/5 transition-colors text-slate-400 hover:text-[var(--primary)]">
+                            <Icon name={mode === 'NORMAL' ? 'shield' : 'skull'} size={20} />
+                        </button>
                     </header>
-                    {/* MAIN CONTENT */}
-                    <main className="flex-1 overflow-auto relative flex flex-col min-h-0 touch-scroll"> {/* Enable scrolling */}
-                        {mode === 'NORMAL' && (
-                            <div className="flex-1 flex flex-col p-4 w-full mx-auto max-w-md md:max-w-4xl transition-all duration-300 min-h-0 overflow-y-auto touch-scroll"> {/* Scrollable container */}
-                                {/* TABS */}
-                                <div className="flex-shrink-0 flex p-1 bg-slate-800 rounded-xl mb-4 anim-slide-up">
-                                    {['CONNECT','VERIFY','CHAT'].map(t => ( // Removed FILES tab
-                                        <button key={t} onClick={()=>setActiveTab(t)}
-                                            className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${activeTab===t ? 'bg-cyan-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}>
-                                            {t}
-                                        </button>
+
+                    {/* MAIN CONTENT AREA */}
+                    <main className="flex-1 relative z-10 overflow-hidden flex flex-col">
+                        
+                        {/* VIEW: HOME (CONNECT) */}
+                        {view === 'HOME' && (
+                            <div className="h-full flex flex-col items-center justify-center p-6 space-y-8 animate-[message-in_0.5s_ease-out]">
+                                {/* Identity Card */}
+                                <div className="w-full max-w-sm glass-panel p-6 rounded-3xl flex flex-col items-center text-center relative overflow-hidden group">
+                                    <div className="absolute top-0 left-0 w-full h-1 bg-[var(--primary)]"></div>
+                                    <div className="mb-4 bg-slate-800/50 p-3 rounded-full border border-white/5 text-[var(--primary)] shadow-[0_0_20px_var(--primary-glow)]">
+                                        <Icon name="fingerprint" size={32} />
+                                    </div>
+                                    <h2 className="text-xl font-bold mb-1">My Identity</h2>
+                                    <p className="text-slate-500 text-xs font-mono mb-4">{identity?.fp || "Generating..."}</p>
+                                    
+                                    <button onClick={() => setQrPayload({ data: JSON.stringify(identity), label: "MY IDENTITY", subLabel: "Scan to Connect" })}
+                                            className="w-full py-3 bg-[var(--primary)] text-black font-bold rounded-xl hover:opacity-90 transition-opacity flex items-center justify-center gap-2">
+                                        <Icon name="qr-code" size={18} /> Show ID
+                                    </button>
+                                </div>
+
+                                {/* Main Action */}
+                                <button onClick={() => setShowScanner(true)} 
+                                        className="pulse-effect relative w-24 h-24 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-white shadow-2xl active:scale-95 transition-transform z-10">
+                                    <Icon name="scan-line" size={32} />
+                                </button>
+                                <p className="text-xs text-slate-500 font-mono tracking-widest uppercase">Tap to Scan</p>
+                            </div>
+                        )}
+
+                        {/* VIEW: CHAT */}
+                        {view === 'CHAT' && (
+                            <div className="flex flex-col h-full">
+                                {/* Session Status */}
+                                <div className="px-6 py-2 flex items-center justify-center gap-2 text-[10px] font-mono text-[var(--primary)] opacity-80 border-b border-white/5">
+                                    <Icon name="lock" size={10} />
+                                    ENCRYPTED: AES-GCM-256
+                                </div>
+
+                                {/* Messages */}
+                                <div className="flex-1 overflow-y-auto p-4 space-y-4 no-scrollbar">
+                                    {chat.map((c, i) => (
+                                        <div key={i} className={`flex ${c.from === 'me' ? 'justify-end' : c.from === 'sys' ? 'justify-center' : 'justify-start'} msg-anim`}>
+                                            {c.from === 'sys' ? (
+                                                <div className="text-[10px] font-mono text-slate-500 bg-slate-900/50 px-3 py-1 rounded-full border border-white/5">
+                                                    {c.text}
+                                                </div>
+                                            ) : (
+                                                <div className={`max-w-[80%] p-4 rounded-2xl relative group ${c.from === 'me' 
+                                                    ? 'bg-[var(--primary)] text-black rounded-tr-sm' 
+                                                    : 'glass-panel text-slate-200 rounded-tl-sm'}`}>
+                                                    <p className="text-sm leading-relaxed">{c.text}</p>
+                                                    <span className="text-[9px] opacity-40 absolute bottom-1 right-2">{c.time}</span>
+                                                </div>
+                                            )}
+                                        </div>
                                     ))}
+                                    <div ref={chatEndRef}></div>
                                 </div>
-                                {/* TAB: CONNECT */}
-                                {activeTab === 'CONNECT' && (
-                                    <div className="h-full flex flex-col min-h-0 overflow-y-auto touch-scroll">
-                                        <div className="flex-1 overflow-y-auto touch-scroll">
-                                            <div className={`grid grid-cols-1 ${handshakeReply ? 'md:grid-cols-2' : ''} gap-4 items-start pb-20 anim-slide-up`}>
-                                                {/* Identity Panel */}
-                                                <div className="glass p-6 rounded-2xl flex flex-col items-center text-center h-full anim-slide-up">
-                                                    <div className="mb-4">
-                                                        <h2 className="text-white font-bold text-sm">STEP 1: IDENTITY</h2>
-                                                        <p className="text-slate-400 text-xs">Show this to partner</p>
-                                                    </div>
-                                                    {identityPayload && (
-                                                        <QRDisplay
-                                                            data={JSON.stringify(identityPayload)}
-                                                            label="MY IDENTITY"
-                                                            subLabel={`FP: ${identityPayload.fp}`}
-                                                            color="black"
-                                                        />
-                                                    )}
-                                                </div>
-                                                {/* Reply Panel */}
-                                                {handshakeReply && (
-                                                    <div className="glass p-6 rounded-2xl flex flex-col items-center text-center border border-green-500/30 shadow-[0_0_30px_rgba(34,197,94,0.1)] h-full anim-slide-up">
-                                                        <div className="mb-4">
-                                                            <h2 className="text-green-400 font-bold text-sm">STEP 2: HANDSHAKE</h2>
-                                                            <p className="text-green-200/50 text-xs">Reply generated from scan</p>
-                                                        </div>
-                                                        <QRDisplay data={handshakeReply} label="SESSION DATA" color="black" />
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
-                                {/* TAB: VERIFY */}
-                                {activeTab === 'VERIFY' && (
-                                    <div className="anim-fade space-y-4 overflow-y-auto touch-scroll flex-1 min-h-0">
-                                        <div className="glass p-8 rounded-2xl text-center space-y-6 anim-slide-up">
-                                            <div className="w-16 h-16 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center mx-auto mb-2 anim-pulse">
-                                                <Icon p={sessionKey ? icons.lock : icons.unlock} size={32} />
-                                            </div>
-                                            <div>
-                                                <h2 className="text-white font-bold text-xl">Session Status</h2>
-                                                <p className={sessionKey ? "text-emerald-400" : "text-red-400"}>
-                                                    {sessionKey ? "SECURE (AES-GCM-256)" : "NOT CONNECTED"}
-                                                </p>
-                                            </div>
-                                           
-                                            {sessionKey && fingerprint && (
-                                                <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 anim-slide-up">
-                                                    <p className="text-xs text-slate-500 uppercase tracking-widest mb-2">Safety Fingerprint</p>
-                                                    <div className="text-4xl mb-2">{fingerprint.emoji}</div>
-                                                    <div className="font-mono text-xl text-yellow-500 tracking-widest">{fingerprint.hex}</div>
-                                                    <p className="text-[10px] text-slate-500 mt-2 mx-auto max-w-[200px] leading-tight">
-                                                        Compare this visually with your partner. If they match, the channel is secure against MITM.
-                                                    </p>
-                                                </div>
-                                            )}
-                                           
-                                            {sessionKey && (
-                                                <button onClick={()=>setActiveTab('CHAT')} className="w-full bg-cyan-600 hover:bg-cyan-500 text-white font-bold py-3 rounded-xl transition-colors anim-slide-up">
-                                                    Open Chat Channel
-                                                </button>
-                                            )}
-                                        </div>
-                                    </div>
-                                )}
-                                {/* TAB: CHAT */}
-                                {activeTab === 'CHAT' && (
-                                    <div className="anim-fade flex flex-col flex-1 min-h-0 overflow-y-auto touch-scroll">
-                                        <div ref={chatContainerRef} className="flex-1 glass rounded-2xl p-4 overflow-y-auto touch-scroll space-y-3 mb-2 scrollbar-hide anim-slide-up">
-                                            {chat.length === 0 && (
-                                                <div className="text-center text-slate-600 mt-10 anim-slide-up">
-                                                    <Icon p={icons.shield} size={48} className="mx-auto mb-2 opacity-20"/>
-                                                    <p className="text-sm">Channel Encrypted.</p>
-                                                    <p className="text-xs">HKDF-derived AES-GCM-256</p>
-                                                </div>
-                                            )}
-                                            {chat.map((c, i) => (
-                                                <div key={i} className={`flex ${c.from==='Me'?'justify-end':''} anim-slide-up`}>
-                                                    <div className={`max-w-[80%] p-3 rounded-2xl text-sm relative ${c.from==='Me' ? 'bg-cyan-600 text-white rounded-br-none' : 'bg-slate-700 text-slate-200 rounded-bl-none'}`}>
-                                                        {c.isTyping ? (
-                                                            <div className="typing-animation">{c.text}</div>
-                                                        ) : (
-                                                            c.text
-                                                        )}
-                                                        {c.isTyping && <div className="absolute bottom-0 right-0 w-1 h-1 bg-current rounded-full anim-pulse"></div>}
-                                                    </div>
-                                                </div>
-                                            ))}
-                                            <div ref={chatEndRef} />
-                                        </div>
-                                       
-                                        <div className="flex gap-2 flex-shrink-0 pt-2 anim-slide-up">
-                                            <button onClick={()=>setScanner('QR')} className="bg-slate-700 hover:bg-slate-600 text-slate-300 p-3 rounded-xl transition-colors anim-pulse" title="Scan QR Message">
-                                                <Icon p={icons.eye} />
-                                            </button>
-                                            <input value={msg} onChange={e=>setMsg(e.target.value)}
-                                                className="flex-1 bg-slate-800 text-white px-4 rounded-xl border border-slate-700 focus:border-cyan-500 outline-none min-w-0"
-                                                placeholder="Type message..."
-                                            />
-                                            <button onClick={sendMessage} className="bg-cyan-600 hover:bg-cyan-500 text-white p-3 rounded-xl shadow-lg transition-transform active:scale-95 flex-shrink-0 anim-pulse">
-                                                <Icon p={icons.send} />
-                                            </button>
-                                        </div>
-                                    </div>
-                                )}
-                                {/* MAIN SCAN FABs */}
-                                {!sessionKey && activeTab === 'CONNECT' && (
-                                    <div className="fixed bottom-6 right-6 flex flex-col gap-3 anim-slide-up">
-                                        <button onClick={()=>setScanner('QR')} className="bg-cyan-500 hover:bg-cyan-400 text-slate-900 p-4 rounded-full shadow-[0_0_30px_rgba(6,182,212,0.4)] transition-transform hover:scale-110 active:scale-95 anim-pulse">
-                                            <Icon p={icons.eye} size={32} />
-                                        </button>
-                                    </div>
-                                )}
-                            </div>
-                        )}
-                        {/* DARTH MODE UI */}
-                        {mode === 'DARTH' && (
-                            <div className="anim-fade max-w-md mx-auto space-y-6 p-4 overflow-y-auto touch-scroll flex-1 w-full min-h-0">
-                                <div className="darth-glass p-6 rounded-2xl text-red-100 border-l-4 border-red-600 relative overflow-hidden anim-slide-up">
-                                    <div className="absolute top-0 right-0 p-4 opacity-10"><Icon p={icons.bug} size={100} /></div>
-                                    <h2 className="text-xl font-bold mb-1">Packet Interceptor</h2>
-                                    <p className="text-red-400 text-xs mb-6">Capture, Analyze, Corrupt</p>
-                                   
-                                    {!interceptedPacket ? (
-                                        <div className="grid grid-cols-2 gap-2">
-                                            <button onClick={()=>setScanner('QR')} className="h-32 border-2 border-dashed border-red-500/50 rounded-xl flex flex-col items-center justify-center text-red-400 hover:bg-red-900/20 hover:border-red-400 transition-all cursor-pointer anim-slide-up">
-                                                <Icon p={icons.eye} size={40} className="mb-2" />
-                                                <span className="font-mono text-sm">SCAN QR</span>
-                                            </button>
-                                        </div>
-                                    ) : (
-                                        <div className="space-y-4 anim-slide-up">
-                                            <div className="bg-black/50 p-4 rounded-xl font-mono text-[10px] break-all border border-red-900/50 relative">
-                                                <div className="absolute top-2 right-2 text-red-500 text-[9px]">CAPTURED AT {interceptedPacket.time}</div>
-                                                {interceptedPacket.raw}
-                                            </div>
-                                            <div className="grid grid-cols-2 gap-3">
-                                                <button onClick={()=>{alert("Brute Force Failed: AES-256 Entropy too high.\nKeyspace: 2^256");}} className="bg-red-900/50 hover:bg-red-900 border border-red-700 text-red-200 py-3 rounded-lg text-xs font-bold">
-                                                    ATTEMPT CRACK
-                                                </button>
-                                                <button onClick={darthTamper} className="bg-red-600 hover:bg-red-500 text-white py-3 rounded-lg text-xs font-bold shadow-[0_0_15px_rgba(220,38,38,0.4)]">
-                                                    TAMPER & REPLAY
-                                                </button>
-                                            </div>
-                                           
-                                            <button onClick={()=>setInterceptedPacket(null)} className="w-full py-2 text-xs text-red-400 hover:text-red-200">
-                                                DISCARD & SCAN NEW
-                                            </button>
-                                        </div>
-                                    )}
-                                </div>
-                               
-                                <div className="p-4 rounded-xl bg-slate-900/50 border border-slate-800 text-xs text-slate-500 anim-slide-up">
-                                    <strong className="text-slate-400 block mb-1">DARTH CONSOLE:</strong>
-                                    Use this mode to test the security of the Normal mode. Try to tamper with a packet and scan it on a receiving device. The receiver's integrity check (GCM Auth Tag) should fail.
+
+                                {/* Input Area */}
+                                <div className="p-4 glass-panel m-2 mb-4 rounded-3xl flex items-center gap-2">
+                                    <button onClick={toggleVoice} 
+                                            className={`p-3 rounded-full transition-all ${isListening ? 'bg-red-500 text-white animate-pulse' : 'bg-slate-800 text-slate-400'}`}>
+                                        <Icon name={isListening ? "mic" : "mic-off"} size={18} />
+                                    </button>
+                                    
+                                    <input value={inputMsg} onChange={(e) => setInputMsg(e.target.value)}
+                                           onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
+                                           placeholder="Type encrypted message..."
+                                           className="flex-1 bg-transparent border-none outline-none text-white placeholder-slate-600 text-sm h-full"
+                                    />
+                                    
+                                    <button onClick={sendMessage} disabled={!inputMsg}
+                                            className="p-3 bg-white/10 rounded-full text-[var(--primary)] hover:bg-[var(--primary)] hover:text-black transition-all disabled:opacity-30">
+                                        <Icon name="send" size={18} />
+                                    </button>
                                 </div>
                             </div>
                         )}
+
+                        {/* DARTH MODE OVERLAY */}
+                        {mode === 'DARTH' && view === 'HOME' && intercepted && (
+                             <div className="absolute inset-4 glass-panel rounded-3xl p-6 flex flex-col border-l-4 border-red-500 animate-[message-in_0.3s_ease-out]">
+                                <div className="flex justify-between items-start mb-4">
+                                    <div>
+                                        <h3 className="text-red-500 font-bold flex items-center gap-2">
+                                            <Icon name="radio" size={16} /> PACKET INTERCEPTED
+                                        </h3>
+                                        <p className="text-[10px] font-mono text-slate-500">ID: {intercepted.id}</p>
+                                    </div>
+                                    <button onClick={() => setIntercepted(null)} className="text-slate-500 hover:text-white"><Icon name="x" size={16}/></button>
+                                </div>
+                                
+                                <div className="flex-1 bg-black/50 rounded-lg p-2 font-mono text-[9px] text-red-400 overflow-hidden break-all border border-red-900/30 relative mb-4">
+                                    <div className="absolute top-0 left-0 w-full h-full bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-10"></div>
+                                    {intercepted.raw}
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-2">
+                                    <button onClick={() => {
+                                        const tampered = intercepted.raw.replace(/./, 'X'); // Simple tamper
+                                        setQrPayload({ data: tampered, label: "TAMPERED PACKET", subLabel: "GCM Auth Tag Should Fail", color: "red" });
+                                    }} className="bg-red-900/40 border border-red-500/50 text-red-200 py-3 rounded-lg text-xs font-bold hover:bg-red-500 hover:text-black transition-colors">
+                                        TAMPER
+                                    </button>
+                                    <button onClick={() => setQrPayload({ data: intercepted.raw, label: "REPLAY ATTACK", subLabel: "Original Packet", color: "red" })} 
+                                            className="bg-slate-800 border border-slate-700 text-slate-300 py-3 rounded-lg text-xs font-bold hover:bg-white hover:text-black transition-colors">
+                                        REPLAY
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
                     </main>
-                    {/* MODALS */}
-                    {scanner === 'QR' && (
-                        <QRScanner
-                            onScan={handleScan}
-                            onClose={()=>setScanner(null)}
-                            isDarth={mode==='DARTH'}
-                        />
+
+                    {/* BOTTOM NAV */}
+                    <nav className="glass-panel m-4 mt-0 rounded-2xl flex justify-around p-2 z-20">
+                        <button onClick={() => setView('HOME')} className={`p-3 rounded-xl flex flex-col items-center gap-1 transition-all ${view === 'HOME' ? 'text-[var(--primary)] bg-white/5' : 'text-slate-500'}`}>
+                            <Icon name="globe" size={20} />
+                            <span className="text-[9px] font-bold">CONNECT</span>
+                        </button>
+                        <button onClick={() => { if(session) setView('CHAT'); else alert("Connect First"); }} className={`p-3 rounded-xl flex flex-col items-center gap-1 transition-all ${view === 'CHAT' ? 'text-[var(--primary)] bg-white/5' : 'text-slate-500'} ${!session ? 'opacity-50' : ''}`}>
+                            <Icon name="message-square" size={20} />
+                            <span className="text-[9px] font-bold">SECURE CHAT</span>
+                        </button>
+                    </nav>
+
+                    {/* FULL SCREEN MODALS */}
+                    {showScanner && (
+                        <ScannerOverlay onScan={processScan} onClose={() => setShowScanner(false)} mode={mode} />
                     )}
-                    {fileTransfer && (
-                        <AnimatedQR
-                            chunks={fileTransfer.chunks}
-                            label={fileTransfer.label}
-                            theme={fileTransfer.theme}
-                            onClose={()=>setFileTransfer(null)}
-                        />
+
+                    {qrPayload && (
+                        <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-sm flex items-center justify-center animate-[message-in_0.2s_ease-out]">
+                            <div className="w-full max-w-sm">
+                                <SmartQR 
+                                    data={qrPayload.data} 
+                                    label={qrPayload.label} 
+                                    subLabel={qrPayload.subLabel} 
+                                    color={qrPayload.color || (mode === 'DARTH' ? 'red' : 'black')} 
+                                />
+                                <button onClick={() => setQrPayload(null)} className="mt-8 mx-auto flex items-center gap-2 text-white/70 hover:text-white transition-colors">
+                                    <Icon name="x-circle" size={24} /> Close
+                                </button>
+                            </div>
+                        </div>
                     )}
                 </div>
             );
         };
+
         const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(<App />);
     </script>
