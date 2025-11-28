@@ -63,6 +63,19 @@
             width: 100%;
             border-radius: 8px;
         }
+
+        .chunk-qr {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .chunk-qr .qr-wrapper {
+            background: white;
+            padding: 0.5rem;
+            border-radius: 0.5rem;
+        }
     </style>
 </head>
 <body class="min-h-screen flex flex-col items-center justify-center p-4">
@@ -131,11 +144,9 @@
 
             <!-- The QR / Code Display -->
             <div id="signalOutput" class="hidden space-y-4">
-                <p class="text-xs text-slate-400 text-center">Scan this on the other device OR copy the code.</p>
+                <p class="text-xs text-slate-400 text-center" id="qrInstructions">Scan this on the other device OR copy the code.</p>
                 
-                <div class="bg-white p-4 rounded-lg mx-auto w-fit">
-                    <div id="qrcode"></div>
-                </div>
+                <div id="qrcode-container" class="mx-auto"></div>
 
                 <div class="relative">
                     <textarea id="localSignalText" readonly class="w-full h-24 bg-slate-900 rounded-lg p-3 text-xs text-slate-400 font-mono resize-none border border-slate-700 focus:outline-none" onclick="this.select()"></textarea>
@@ -148,6 +159,9 @@
             <!-- The Input Section -->
             <div id="signalInputSection" class="pt-4 border-t border-slate-700 space-y-4">
                 <p class="text-sm text-white font-bold mb-2" id="remoteSignalLabel">Paste response from other device:</p>
+                
+                <!-- Scan Progress -->
+                <div id="scanProgress" class="hidden text-center text-sm text-cyan-400 py-2"></div>
                 
                 <!-- QR Scanner -->
                 <div id="qrScannerSection" class="hidden space-y-2">
@@ -219,6 +233,10 @@
         let receivedSize = 0;
         let fileMeta = {};
         let html5QrCode; // QR Scanner instance
+        let collectedSignalChunks = [];
+        let nextExpectedChunk = 1;
+        let expectedTotalChunks = 0;
+        let fullSignalString = ''; // For copy
         
         // ICE Server configuration (Public STUN servers are usually enough for local/direct)
         const rtcConfig = {
@@ -256,10 +274,16 @@
             const inputSection = document.getElementById('remoteSignalInput').parentElement;
             const scannerSection = document.getElementById('qrScannerSection');
             const scanBtn = document.querySelector('[onclick="startQrScan()"]');
+            const progressDiv = document.getElementById('scanProgress');
             
+            collectedSignalChunks = [];
+            nextExpectedChunk = 1;
+            expectedTotalChunks = 0;
             inputSection.style.display = 'none';
             scannerSection.classList.remove('hidden');
             scanBtn.style.display = 'none';
+            progressDiv.classList.remove('hidden');
+            progressDiv.innerText = 'Scan the first chunk (1/N)...';
             
             html5QrCode = new Html5Qrcode("qr-reader");
             const config = { fps: 10, qrbox: { width: 250, height: 250 } };
@@ -268,10 +292,44 @@
                 { facingMode: "environment" }, // Use back camera
                 config,
                 (decodedText) => {
-                    // On success
-                    document.getElementById('remoteSignalInput').value = decodedText;
-                    stopQrScan();
-                    connectPeers(); // Auto-connect if valid
+                    // Parse chunk
+                    const match = decodedText.match(/^(\d+):(\d+):(.*)$/);
+                    if (!match) {
+                        console.log('Invalid chunk format');
+                        return;
+                    }
+                    const chunkNum = parseInt(match[1]);
+                    const total = parseInt(match[2]);
+                    const chunkData = match[3];
+
+                    if (expectedTotalChunks === 0) {
+                        expectedTotalChunks = total;
+                    } else if (total !== expectedTotalChunks) {
+                        alert('Inconsistent chunk count. Restart scan.');
+                        stopQrScan();
+                        return;
+                    }
+
+                    if (chunkNum === nextExpectedChunk) {
+                        collectedSignalChunks[chunkNum - 1] = chunkData;
+                        nextExpectedChunk++;
+                        const scanned = nextExpectedChunk - 1;
+                        if (nextExpectedChunk > expectedTotalChunks) {
+                            // Complete
+                            fullSignalString = collectedSignalChunks.join('');
+                            document.getElementById('remoteSignalInput').value = fullSignalString;
+                            stopQrScan();
+                            connectPeers(); // Auto connect
+                        } else {
+                            progressDiv.innerText = `Scanned ${scanned}/${expectedTotalChunks}. Now scan chunk ${nextExpectedChunk}...`;
+                        }
+                    } else if (chunkNum < nextExpectedChunk) {
+                        // Already scanned, ignore
+                        progressDiv.innerText = `Chunk ${chunkNum} already scanned. Scanning for ${nextExpectedChunk}...`;
+                    } else {
+                        // Out of order
+                        alert(`Please scan chunks in order. Expected ${nextExpectedChunk}, got ${chunkNum}.`);
+                    }
                 },
                 (error) => {
                     // Ignore scan errors
@@ -294,10 +352,13 @@
             const inputSection = document.getElementById('remoteSignalInput').parentElement;
             const scannerSection = document.getElementById('qrScannerSection');
             const scanBtn = document.querySelector('[onclick="startQrScan()"]');
+            const progressDiv = document.getElementById('scanProgress');
             
             inputSection.style.display = 'flex';
             scannerSection.classList.add('hidden');
             scanBtn.style.display = 'block';
+            progressDiv.classList.add('hidden');
+            progressDiv.innerText = '';
         }
 
         // --- WEBRTC CORE ---
@@ -315,7 +376,7 @@
             pc.onicecandidate = e => {
                 if (!e.candidate) {
                     // Gathering complete - Show the OFFER code
-                    displaySignal(pc.localDescription, "Scan this on Receiver");
+                    displaySignal(pc.localDescription, "Scan all chunks on Receiver in order");
                 }
             };
         }
@@ -349,18 +410,18 @@
             pc.onicecandidate = e => {
                 if (!e.candidate) {
                     // Gathering complete - Show the ANSWER code
-                    displaySignal(pc.localDescription, "Scan this on Sender");
+                    displaySignal(pc.localDescription, "Scan all chunks on Sender in order");
                 }
             };
         }
 
         // 4. Connect Peers (Both sides use this button logic differently)
         async function connectPeers() {
-            const remoteDataStr = document.getElementById('remoteSignalInput').value;
+            const remoteDataStr = document.getElementById('remoteSignalInput').value.trim();
             if (!remoteDataStr) return alert("Please paste the code first!");
 
             try {
-                // Decompress base64
+                // Assume it's the full base64
                 const remoteDesc = JSON.parse(atob(remoteDataStr));
 
                 if (!pc.currentRemoteDescription) {
@@ -386,21 +447,49 @@
         function displaySignal(sdp, instructions) {
             document.getElementById('signalLoader').classList.add('hidden');
             document.getElementById('signalOutput').classList.remove('hidden');
+            document.getElementById('qrInstructions').innerText = instructions;
             
-            // Compress to Base64 to make it copy-pasteable
-            const signalString = btoa(JSON.stringify(sdp));
+            // Minify SDP JSON
+            let sdpJson = JSON.stringify(sdp);
+            sdpJson = sdpJson.replace(/\s/g, ''); // Remove all whitespace
+            fullSignalString = btoa(sdpJson);
             
-            document.getElementById('localSignalText').value = signalString;
+            document.getElementById('localSignalText').value = fullSignalString;
             
-            // Generate QR with higher error correction and larger size for better scannability
-            document.getElementById('qrcode').innerHTML = "";
-            new QRCode(document.getElementById("qrcode"), {
-                text: signalString,
-                width: 256,
-                height: 256,
-                colorDark : "#000000",
-                colorLight : "#ffffff",
-                correctLevel : QRCode.CorrectLevel.H  // High error correction for denser data
+            // Chunk the base64 string
+            const chunkSize = 350; // Conservative size for reliable QR scanning with high EC
+            const chunks = [];
+            for (let i = 0; i < fullSignalString.length; i += chunkSize) {
+                chunks.push(fullSignalString.substring(i, i + chunkSize));
+            }
+            const totalChunks = chunks.length;
+            
+            // Generate multiple QRs
+            const container = document.getElementById('qrcode-container');
+            container.innerHTML = `<p class="text-xs text-slate-400 text-center mb-2">Scan all ${totalChunks} chunks in order (1 to ${totalChunks})</p>`;
+            
+            chunks.forEach((chunk, index) => {
+                const chunkNum = index + 1;
+                const qrText = `${chunkNum}:${totalChunks}:${chunk}`;
+                const chunkDiv = document.createElement('div');
+                chunkDiv.className = 'chunk-qr';
+                chunkDiv.innerHTML = `
+                    <span class="text-sm font-bold text-slate-300 mb-1">Chunk ${chunkNum}/${totalChunks}</span>
+                    <div class="qr-wrapper">
+                        <div id="qrcode-${chunkNum}"></div>
+                    </div>
+                `;
+                container.appendChild(chunkDiv);
+                
+                // Generate QR for this chunk
+                new QRCode(document.getElementById(`qrcode-${chunkNum}`), {
+                    text: qrText,
+                    width: 200,
+                    height: 200,
+                    colorDark: "#000000",
+                    colorLight: "#ffffff",
+                    correctLevel: QRCode.CorrectLevel.H  // High error correction
+                });
             });
         }
 
@@ -408,8 +497,7 @@
             const copyText = document.getElementById("localSignalText");
             copyText.select();
             document.execCommand("copy"); // Fallback for older browsers
-            // Modern way: navigator.clipboard.writeText(copyText.value);
-            alert("Code copied!");
+            alert("Full code copied!");
         }
 
         // --- DATA CHANNEL & TRANSFER ---
