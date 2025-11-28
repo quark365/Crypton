@@ -556,7 +556,7 @@
             sendFile() {
                 const CHUNK_SIZE = 16384; // 16KB
                 const meta = { name: this.file.name, size: this.file.size, type: this.file.type };
-                this.dc.send(JSON.stringify({ type: 'meta', ...meta }));
+                this.dc.send(JSON.stringify({ type: 'meta', data: meta }));
 
                 const reader = new FileReader();
                 let offset = 0;
@@ -582,7 +582,7 @@
                 if(typeof data === 'string') {
                     const msg = JSON.parse(data);
                     if(msg.type === 'meta') {
-                        this.fileMeta = msg;
+                        this.fileMeta = msg.data;
                         this.receivedBuffers = [];
                         this.receivedBytes = 0;
                     }
