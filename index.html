@@ -3,69 +3,102 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>CryptoVis: GibberLink v2.1 (Audio + Secure)</title>
-   
+    <title>CryptoVis: GibberLink v3.0 (Chat Only)</title>
+    
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
-   
+    
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap');
-       
+        @import url('https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Outfit:wght@300;400;600;800&display=swap');
+        
+        :root {
+            --primary: #06b6d4;
+            --primary-glow: rgba(6, 182, 212, 0.5);
+            --bg-dark: #020617;
+            --glass-bg: rgba(15, 23, 42, 0.6);
+            --glass-border: rgba(148, 163, 184, 0.1);
+        }
+
         body {
-            font-family: 'JetBrains Mono', monospace;
-            background-color: #0f172a;
+            font-family: 'Outfit', sans-serif;
+            background-color: var(--bg-dark);
             color: #e2e8f0;
             overscroll-behavior-y: none;
             height: 100dvh;
             width: 100%;
             overflow: hidden;
+            background-image: 
+                radial-gradient(circle at 50% 0%, #1e293b 0%, transparent 50%),
+                radial-gradient(circle at 80% 80%, #0f172a 0%, transparent 40%);
         }
-        #root {
-            height: 100dvh;
-            width: 100%;
-            overflow: hidden;
+
+        .mono { font-family: 'Space Mono', monospace; }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+
+        /* Glassmorphism */
+        .glass { 
+            background: var(--glass-bg); 
+            backdrop-filter: blur(16px); 
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--glass-border); 
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
         }
-        .glass { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(12px); border: 1px solid rgba(148, 163, 184, 0.1); }
-        .darth-glass { background: rgba(69, 10, 10, 0.85); backdrop-filter: blur(12px); border: 1px solid rgba(239, 68, 68, 0.3); }
-       
-        .scan-line {
-            width: 100%; height: 2px; background: #06b6d4; position: absolute;
-            animation: scan 2s linear infinite; box-shadow: 0 0 10px #06b6d4;
+        
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.4);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.2);
         }
-        .darth-scan-line { background: #ef4444; box-shadow: 0 0 10px #ef4444; }
-       
+
+        /* Animations */
         @keyframes scan { 0% { top: 0%; opacity: 0; } 50% { opacity: 1; } 100% { top: 100%; opacity: 0; } }
-       
-        .matrix-bg {
-            background-image: radial-gradient(#1e293b 1px, transparent 1px), radial-gradient(#1e293b 1px, transparent 1px);
-            background-size: 20px 20px;
-            background-position: 0 0, 10px 10px;
-            background-color: #020617;
+        .scan-line {
+            width: 100%; height: 2px; background: var(--primary); position: absolute;
+            animation: scan 2s cubic-bezier(0.4, 0, 0.2, 1) infinite; 
+            box-shadow: 0 0 15px var(--primary);
         }
-       
+
+        @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        .anim-slide-up { animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+
+        @keyframes pulse-glow { 0%, 100% { box-shadow: 0 0 10px var(--primary-glow); } 50% { box-shadow: 0 0 25px var(--primary-glow); } }
+        .anim-pulse-glow { animation: pulse-glow 3s infinite; }
+
+        @keyframes float { 0% { transform: translateY(0px); } 50% { transform: translateY(-5px); } 100% { transform: translateY(0px); } }
+        .anim-float { animation: float 6s ease-in-out infinite; }
+
+        /* Theme Overrides for Darth Mode */
+        .theme-darth { --primary: #ef4444; --primary-glow: rgba(239, 68, 68, 0.5); }
+        .theme-darth .glass { background: rgba(69, 10, 10, 0.3); border-color: rgba(239, 68, 68, 0.2); }
+        .theme-darth body { background-image: radial-gradient(circle at 50% 0%, #450a0a 0%, transparent 60%); }
+
+        /* Utilities */
+        .text-glow { text-shadow: 0 0 10px var(--primary-glow); }
         input[type=range] { -webkit-appearance: none; width: 100%; background: transparent; }
-        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; height: 16px; width: 16px; border-radius: 50%; background: currentColor; cursor: pointer; margin-top: -6px; }
-        input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 4px; cursor: pointer; background: #334155; border-radius: 2px; }
-       
-        .scrollbar-hide::-webkit-scrollbar { display: none; }
-        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
-       
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; height: 16px; width: 16px; border-radius: 50%; background: currentColor; cursor: pointer; margin-top: -6px; box-shadow: 0 0 10px currentColor; }
+        input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 4px; cursor: pointer; background: rgba(255,255,255,0.1); border-radius: 2px; }
+        
         .touch-scroll { -webkit-overflow-scrolling: touch; }
-        .anim-fade { animation: fadeIn 0.3s ease-in; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
     </style>
 </head>
-<body class="matrix-bg selection:bg-cyan-500 selection:text-white">
+<body>
     <div id="root"></div>
     <script type="text/babel">
         const { useState, useEffect, useRef, useMemo } = React;
-        // --- CONSTANTS & CONFIG ---
+
+        // --- CONSTANTS ---
         const PROTOCOL = {
-            VERSION: '2.1',
+            VERSION: '3.0',
             SAMPLE_RATE: 48000,
             BASE_FREQ: 1400,
             FREQ_SPACING: 120,
@@ -78,6 +111,7 @@
             DEFAULT_QR_FPS: 200
         };
         const BASE32_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+
         // --- ICONS ---
         const Icon = ({ p, size=24, className="" }) => (
             <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>{p}</svg>
@@ -85,26 +119,24 @@
         const icons = {
             shield: <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />,
             skull: <><path d="M12 2c-4 0-8 3-8 8 0 1.5.5 3 1.5 4C4 16 3 22 3 22h18s-1-6-2.5-8c1-1 1.5-2.5 1.5-4 0-5-4-8-8-8z"/><path d="M8 10h.01"/><path d="M16 10h.01"/><path d="M10 14h4"/></>,
-            zap: <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>,
             lock: <><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></>,
             unlock: <><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 9.9-1" /></>,
             eye: <><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></>,
             send: <><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></>,
-            file: <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></>,
             mic: <><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></>,
-            stop: <><circle cx="12" cy="12" r="10"/><rect x="9" y="9" width="6" height="6"/></>,
             play: <polygon points="5 3 19 12 5 21 5 3"/>,
             pause: <><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></>,
             bug: <><rect x="8" y="6" width="8" height="12" rx="4"/><path d="M12 12v.01"/><path d="M4 14h4"/><path d="M16 14h4"/><path d="M4 10h4"/><path d="M16 10h4"/><path d="M4 18h4"/><path d="M16 18h4"/></>,
             x: <><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>,
             sound: <><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></>,
-            download: <><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></>,
-            clock: <><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></>,
-            check: <path d="M20 6L9 17l-5-5"/>
+            link: <><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" /><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" /></>,
+            wifi: <><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></>
         };
+
         // --- CRYPTO UTILS ---
         const buf2hex = (buf) => [...new Uint8Array(buf)].map(x => x.toString(16).padStart(2, '0')).join('');
         const hex2buf = (hex) => new Uint8Array(hex.match(/.{1,2}/g).map(byte => parseInt(byte, 16))).buffer;
+        
         const generateFingerprint = async (buffer) => {
             const hash = await window.crypto.subtle.digest('SHA-256', buffer);
             const arr = new Uint8Array(hash);
@@ -112,9 +144,10 @@
             let em = "";
             for(let i=0; i<4; i++) em += emojis[arr[i] % emojis.length];
             const hex = buf2hex(hash).substring(0, 8).toUpperCase();
-            return { emoji: em, hex: hex, full: buf2hex(hash) };
+            return { emoji: em, hex: hex };
         };
-        // --- GIBBERLINK CORE ---
+
+        // --- LOGIC: GIBBERLINK CORE (Audio/Data) ---
         const GibberLink = {
             utf8ToBytes: (str) => new TextEncoder().encode(str),
             crc32: (bytes) => {
@@ -145,7 +178,7 @@
                 const f = PROTOCOL.BASE_FREQ + symbolIndex * PROTOCOL.FREQ_SPACING;
                 const symbolSamples = Math.floor(PROTOCOL.SAMPLE_RATE * (PROTOCOL.SYMBOL_MS/1000));
                 const fadeSamples = Math.floor(PROTOCOL.SAMPLE_RATE * (PROTOCOL.FADE_MS/1000));
-               
+                
                 const buffer = ctx.createBuffer(1, symbolSamples, PROTOCOL.SAMPLE_RATE);
                 const arr = buffer.getChannelData(0);
                 for(let n=0; n<symbolSamples; n++) {
@@ -169,7 +202,7 @@
                 const charToIndex = {};
                 for(let i=0; i<BASE32_ALPHABET.length; i++) charToIndex[BASE32_ALPHABET[i]] = i;
                 const symbols = [];
-                symbols.push(PROTOCOL.PREAMBLE_SYM, PROTOCOL.PREAMBLE_SYM, PROTOCOL.PREAMBLE_SYM, PROTOCOL.PREAMBLE_SYM);
+                symbols.push(PROTOCOL.PREAMBLE_SYM, PROTOCOL.PREAMBLE_SYM, PROTOCOL.PREAMBLE_SYM);
                 symbols.push(PROTOCOL.START_SYM);
                 const len = b32.length;
                 symbols.push(1); // Type
@@ -209,29 +242,35 @@
                 return Math.sqrt(real*real + imag*imag);
             }
         };
-        // --- COMPONENTS ---
-        const QRDisplay = ({ data, label, subLabel, color="black" }) => {
+
+        // --- UI COMPONENTS ---
+        
+        const QRDisplay = ({ data, label, subLabel }) => {
             const canvasRef = useRef(null);
             useEffect(() => {
                 if (canvasRef.current && data) {
                     new QRious({ element: canvasRef.current, value: data, size: 256, level: 'L', foreground: 'black', background: 'white' });
                 }
-            }, [data, color]);
+            }, [data]);
             return (
-                <div className="bg-white p-3 rounded-xl shadow-2xl flex flex-col items-center">
-                    <canvas ref={canvasRef} className="max-w-full h-auto border-4 border-white" />
-                    <div className="mt-2 text-center">
-                        <p className="text-slate-900 font-bold text-sm truncate max-w-[200px]">{label}</p>
-                        {subLabel && <p className="text-slate-500 text-xs font-mono">{subLabel}</p>}
+                <div className="bg-white/95 p-4 rounded-2xl shadow-2xl flex flex-col items-center anim-float">
+                    <div className="relative">
+                        <canvas ref={canvasRef} className="max-w-full h-auto rounded-lg" />
+                        <div className="absolute inset-0 border-4 border-slate-900/10 rounded-lg pointer-events-none"></div>
+                    </div>
+                    <div className="mt-3 text-center">
+                        <p className="text-slate-900 font-extrabold text-sm tracking-tight">{label}</p>
+                        {subLabel && <p className="text-slate-500 text-[10px] font-mono mt-1">{subLabel}</p>}
                     </div>
                 </div>
             );
         };
+
         const AnimatedQR = ({ chunks, label, onClose, theme="cyan" }) => {
             const [index, setIndex] = useState(0);
             const [speed, setSpeed] = useState(PROTOCOL.DEFAULT_QR_FPS);
             const [isPaused, setIsPaused] = useState(false);
-           
+            
             useEffect(() => {
                 if (isPaused) return;
                 const interval = setInterval(() => {
@@ -239,46 +278,46 @@
                 }, speed);
                 return () => clearInterval(interval);
             }, [chunks, speed, isPaused]);
-            const btnClass = theme === "red" ? "bg-red-600 hover:bg-red-500" : "bg-cyan-600 hover:bg-cyan-500";
+
+            const accentColor = theme === "red" ? "text-red-500" : "text-cyan-400";
+
             return (
-                <div className="fixed inset-0 z-50 bg-black/95 flex flex-col items-center justify-center p-4">
-                    <div className="bg-white p-4 rounded-2xl w-full max-w-sm shadow-[0_0_50px_rgba(255,255,255,0.1)]">
-                        <QRDisplay data={chunks[index]} label={label} subLabel={`Chunk ${index+1}/${chunks.length}`} color="black" />
-                        <div className="mt-6 space-y-4">
+                <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-sm flex flex-col items-center justify-center p-4 animate-[fadeIn_0.3s_ease]">
+                    <div className="relative w-full max-w-sm">
+                        <QRDisplay data={chunks[index]} label={label} subLabel={`Part ${index+1}/${chunks.length}`} />
+                        <div className="glass mt-6 p-4 rounded-2xl space-y-4">
                             <div className="flex items-center gap-2">
-                                <span className="text-xs font-bold text-slate-400 w-8">POS</span>
+                                <span className={`text-[10px] font-bold ${accentColor} w-8 mono`}>POS</span>
                                 <input type="range" min="0" max={chunks.length-1} value={index}
                                     onChange={(e)=>{setIndex(parseInt(e.target.value)); setIsPaused(true);}}
-                                    className="accent-slate-800"
                                 />
                             </div>
                             <div className="flex items-center gap-2">
-                                <span className="text-xs font-bold text-slate-400 w-8">SPD</span>
+                                <span className={`text-[10px] font-bold ${accentColor} w-8 mono`}>SPD</span>
                                 <input type="range" min="50" max="1000" step="50" value={speed}
                                     onChange={(e)=>setSpeed(parseInt(e.target.value))}
-                                    className="accent-slate-800"
                                 />
-                                <span className="text-xs font-mono text-slate-500 w-12 text-right">{speed}ms</span>
+                                <span className="text-[10px] font-mono text-slate-400 w-10 text-right">{speed}ms</span>
                             </div>
-                            <div className="flex justify-center gap-4">
-                                <button onClick={()=>setIndex(prev=>(prev-1+chunks.length)%chunks.length)} className="p-2 rounded-full bg-slate-100 text-slate-800"><Icon p={icons.play} className="rotate-180"/></button>
-                                <button onClick={()=>setIsPaused(!isPaused)} className={`p-4 rounded-full text-white shadow-lg transition-transform active:scale-95 ${btnClass}`}>
+                            <div className="flex justify-center gap-4 pt-2">
+                                <button onClick={()=>setIsPaused(!isPaused)} className={`p-4 rounded-full text-white shadow-lg transition-all active:scale-95 ${theme==='red'?'bg-red-600 shadow-red-500/30':'bg-cyan-600 shadow-cyan-500/30'}`}>
                                     <Icon p={isPaused ? icons.play : icons.pause} />
                                 </button>
-                                <button onClick={()=>setIndex(prev=>(prev+1)%chunks.length)} className="p-2 rounded-full bg-slate-100 text-slate-800"><Icon p={icons.play}/></button>
                             </div>
                         </div>
                     </div>
-                    <button onClick={onClose} className="mt-8 text-white/50 hover:text-white flex items-center gap-2">
-                        <Icon p={icons.x} /> Stop Broadcast
+                    <button onClick={onClose} className="mt-8 text-white/50 hover:text-white flex items-center gap-2 text-sm font-bold tracking-widest uppercase transition-colors">
+                        <Icon p={icons.x} size={18} /> Stop Broadcast
                     </button>
                 </div>
             );
         };
-        const QRScanner = ({ onScan, onClose, incomingFile, isDarth }) => {
+
+        const QRScanner = ({ onScan, onClose, isDarth }) => {
             const videoRef = useRef(null);
             const canvasRef = useRef(null);
             const [error, setError] = useState(null);
+            
             useEffect(() => {
                 let stream;
                 let animFrame;
@@ -292,6 +331,7 @@
                         }
                     })
                     .catch(err => setError("Camera access denied or unavailable."));
+                
                 const tick = () => {
                     if (videoRef.current && videoRef.current.readyState === 4) {
                         const cvs = canvasRef.current;
@@ -311,92 +351,62 @@
                     cancelAnimationFrame(animFrame);
                 };
             }, []);
-            const progress = incomingFile && incomingFile.total > 0
-                ? (Object.keys(incomingFile.chunks).length / incomingFile.total) * 100 : 0;
-            const missingChunks = useMemo(() => {
-                if (!incomingFile || incomingFile.total === 0) return [];
-                const received = new Set(Object.keys(incomingFile.chunks).map(Number));
-                return Array.from({length: incomingFile.total}, (_, i) => i).filter(i => !received.has(i));
-            }, [incomingFile]);
+
             return (
                 <div className="fixed inset-0 z-50 bg-black flex flex-col items-center justify-center p-4">
                     {error ? (
-                        <div className="text-red-500 text-center">{error} <br/><button onClick={onClose} className="mt-4 bg-slate-800 px-4 py-2 rounded">Close</button></div>
+                        <div className="text-red-500 text-center mono text-sm">{error} <br/><button onClick={onClose} className="mt-4 bg-slate-800 px-6 py-2 rounded-full border border-slate-700">Close</button></div>
                     ) : (
-                        <div className={`relative w-full max-w-sm aspect-square bg-slate-900 rounded-3xl overflow-hidden border-2 shadow-[0_0_50px_rgba(0,0,0,0.5)] ${isDarth ? 'border-red-500 shadow-red-900/50' : 'border-cyan-500 shadow-cyan-900/50'}`}>
+                        <div className={`relative w-full max-w-sm aspect-square bg-slate-900 rounded-3xl overflow-hidden border-2 ${isDarth ? 'border-red-500 shadow-[0_0_50px_rgba(239,68,68,0.3)]' : 'border-cyan-500 shadow-[0_0_50px_rgba(6,182,212,0.3)]'}`}>
                             <video ref={videoRef} className="absolute inset-0 w-full h-full object-cover" playsInline muted />
                             <canvas ref={canvasRef} className="hidden" />
-                            <div className={isDarth ? "scan-line darth-scan-line" : "scan-line"}></div>
+                            <div className="scan-line"></div>
                             <div className="absolute top-4 left-0 right-0 text-center pointer-events-none">
-                                <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-widest ${isDarth ? 'bg-red-600 text-white' : 'bg-cyan-500 text-slate-900'}`}>
-                                    {isDarth ? 'INTERCEPTOR ACTIVE' : 'SECURE SCANNER'}
+                                <span className={`px-4 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-[0.2em] shadow-lg backdrop-blur-md ${isDarth ? 'bg-red-600/90 text-white' : 'bg-cyan-500/90 text-black'}`}>
+                                    {isDarth ? 'Interceptor Active' : 'Scanning'}
                                 </span>
                             </div>
-                            {incomingFile && incomingFile.total > 0 && (
-                                <div className="absolute bottom-0 left-0 right-0 bg-black/80 p-4 backdrop-blur-sm">
-                                    <div className="flex justify-between text-xs font-mono text-white mb-2">
-                                        <span>RECEIVING FILE...</span>
-                                        <span>{Math.round(progress)}%</span>
-                                    </div>
-                                    <div className="w-full bg-slate-700 h-1.5 rounded-full overflow-hidden mb-2">
-                                        <div className={`h-full transition-all duration-100 ${isDarth ? 'bg-red-500' : 'bg-cyan-400'}`} style={{width: `${progress}%`}}></div>
-                                    </div>
-                                    <div className="text-[10px] text-slate-400 mb-1">
-                                        Chunks: {Object.keys(incomingFile.chunks).length} / {incomingFile.total}
-                                    </div>
-                                    {missingChunks.length > 0 && (
-                                        <div className="text-[10px] text-red-400 font-bold">
-                                            Missing: {missingChunks.join(', ')}
-                                        </div>
-                                    )}
-                                </div>
-                            )}
+                            <div className="absolute bottom-4 left-0 right-0 text-center pointer-events-none">
+                                <span className="text-[10px] text-white/70 mono bg-black/40 px-3 py-1 rounded">Align QR Code in frame</span>
+                            </div>
                         </div>
                     )}
-                    <button onClick={onClose} className="mt-8 text-white/70 hover:text-white font-bold flex items-center gap-2">
+                    <button onClick={onClose} className="mt-8 text-white/70 hover:text-white font-bold flex items-center gap-2 transition-colors">
                         <Icon p={icons.x} /> Cancel Scan
                     </button>
                 </div>
             );
         };
+
         const AudioListener = ({ onData, onClose }) => {
             const [status, setStatus] = useState("Initializing Mic...");
             const [visuals, setVisuals] = useState(new Array(32).fill(0));
-            const analyzerRef = useRef(null);
-            const processorRef = useRef(null);
+            const stateRef = useRef({ mode: 'WAIT_PREAMBLE', samplesProcessed: 0, syncTime: 0, buffer: [], payload: [], header: { len: 0 } });
             const ctxRef = useRef(null);
             const streamRef = useRef(null);
-           
-            const stateRef = useRef({
-                mode: 'WAIT_PREAMBLE',
-                samplesProcessed: 0,
-                syncTime: 0,
-                buffer: [],
-                payload: [],
-                header: { len: 0 }
-            });
+            
             useEffect(() => {
                 const initAudio = async () => {
                     try {
                         const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
                         streamRef.current = stream;
-                       
                         const ctx = new (window.AudioContext || window.webkitAudioContext)({sampleRate: PROTOCOL.SAMPLE_RATE});
                         ctxRef.current = ctx;
                         const src = ctx.createMediaStreamSource(stream);
                         const processor = ctx.createScriptProcessor(4096, 1, 1);
                         src.connect(processor);
                         processor.connect(ctx.destination);
-                        processorRef.current = processor;
-                        setStatus("Listening for GibberLink...");
+                        
+                        setStatus("Listening...");
+                        
                         processor.onaudioprocess = (e) => {
                             const input = e.inputBuffer.getChannelData(0);
                             const state = stateRef.current;
                             for(let i=0; i<input.length; i++) state.buffer.push(input[i]);
-                            if (state.buffer.length > PROTOCOL.SAMPLE_RATE * 5) {
-                                state.buffer.splice(0, state.buffer.length - PROTOCOL.SAMPLE_RATE * 5);
-                            }
-                            if (Math.random() < 0.1) {
+                            if (state.buffer.length > PROTOCOL.SAMPLE_RATE * 5) state.buffer.splice(0, state.buffer.length - PROTOCOL.SAMPLE_RATE * 5);
+                            
+                            // Visualizer logic (Goertzel on latest samples)
+                            if (Math.random() < 0.2) {
                                 const visData = [];
                                 const tail = state.buffer.slice(-1024);
                                 for(let i=0; i<32; i++) {
@@ -406,28 +416,31 @@
                                 const max = Math.max(...visData, 0.001);
                                 setVisuals(visData.map(v => (v/max)*100));
                             }
+                            
                             processBuffer(state, ctx.sampleRate);
                         };
                     } catch (e) { setStatus("Mic Error: " + e.message); }
                 };
+                
                 const processBuffer = (state, sr) => {
                     const symbolSamps = Math.floor(sr * (PROTOCOL.SYMBOL_MS/1000));
                     const preambleFreq = PROTOCOL.BASE_FREQ + PROTOCOL.PREAMBLE_SYM * PROTOCOL.FREQ_SPACING;
+                    
                     if (state.mode === 'WAIT_PREAMBLE') {
                         if(state.buffer.length < symbolSamps) return;
                         const window = state.buffer.slice(-symbolSamps);
                         const energy = GibberLink.goertzel(window, sr, preambleFreq);
                         if (energy > 0.05) {
                             state.mode = 'SYNCING';
-                            setStatus("Preamble Detected! Syncing...");
+                            setStatus("Signal Detected...");
                             state.syncIndex = state.buffer.length;
                         }
                     } else if (state.mode === 'SYNCING') {
-                        const samplesNeeded = symbolSamps * 6;
+                        const samplesNeeded = symbolSamps * 4; // reduced preamble length wait
                         if (state.buffer.length - state.syncIndex > samplesNeeded) {
                              state.mode = 'READING';
-                             state.readIndex = state.syncIndex + (symbolSamps * 5);
-                             setStatus("Reading Payload...");
+                             state.readIndex = state.syncIndex + (symbolSamps * 2);
+                             setStatus("Receiving Data...");
                         }
                     } else if (state.mode === 'READING') {
                         while (state.buffer.length - state.readIndex >= symbolSamps) {
@@ -448,6 +461,7 @@
                         }
                     }
                 };
+
                 const finishDecode = (state) => {
                     try {
                         const type = state.payload[0];
@@ -457,8 +471,10 @@
                         const dataSyms = state.payload.slice(3, 3 + len);
                         let b32 = "";
                         for(let s of dataSyms) if(s < 32 && s >= 0) b32 += BASE32_ALPHABET[s];
+                        
                         const lookup = {};
                         for(let i=0; i<BASE32_ALPHABET.length; i++) lookup[BASE32_ALPHABET[i]] = i;
+                        
                         let bits = 0, value = 0;
                         const bytes = [];
                         for(let i=0; i<b32.length; i++) {
@@ -469,80 +485,60 @@
                                 bits -= 8;
                             }
                         }
-                        if (bytes.length < 4) throw new Error("Too short");
+                        if (bytes.length < 4) throw new Error("Packet too short");
+                        
+                        // CRC Check
                         const dataBytes = new Uint8Array(bytes.slice(0, bytes.length - 4));
                         const recvCrcVals = bytes.slice(bytes.length - 4);
                         const recvCrc = ((recvCrcVals[0] << 24) | (recvCrcVals[1] << 16) | (recvCrcVals[2] << 8) | recvCrcVals[3]) >>> 0;
                         const calcCrc = GibberLink.crc32(dataBytes) >>> 0;
-                        if (calcCrc !== recvCrc) throw new Error("CRC Fail");
+                        
+                        if (calcCrc !== recvCrc) throw new Error("CRC Check Failed");
+                        
                         const jsonStr = new TextDecoder().decode(dataBytes);
                         onData(jsonStr);
                     } catch(e) {
-                        setStatus("Decode Error: " + e.message);
+                        setStatus("Error: " + e.message);
                         setTimeout(() => {
                             stateRef.current.mode = 'WAIT_PREAMBLE';
                             stateRef.current.payload = [];
-                            stateRef.current.buffer = [];
                             setStatus("Listening...");
                         }, 2000);
                     }
                 };
+                
                 initAudio();
                 return () => {
                     if(streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
                     if(ctxRef.current) ctxRef.current.close();
                 };
             }, []);
+
             return (
-                <div className="fixed inset-0 z-50 bg-black/95 flex flex-col items-center justify-center p-6">
+                <div className="fixed inset-0 z-50 bg-black/90 flex flex-col items-center justify-center p-6 backdrop-blur-xl">
                     <div className="text-center mb-8">
+                        <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-cyan-500/20 text-cyan-400 mb-4 animate-pulse">
+                            <Icon p={icons.mic} size={32} />
+                        </div>
                         <h2 className="text-2xl font-bold text-white mb-2">Sonic Receiver</h2>
-                        <p className="font-mono text-cyan-400">{status}</p>
+                        <p className="font-mono text-cyan-400 text-sm">{status}</p>
                     </div>
-                    <div className="flex items-end gap-[2px] h-32 mb-4 bg-slate-900/50 p-4 rounded-xl border border-slate-700 w-full max-w-md">
+                    
+                    <div className="flex items-end gap-1 h-24 mb-8 w-full max-w-xs justify-center">
                         {visuals.map((v, i) => (
-                            <div key={i} className="flex-1 bg-cyan-500 rounded-t transition-all duration-75" style={{height: `${Math.min(100, v*5)}%`, opacity: 0.5 + (v/200)}}></div>
+                            <div key={i} 
+                                className="w-1.5 bg-cyan-400 rounded-t transition-all duration-75 ease-out shadow-[0_0_10px_rgba(6,182,212,0.5)]" 
+                                style={{height: `${Math.max(4, Math.min(100, v*8))}%`, opacity: 0.3 + (v/150)}}
+                            ></div>
                         ))}
                     </div>
-                    <button onClick={onClose} className="mt-8 bg-slate-800 px-8 py-3 rounded-full text-white font-bold hover:bg-slate-700 border border-slate-600">Cancel</button>
+                    
+                    <button onClick={onClose} className="px-8 py-3 rounded-full text-slate-300 font-bold hover:text-white hover:bg-white/10 transition-all">Cancel</button>
                 </div>
             );
         };
-        const FileLog = ({ fileLog, onDownload }) => (
-            <div className="space-y-3 overflow-y-auto touch-scroll flex-1">
-                {fileLog.length === 0 ? (
-                    <div className="text-center text-slate-600 mt-10">
-                        <Icon p={icons.file} size={48} className="mx-auto mb-2 opacity-20"/>
-                        <p className="text-sm">No files shared yet.</p>
-                    </div>
-                ) : (
-                    fileLog.map((log, i) => (
-                        <div key={i} className="glass p-4 rounded-xl flex items-center justify-between">
-                            <div className="flex items-center gap-3 flex-1">
-                                <div className={`p-2 rounded-lg ${log.type === 'sent' ? 'bg-green-600' : 'bg-blue-600'}`}>
-                                    <Icon p={icons.file} size={20} className="text-white" />
-                                </div>
-                                <div>
-                                    <p className="font-bold text-sm text-white truncate">{log.name}</p>
-                                    <p className="text-xs text-slate-400 font-mono">{log.timestamp}</p>
-                                </div>
-                            </div>
-                            {log.type === 'received' && !log.downloaded && (
-                                <button onClick={() => onDownload(log)} className="bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded-lg text-xs font-bold transition-colors">
-                                    Download
-                                </button>
-                            )}
-                            {log.type === 'received' && log.downloaded && (
-                                <div className="text-green-400 text-xs font-bold flex items-center gap-1">
-                                    <Icon p={icons.check} size={12} /> Downloaded
-                                </div>
-                            )}
-                        </div>
-                    ))
-                )}
-            </div>
-        );
-        // --- MAIN APP ---
+
+        // --- MAIN APP COMPONENT ---
         const App = () => {
             const [mode, setMode] = useState('NORMAL');
             const [activeTab, setActiveTab] = useState('CONNECT');
@@ -552,109 +548,70 @@
             const [sessionKey, setSessionKey] = useState(null);
             const [fingerprint, setFingerprint] = useState(null);
             const [scanner, setScanner] = useState(null);
-            const [fileTransfer, setFileTransfer] = useState(null);
-            const [incomingFile, setIncomingFile] = useState({ id: null, chunks: {}, total: 0, complete: false });
-            const [pendingDownload, setPendingDownload] = useState(null);
-            const [fileLog, setFileLog] = useState([]);
+            const [fileTransfer, setFileTransfer] = useState(null); // Used for packet QR display
             const [chat, setChat] = useState([]);
             const [msg, setMsg] = useState("");
             const [audioPlaying, setAudioPlaying] = useState(false);
             const chatEndRef = useRef(null);
-            const chatContainerRef = useRef(null);
             const [interceptedPacket, setInterceptedPacket] = useState(null);
             const lastScanRef = useRef("");
-           
+            
             useEffect(() => {
                 if (scanner) lastScanRef.current = "";
             }, [scanner]);
-           
+            
+            // Auto scroll chat
             useEffect(() => {
-                if (incomingFile.complete && incomingFile.total > 0) {
-                    assembleFileNoDownload(incomingFile).then(({url, filename}) => {
-                        const newLog = { type: 'received', name: filename, timestamp: new Date().toLocaleString(), url, downloaded: false };
-                        setFileLog(prev => [newLog, ...prev]);
-                        setChat(prev => [...prev, { from: 'Partner', text: `📎 Shared file: ${filename}` }]);
-                        setPendingDownload(newLog);
-                    }).catch(e => {
-                        console.error(e);
-                        alert("File assembly failed: " + e.message);
-                    }).finally(() => {
-                        setIncomingFile({ id: null, chunks: {}, total: 0, complete: false });
-                        setScanner(null);
-                    });
-                }
-            }, [incomingFile.complete]);
-            useEffect(() => {
-                if (chatContainerRef.current) {
-                    chatContainerRef.current.scrollTo({
-                        top: chatContainerRef.current.scrollHeight,
-                        behavior: 'smooth'
-                    });
-                }
+                chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
             }, [chat]);
-            const genKeys = async () => {
-                setKeys(null); setSessionKey(null); setFingerprint(null); setChat([]);
-                const rsa = await window.crypto.subtle.generateKey(
-                    { name: "RSA-OAEP", modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: "SHA-256" },
-                    true, ["encrypt", "decrypt"]
-                );
-                const ecdh = await window.crypto.subtle.generateKey(
-                    { name: "ECDH", namedCurve: "P-256" },
-                    true, ["deriveKey", "deriveBits"]
-                );
-                setKeys({ rsa, ecdh });
-                const rsaExp = await window.crypto.subtle.exportKey("spki", rsa.publicKey);
-                const rsaStr = btoa(String.fromCharCode(...new Uint8Array(rsaExp)));
-                const myFp = await generateFingerprint(rsaExp);
-                setIdentityPayload({
-                    t: "ID",
-                    k: rsaStr,
-                    fp: myFp.hex
-                });
-            };
-            useEffect(() => { genKeys(); }, []);
-           
+
+            // Setup Crypto Keys on Mount
+            useEffect(() => {
+                const initKeys = async () => {
+                    setKeys(null); setSessionKey(null); setFingerprint(null); setChat([]);
+                    const rsa = await window.crypto.subtle.generateKey(
+                        { name: "RSA-OAEP", modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: "SHA-256" },
+                        true, ["encrypt", "decrypt"]
+                    );
+                    const ecdh = await window.crypto.subtle.generateKey(
+                        { name: "ECDH", namedCurve: "P-256" },
+                        true, ["deriveKey", "deriveBits"]
+                    );
+                    setKeys({ rsa, ecdh });
+                    const rsaExp = await window.crypto.subtle.exportKey("spki", rsa.publicKey);
+                    const rsaStr = btoa(String.fromCharCode(...new Uint8Array(rsaExp)));
+                    const myFp = await generateFingerprint(rsaExp);
+                    setIdentityPayload({
+                        t: "ID",
+                        k: rsaStr,
+                        fp: myFp.hex
+                    });
+                };
+                initKeys();
+            }, []);
+
             const playAudioPayload = async (dataStr) => {
                 if(audioPlaying) return;
                 setAudioPlaying(true);
                 await GibberLink.transmit(dataStr);
                 setAudioPlaying(false);
             };
+
             const handleScan = async (raw) => {
                 if (raw === lastScanRef.current) return;
                 lastScanRef.current = raw;
+                
+                // Interceptor Mode
                 if (mode === 'DARTH') {
                     setScanner(null);
                     setInterceptedPacket({ raw, time: new Date().toLocaleTimeString() });
                     return;
                 }
+
                 try {
-                    if (raw.startsWith("F|")) {
-                        if (!sessionKey) return;
-                        const [_, id, idxStr, totStr, data] = raw.split("|");
-                        const idx = parseInt(idxStr);
-                        const tot = parseInt(totStr);
-                       
-                        setIncomingFile(prev => {
-                            if (prev.complete) return prev;
-                            const isNewFile = prev.id !== id;
-                            let newChunks = isNewFile ? {} : { ...prev.chunks };
-                           
-                            if (newChunks[idx]) return prev;
-                            newChunks[idx] = data;
-                           
-                            const isComplete = Object.keys(newChunks).length === tot;
-                           
-                            return {
-                                id: id,
-                                chunks: newChunks,
-                                total: tot,
-                                complete: isComplete
-                            };
-                        });
-                        return;
-                    }
                     const p = JSON.parse(raw);
+                    
+                    // 1. Identity Scan
                     if (p.t === "ID") {
                         const kData = Uint8Array.from(atob(p.k), c => c.charCodeAt(0));
                         const partnerRsa = await window.crypto.subtle.importKey(
@@ -667,8 +624,11 @@
                         const reply = { t: "HSH", d: buf2hex(encEcdh) };
                         setHandshakeReply(JSON.stringify(reply));
                         setScanner(null);
+                        // Optional: Vibration
+                        if(navigator.vibrate) navigator.vibrate(200);
                         alert(`Partner Identity Scanned!\nFingerprint: ${p.fp}\n\nVerify this matches their screen!`);
                     }
+                    // 2. Handshake Reply Scan
                     else if (p.t === "HSH") {
                         if (!keys) return;
                         const encBuf = hex2buf(p.d);
@@ -680,17 +640,14 @@
                         );
                         const sharedBits = await window.crypto.subtle.deriveBits(
                             { name: "ECDH", public: partnerEcdhKey },
-                            keys.ecdh.privateKey,
-                            256
+                            keys.ecdh.privateKey, 256
                         );
                         const hkdfKey = await window.crypto.subtle.importKey(
                             "raw", sharedBits, { name: "HKDF" }, false, ["deriveKey"]
                         );
                         const sessionKey = await window.crypto.subtle.deriveKey(
                             {
-                                name: "HKDF",
-                                hash: "SHA-256",
-                                salt: new Uint8Array(),
+                                name: "HKDF", hash: "SHA-256", salt: new Uint8Array(),
                                 info: new TextEncoder().encode("GibberLinkv2_Session")
                             },
                             hkdfKey,
@@ -703,8 +660,9 @@
                         setFingerprint(fp);
                         setScanner(null);
                         setActiveTab('VERIFY');
-                        alert("Handshake Complete. Secure Tunnel Established.");
+                        if(navigator.vibrate) navigator.vibrate([100, 50, 100]);
                     }
+                    // 3. Encrypted Message Scan
                     else if (p.iv) {
                         if (!sessionKey) throw new Error("No secure session.");
                         const iv = hex2buf(p.iv);
@@ -716,48 +674,14 @@
                         setChat(prev => [...prev, { from: 'Partner', text }]);
                         setScanner(null);
                         setActiveTab('CHAT');
-                        alert("New Message Received");
+                        if(navigator.vibrate) navigator.vibrate(200);
                     }
                 } catch (e) {
                     console.error(e);
+                    // In real app, show toast error
                 }
             };
-            const assembleFileNoDownload = async (fileObj) => {
-                const orderedData = [];
-                for(let i=0; i<fileObj.total; i++) orderedData.push(fileObj.chunks[i]);
-                const blobBase64 = orderedData.join('');
-                const binStr = atob(blobBase64);
-                const encBytes = new Uint8Array(binStr.length);
-                for(let i=0; i<binStr.length; i++) encBytes[i] = binStr.charCodeAt(i);
-                const iv = encBytes.slice(0, 12);
-                const data = encBytes.slice(12);
-                const decrypted = await window.crypto.subtle.decrypt(
-                    { name: "AES-GCM", iv }, sessionKey, data
-                );
-                const view = new DataView(decrypted);
-                const mimeLen = view.getUint8(0);
-                const mimeBytes = new Uint8Array(decrypted, 1, mimeLen);
-                const mime = new TextDecoder().decode(mimeBytes);
-                const fileData = new Uint8Array(decrypted, 1 + mimeLen);
-                const blob = new Blob([fileData], { type: mime });
-                const url = URL.createObjectURL(blob);
-                const ext = mime.split('/')[1] || 'bin';
-                const filename = `secure_recv.${ext}`;
-                return { url, filename };
-            };
-            const handleDownload = (logEntry) => {
-                const a = document.createElement('a');
-                a.style.display = 'none';
-                a.href = logEntry.url;
-                a.download = logEntry.name;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(logEntry.url);
-                setFileLog(prev => prev.map(log => log === logEntry ? { ...log, downloaded: true } : log));
-                setPendingDownload(null);
-                alert("File Downloaded!");
-            };
+
             const sendMessage = async () => {
                 if (!msg || !sessionKey) return;
                 const iv = window.crypto.getRandomValues(new Uint8Array(12));
@@ -766,323 +690,293 @@
                 );
                 const packet = { iv: buf2hex(iv), d: buf2hex(enc) };
                 const json = JSON.stringify(packet);
+                
+                // Show QR for this message
                 setFileTransfer({ chunks: [json], label: "Encrypted Message" });
                 setChat(prev => [...prev, { from: 'Me', text: msg }]);
                 setMsg("");
             };
-            const handleFileSelect = async (e) => {
-                const file = e.target.files[0];
-                if (!file || !sessionKey) return;
-                const newLog = { type: 'sent', name: file.name, timestamp: new Date().toLocaleString() };
-                setFileLog(prev => [newLog, ...prev]);
-                setChat(prev => [...prev, { from: 'Me', text: `📎 Shared file: ${file.name}` }]);
-                const raw = await file.arrayBuffer();
-                const mimeBytes = new TextEncoder().encode(file.type);
-                const pack = new Uint8Array(1 + mimeBytes.length + raw.byteLength);
-                pack[0] = mimeBytes.length;
-                pack.set(mimeBytes, 1);
-                pack.set(new Uint8Array(raw), 1 + mimeBytes.length);
-                const iv = window.crypto.getRandomValues(new Uint8Array(12));
-                const enc = await window.crypto.subtle.encrypt(
-                    { name: "AES-GCM", iv }, sessionKey, pack
-                );
-                const finalPayload = new Uint8Array(12 + enc.byteLength);
-                finalPayload.set(iv, 0);
-                finalPayload.set(new Uint8Array(enc), 12);
-                let binary = "";
-                for(let i=0; i<finalPayload.length; i++) binary += String.fromCharCode(finalPayload[i]);
-                const b64 = btoa(binary);
-                const id = Math.floor(Math.random()*10000).toString(16);
-                const chunks = [];
-                const total = Math.ceil(b64.length / PROTOCOL.QR_CHUNK_SIZE);
-                for(let i=0; i<total; i++) {
-                    const slice = b64.slice(i*PROTOCOL.QR_CHUNK_SIZE, (i+1)*PROTOCOL.QR_CHUNK_SIZE);
-                    chunks.push(`F|${id}|${i}|${total}|${slice}`);
-                }
-                setFileTransfer({ chunks, label: `Sending ${file.name}` });
-            };
+
+            // "Darth Mode" Tamper Function
             const darthTamper = () => {
                 if (!interceptedPacket) return;
-                let badRaw = interceptedPacket.raw.replace(/[a-fA-F0-9]/, "X");
+                let badRaw = interceptedPacket.raw;
                 try {
                     const p = JSON.parse(interceptedPacket.raw);
-                    if (p.d) p.d = p.d.replace(/^../, "FF");
+                    // Corrupt the ciphertext slightly
+                    if (p.d) p.d = p.d.replace(/a/g, "b");
                     badRaw = JSON.stringify(p);
                 } catch(e) {}
-                const id = Math.random().toString(36).substr(2,5);
-                setFileTransfer({ chunks: [badRaw], label: `Tampered Packet #${id}`, theme: "red" });
+                const id = Math.floor(Math.random()*999);
+                setFileTransfer({ chunks: [badRaw], label: `Corrupted Packet #${id}`, theme: "red" });
             };
+
+            const themeClass = mode === 'DARTH' ? 'theme-darth' : '';
+
             return (
-                <div className={`h-full w-full flex flex-col transition-colors duration-500 ${mode === 'DARTH' ? 'bg-slate-950' : 'bg-slate-900'}`}>
-                    {/* Header */}
-                    <header className={`p-4 flex-shrink-0 flex justify-between items-center z-10 ${mode === 'DARTH' ? 'bg-red-950 border-b border-red-900' : 'bg-slate-800 border-b border-cyan-900'}`}>
+                <div className={`h-full w-full flex flex-col transition-colors duration-700 ${themeClass}`}>
+                    
+                    {/* --- HEADER --- */}
+                    <header className="p-4 flex-shrink-0 flex justify-between items-center z-10 glass-panel border-b-0 border-b-white/5 relative">
                         <div className="flex items-center gap-3">
-                            <div className={`p-2 rounded-lg ${mode==='DARTH' ? 'bg-red-600 text-white' : 'bg-cyan-500 text-black'}`}>
+                            <div className={`p-2.5 rounded-xl shadow-lg transition-colors duration-500 ${mode==='DARTH' ? 'bg-red-600 text-white shadow-red-500/20' : 'bg-cyan-500 text-slate-900 shadow-cyan-500/20'}`}>
                                 <Icon p={mode==='DARTH' ? icons.skull : icons.shield} />
                             </div>
                             <div>
-                                <h1 className="font-bold text-lg leading-none text-white tracking-tighter">GibberLink <span className="text-xs opacity-50">v2.1</span></h1>
-                                <div className={`text-[10px] font-mono ${mode==='DARTH' ? 'text-red-400' : 'text-cyan-400'}`}>
-                                    {mode==='DARTH' ? 'INTERCEPTOR MODE' : 'SECURE CHANNEL'}
+                                <h1 className="font-bold text-lg leading-tight tracking-tight">GibberLink <span className="text-[10px] opacity-60 font-mono">v3.0</span></h1>
+                                <div className={`text-[10px] font-bold tracking-widest uppercase mt-0.5 ${mode==='DARTH' ? 'text-red-400' : 'text-cyan-400 text-glow'}`}>
+                                    {mode==='DARTH' ? 'Interceptor Mode' : 'Secure Channel'}
                                 </div>
                             </div>
                         </div>
-                        <div className="flex gap-2">
-                             <button onClick={()=>{setMode(mode==='NORMAL'?'DARTH':'NORMAL'); setScanner(null); setInterceptedPacket(null);}}
-                                className={`px-3 py-1 rounded border text-xs font-bold transition-all ${mode==='NORMAL' ? 'border-red-900 text-red-900 hover:bg-red-900 hover:text-white opacity-30 hover:opacity-100' : 'bg-cyan-500 text-black border-cyan-500'}`}>
-                                {mode==='NORMAL' ? 'ACTIVATE DARTH' : 'EXIT DARTH'}
-                             </button>
+
+                        <div className="flex items-center gap-4">
+                            {/* File Share Link */}
+                            <a href="wave.html" target="_self" className="hidden md:flex items-center gap-2 text-xs font-bold text-slate-400 hover:text-white transition-colors bg-white/5 px-3 py-1.5 rounded-lg border border-white/5 hover:border-white/20">
+                                <Icon p={icons.link} size={14} /> <span>File Sharing</span>
+                            </a>
+                            
+                            {/* Mode Toggle */}
+                            <button onClick={()=>{setMode(mode==='NORMAL'?'DARTH':'NORMAL'); setScanner(null); setInterceptedPacket(null);}}
+                                className={`w-8 h-8 rounded-full flex items-center justify-center transition-all duration-300 ${mode==='NORMAL' ? 'bg-slate-800 text-slate-500 hover:bg-red-900/50 hover:text-red-400' : 'bg-red-600 text-white shadow-[0_0_15px_rgba(239,68,68,0.5)]'}`}
+                                title={mode==='NORMAL' ? 'Activate Interceptor' : 'Disable Interceptor'}
+                            >
+                                <Icon p={icons.bug} size={16} />
+                            </button>
                         </div>
                     </header>
-                    {/* MAIN CONTENT */}
+                    
+                    {/* Mobile Link (Visible only on small screens below header) */}
+                    <div className="md:hidden px-4 py-2 bg-slate-900/50 border-b border-white/5 flex justify-center">
+                        <a href="wave.html" target="_self" className="flex items-center gap-2 text-xs font-bold text-slate-400 hover:text-white">
+                            <Icon p={icons.link} size={12} /> Open File Sharing (wave.html)
+                        </a>
+                    </div>
+
+                    {/* --- MAIN CONTENT AREA --- */}
                     <main className="flex-1 overflow-hidden relative flex flex-col min-h-0">
+                        
+                        {/* NORMAL MODE */}
                         {mode === 'NORMAL' && (
-                            <div className="flex-1 flex flex-col p-4 w-full mx-auto max-w-md md:max-w-4xl transition-all duration-300 min-h-0">
+                            <div className="flex-1 flex flex-col p-4 w-full mx-auto max-w-md md:max-w-4xl transition-all duration-500 min-h-0">
+                                
                                 {/* TABS */}
-                                <div className="flex-shrink-0 flex p-1 bg-slate-800 rounded-xl mb-4">
-                                    {['CONNECT','VERIFY','CHAT','FILES'].map(t => (
+                                <div className="flex-shrink-0 flex p-1.5 glass rounded-2xl mb-6 gap-1">
+                                    {['CONNECT','VERIFY','CHAT'].map(t => (
                                         <button key={t} onClick={()=>setActiveTab(t)}
-                                            className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${activeTab===t ? 'bg-cyan-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}>
+                                            className={`flex-1 py-2.5 rounded-xl text-xs font-bold tracking-wide transition-all duration-300 ${activeTab===t ? 'bg-cyan-500 text-slate-900 shadow-lg shadow-cyan-500/25 scale-[1.02]' : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'}`}>
                                             {t}
                                         </button>
                                     ))}
                                 </div>
-                                {/* TAB: CONNECT */}
-                                {activeTab === 'CONNECT' && (
-                                    <div className="h-full flex flex-col min-h-0">
-                                        <div className="flex-1 overflow-y-auto touch-scroll">
-                                            <div className={`grid grid-cols-1 ${handshakeReply ? 'md:grid-cols-2' : ''} gap-4 items-start pb-20`}>
-                                                {/* Identity Panel */}
-                                                <div className="glass p-6 rounded-2xl flex flex-col items-center text-center h-full">
-                                                    <div className="mb-4">
-                                                        <h2 className="text-white font-bold text-sm">STEP 1: IDENTITY</h2>
-                                                        <p className="text-slate-400 text-xs">Show this to partner</p>
-                                                    </div>
-                                                    {identityPayload && (
-                                                        <QRDisplay
-                                                            data={JSON.stringify(identityPayload)}
-                                                            label="MY IDENTITY"
-                                                            subLabel={`FP: ${identityPayload.fp}`}
-                                                            color="black"
-                                                        />
-                                                    )}
-                                                    {identityPayload && (
+
+                                {/* TAB CONTENT CONTAINER */}
+                                <div className="flex-1 relative min-h-0 flex flex-col">
+                                    
+                                    {/* --- CONNECT TAB --- */}
+                                    {activeTab === 'CONNECT' && (
+                                        <div className="h-full flex flex-col min-h-0 anim-slide-up">
+                                            <div className="flex-1 overflow-y-auto touch-scroll pb-24">
+                                                <div className="grid grid-cols-1 gap-6">
+                                                    
+                                                    {/* Step 1: Identity */}
+                                                    <div className="glass p-6 rounded-3xl flex flex-col items-center text-center relative overflow-hidden group">
+                                                        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-cyan-500 to-transparent opacity-50"></div>
+                                                        <div className="mb-6">
+                                                            <div className="inline-block px-3 py-1 rounded-full bg-cyan-950 border border-cyan-800 text-cyan-400 text-[10px] font-bold mb-2">STEP 01</div>
+                                                            <h2 className="text-white font-bold text-lg">Establish Identity</h2>
+                                                            <p className="text-slate-400 text-xs mt-1">Share this QR to initiate a secure channel.</p>
+                                                        </div>
+                                                        {identityPayload && (
+                                                            <div className="transform transition-transform duration-300 group-hover:scale-[1.02]">
+                                                                <QRDisplay data={JSON.stringify(identityPayload)} label="MY IDENTITY" subLabel={identityPayload.fp} />
+                                                            </div>
+                                                        )}
                                                         <button onClick={()=>playAudioPayload(JSON.stringify(identityPayload))} disabled={audioPlaying}
-                                                            className="w-full mt-3 bg-cyan-900/40 hover:bg-cyan-800 border border-cyan-700 text-cyan-200 text-xs py-2 rounded flex items-center justify-center gap-2 transition-colors">
-                                                            <Icon p={icons.sound} size={14} /> {audioPlaying ? 'Broadcasting...' : 'Broadcast via Audio'}
+                                                            className="mt-6 w-full glass hover:bg-white/10 text-cyan-300 text-xs font-bold py-3 rounded-xl flex items-center justify-center gap-2 transition-all border-cyan-500/20 hover:border-cyan-500/40">
+                                                            <div className={`w-2 h-2 rounded-full ${audioPlaying ? 'bg-red-500 animate-ping' : 'bg-cyan-500'}`}></div>
+                                                            {audioPlaying ? 'Broadcasting Audio...' : 'Broadcast via Audio'}
                                                         </button>
+                                                    </div>
+
+                                                    {/* Step 2: Handshake Reply (Only if scanned) */}
+                                                    {handshakeReply && (
+                                                        <div className="glass p-6 rounded-3xl flex flex-col items-center text-center border-emerald-500/20 shadow-[0_0_30px_rgba(16,185,129,0.1)] anim-slide-up">
+                                                            <div className="mb-6">
+                                                                <div className="inline-block px-3 py-1 rounded-full bg-emerald-950 border border-emerald-800 text-emerald-400 text-[10px] font-bold mb-2">STEP 02</div>
+                                                                <h2 className="text-white font-bold text-lg">Complete Handshake</h2>
+                                                                <p className="text-slate-400 text-xs mt-1">Reply generated. Show this to partner.</p>
+                                                            </div>
+                                                            <QRDisplay data={handshakeReply} label="HANDSHAKE DATA" />
+                                                            <button onClick={()=>playAudioPayload(handshakeReply)} disabled={audioPlaying}
+                                                                className="mt-6 w-full glass hover:bg-white/10 text-emerald-300 text-xs font-bold py-3 rounded-xl flex items-center justify-center gap-2 transition-all border-emerald-500/20 hover:border-emerald-500/40">
+                                                                <Icon p={icons.sound} size={14} /> {audioPlaying ? 'Sending...' : 'Send via Audio'}
+                                                            </button>
+                                                        </div>
                                                     )}
                                                 </div>
-                                                {/* Reply Panel */}
-                                                {handshakeReply && (
-                                                    <div className="glass p-6 rounded-2xl flex flex-col items-center text-center border border-green-500/30 shadow-[0_0_30px_rgba(34,197,94,0.1)] h-full">
-                                                        <div className="mb-4">
-                                                            <h2 className="text-green-400 font-bold text-sm">STEP 2: HANDSHAKE</h2>
-                                                            <p className="text-green-200/50 text-xs">Reply generated from scan</p>
-                                                        </div>
-                                                        <QRDisplay data={handshakeReply} label="SESSION DATA" color="black" />
-                                                        <button onClick={()=>playAudioPayload(handshakeReply)} disabled={audioPlaying}
-                                                            className="w-full mt-3 bg-green-900/40 hover:bg-green-800 border border-green-700 text-green-200 text-xs py-2 rounded flex items-center justify-center gap-2 transition-colors">
-                                                            <Icon p={icons.sound} size={14} /> {audioPlaying ? 'Broadcasting...' : 'Broadcast via Audio'}
-                                                        </button>
-                                                    </div>
-                                                )}
                                             </div>
+                                            
+                                            {/* FABs for Scanning */}
+                                            {!sessionKey && (
+                                                <div className="absolute bottom-6 right-2 flex flex-col gap-4">
+                                                    <button onClick={()=>setScanner('AUDIO')} className="w-14 h-14 bg-violet-600 hover:bg-violet-500 text-white rounded-full shadow-lg shadow-violet-600/40 flex items-center justify-center transition-transform hover:scale-110 active:scale-95">
+                                                        <Icon p={icons.mic} size={24} />
+                                                    </button>
+                                                    <button onClick={()=>setScanner('QR')} className="w-14 h-14 bg-cyan-500 hover:bg-cyan-400 text-slate-900 rounded-full shadow-lg shadow-cyan-500/40 flex items-center justify-center transition-transform hover:scale-110 active:scale-95 anim-pulse-glow">
+                                                        <Icon p={icons.eye} size={24} />
+                                                    </button>
+                                                </div>
+                                            )}
                                         </div>
-                                    </div>
-                                )}
-                                {/* TAB: VERIFY */}
-                                {activeTab === 'VERIFY' && (
-                                    <div className="anim-fade space-y-4 overflow-y-auto touch-scroll flex-1 min-h-0">
-                                        <div className="glass p-8 rounded-2xl text-center space-y-6">
-                                            <div className="w-16 h-16 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center mx-auto mb-2">
-                                                <Icon p={sessionKey ? icons.lock : icons.unlock} size={32} />
+                                    )}
+
+                                    {/* --- VERIFY TAB --- */}
+                                    {activeTab === 'VERIFY' && (
+                                        <div className="anim-slide-up flex flex-col items-center justify-center flex-1 space-y-8 p-4">
+                                            <div className="relative">
+                                                <div className={`w-32 h-32 rounded-full flex items-center justify-center text-4xl shadow-2xl ${sessionKey ? 'bg-emerald-500/10 text-emerald-400 shadow-emerald-500/20 ring-1 ring-emerald-500/50' : 'bg-slate-800 text-slate-600'}`}>
+                                                    <Icon p={sessionKey ? icons.lock : icons.unlock} size={48} />
+                                                </div>
+                                                {sessionKey && <div className="absolute bottom-0 right-0 bg-emerald-500 text-slate-900 text-[10px] font-bold px-2 py-1 rounded-full">AES-256</div>}
                                             </div>
-                                            <div>
-                                                <h2 className="text-white font-bold text-xl">Session Status</h2>
-                                                <p className={sessionKey ? "text-emerald-400" : "text-red-400"}>
-                                                    {sessionKey ? "SECURE (AES-GCM-256)" : "NOT CONNECTED"}
+                                            
+                                            <div className="text-center space-y-2">
+                                                <h2 className="text-2xl font-bold text-white">
+                                                    {sessionKey ? "Channel Secured" : "Not Connected"}
+                                                </h2>
+                                                <p className="text-slate-400 text-sm max-w-xs mx-auto">
+                                                    {sessionKey ? "End-to-end encryption established using ECDH & HKDF key derivation." : "Please complete the handshake process in the Connect tab."}
                                                 </p>
                                             </div>
-                                           
+
                                             {sessionKey && fingerprint && (
-                                                <div className="bg-slate-950 p-4 rounded-xl border border-slate-800">
-                                                    <p className="text-xs text-slate-500 uppercase tracking-widest mb-2">Safety Fingerprint</p>
-                                                    <div className="text-4xl mb-2">{fingerprint.emoji}</div>
-                                                    <div className="font-mono text-xl text-yellow-500 tracking-widest">{fingerprint.hex}</div>
-                                                    <p className="text-[10px] text-slate-500 mt-2 mx-auto max-w-[200px] leading-tight">
-                                                        Compare this visually with your partner. If they match, the channel is secure against MITM.
+                                                <div className="glass p-6 rounded-2xl w-full max-w-sm border-t-4 border-t-emerald-500">
+                                                    <p className="text-[10px] text-slate-400 uppercase tracking-widest mb-4 text-center">Security Fingerprint</p>
+                                                    <div className="text-5xl text-center mb-4 animate-bounce">{fingerprint.emoji}</div>
+                                                    <div className="bg-black/40 rounded-lg p-3 text-center">
+                                                        <code className="text-emerald-400 font-mono text-xl tracking-widest">{fingerprint.hex}</code>
+                                                    </div>
+                                                    <p className="text-[10px] text-slate-500 mt-4 text-center leading-relaxed">
+                                                        Visually compare these icons and code with your partner. Mismatch indicates a Man-in-the-Middle attack.
                                                     </p>
                                                 </div>
                                             )}
-                                           
+
                                             {sessionKey && (
-                                                <button onClick={()=>setActiveTab('CHAT')} className="w-full bg-cyan-600 hover:bg-cyan-500 text-white font-bold py-3 rounded-xl transition-colors">
-                                                    Open Chat Channel
+                                                <button onClick={()=>setActiveTab('CHAT')} className="bg-cyan-600 hover:bg-cyan-500 text-white px-8 py-4 rounded-xl font-bold shadow-lg shadow-cyan-600/30 transition-all hover:scale-105 active:scale-95 flex items-center gap-2">
+                                                    Start Chatting <Icon p={icons.send} size={18} />
                                                 </button>
                                             )}
                                         </div>
-                                    </div>
-                                )}
-                                {/* TAB: CHAT */}
-                                {activeTab === 'CHAT' && (
-                                    <div className="anim-fade flex flex-col flex-1 min-h-0">
-                                        <div ref={chatContainerRef} className="flex-1 glass rounded-2xl p-4 overflow-y-auto touch-scroll space-y-3 mb-2 scrollbar-hide">
-                                            {chat.length === 0 && (
-                                                <div className="text-center text-slate-600 mt-10">
-                                                    <Icon p={icons.shield} size={48} className="mx-auto mb-2 opacity-20"/>
-                                                    <p className="text-sm">Channel Encrypted.</p>
-                                                    <p className="text-xs">HKDF-derived AES-GCM-256</p>
-                                                </div>
-                                            )}
-                                            {chat.map((c, i) => (
-                                                <div key={i} className={`flex ${c.from==='Me'?'justify-end':''}`}>
-                                                    <div className={`max-w-[80%] p-3 rounded-2xl text-sm ${c.from==='Me' ? 'bg-cyan-600 text-white rounded-br-none' : 'bg-slate-700 text-slate-200 rounded-bl-none'}`}>
-                                                        {c.text}
+                                    )}
+
+                                    {/* --- CHAT TAB --- */}
+                                    {activeTab === 'CHAT' && (
+                                        <div className="flex flex-col flex-1 min-h-0 anim-slide-up h-full">
+                                            <div className="glass flex-1 rounded-2xl mb-4 p-4 overflow-y-auto touch-scroll flex flex-col space-y-4">
+                                                {chat.length === 0 && (
+                                                    <div className="flex-1 flex flex-col items-center justify-center text-slate-600 opacity-50">
+                                                        <Icon p={icons.shield} size={64} strokeWidth={1} />
+                                                        <p className="mt-4 text-sm font-mono">Encrypted Tunnel Ready</p>
                                                     </div>
-                                                </div>
-                                            ))}
-                                            <div ref={chatEndRef} />
+                                                )}
+                                                {chat.map((c, i) => (
+                                                    <div key={i} className={`flex ${c.from==='Me'?'justify-end':''}`}>
+                                                        <div className={`max-w-[85%] px-4 py-3 rounded-2xl text-sm leading-relaxed shadow-sm ${c.from==='Me' ? 'bg-cyan-600 text-white rounded-tr-none' : 'bg-slate-700 text-slate-200 rounded-tl-none'}`}>
+                                                            {c.text}
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                                <div ref={chatEndRef} />
+                                            </div>
+                                            
+                                            <div className="glass p-2 rounded-2xl flex items-center gap-2">
+                                                <button onClick={()=>setScanner('QR')} className="p-3 rounded-xl hover:bg-white/10 text-slate-400 hover:text-cyan-400 transition-colors">
+                                                    <Icon p={icons.eye} />
+                                                </button>
+                                                <button onClick={()=>setScanner('AUDIO')} className="p-3 rounded-xl hover:bg-white/10 text-slate-400 hover:text-violet-400 transition-colors">
+                                                    <Icon p={icons.mic} />
+                                                </button>
+                                                <input value={msg} onChange={e=>setMsg(e.target.value)}
+                                                    onKeyDown={e => e.key === 'Enter' && sendMessage()}
+                                                    className="flex-1 bg-transparent border-none outline-none text-white placeholder-slate-500 text-sm px-2"
+                                                    placeholder="Type secure message..."
+                                                />
+                                                <button onClick={sendMessage} disabled={!msg} className="p-3 bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 disabled:bg-slate-700 text-white rounded-xl shadow-lg transition-transform active:scale-95">
+                                                    <Icon p={icons.send} size={20} />
+                                                </button>
+                                            </div>
                                         </div>
-                                       
-                                        <div className="flex gap-2 flex-shrink-0 pt-2">
-                                            <button onClick={()=>setScanner('QR')} className="bg-slate-700 hover:bg-slate-600 text-slate-300 p-3 rounded-xl transition-colors" title="Scan QR Message">
-                                                <Icon p={icons.eye} />
-                                            </button>
-                                            <button onClick={()=>setScanner('AUDIO')} className="bg-slate-700 hover:bg-slate-600 text-slate-300 p-3 rounded-xl transition-colors" title="Listen for Audio">
-                                                <Icon p={icons.mic} />
-                                            </button>
-                                            <input value={msg} onChange={e=>setMsg(e.target.value)}
-                                                className="flex-1 bg-slate-800 text-white px-4 rounded-xl border border-slate-700 focus:border-cyan-500 outline-none min-w-0"
-                                                placeholder="Message..."
-                                            />
-                                            <label className="bg-slate-700 hover:bg-slate-600 text-slate-300 p-3 rounded-xl cursor-pointer transition-colors flex-shrink-0">
-                                                <input type="file" className="hidden" onChange={handleFileSelect} />
-                                                <Icon p={icons.file} />
-                                            </label>
-                                            <button onClick={sendMessage} className="bg-cyan-600 hover:bg-cyan-500 text-white p-3 rounded-xl shadow-lg transition-transform active:scale-95 flex-shrink-0">
-                                                <Icon p={icons.send} />
-                                            </button>
-                                        </div>
-                                    </div>
-                                )}
-                                {/* TAB: FILES */}
-                                {activeTab === 'FILES' && (
-                                    <div className="anim-fade flex flex-col flex-1 min-h-0">
-                                        <div className="glass p-4 rounded-2xl mb-2">
-                                            <h2 className="text-white font-bold text-sm mb-2">File Share Log</h2>
-                                            <p className="text-slate-400 text-xs">History of sent and received files</p>
-                                        </div>
-                                        <FileLog fileLog={fileLog.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp))} onDownload={handleDownload} />
-                                    </div>
-                                )}
-                                {/* MAIN SCAN FABs */}
-                                {!sessionKey && activeTab === 'CONNECT' && (
-                                    <div className="fixed bottom-6 right-6 flex flex-col gap-3">
-                                        <button onClick={()=>setScanner('AUDIO')} className="bg-purple-600 hover:bg-purple-500 text-white p-4 rounded-full shadow-[0_0_20px_rgba(147,51,234,0.4)] transition-transform hover:scale-110 active:scale-95">
-                                            <Icon p={icons.mic} size={32} />
-                                        </button>
-                                        <button onClick={()=>setScanner('QR')} className="bg-cyan-500 hover:bg-cyan-400 text-slate-900 p-4 rounded-full shadow-[0_0_30px_rgba(6,182,212,0.4)] transition-transform hover:scale-110 active:scale-95">
-                                            <Icon p={icons.eye} size={32} />
-                                        </button>
-                                    </div>
-                                )}
+                                    )}
+
+                                </div>
                             </div>
                         )}
-                        {/* DARTH MODE UI */}
+
+                        {/* DARTH MODE */}
                         {mode === 'DARTH' && (
-                            <div className="anim-fade max-w-md mx-auto space-y-6 p-4 overflow-y-auto touch-scroll flex-1 w-full min-h-0">
-                                <div className="darth-glass p-6 rounded-2xl text-red-100 border-l-4 border-red-600 relative overflow-hidden">
-                                    <div className="absolute top-0 right-0 p-4 opacity-10"><Icon p={icons.bug} size={100} /></div>
-                                    <h2 className="text-xl font-bold mb-1">Packet Interceptor</h2>
-                                    <p className="text-red-400 text-xs mb-6">Capture, Analyze, Corrupt</p>
-                                   
+                            <div className="anim-slide-up max-w-md mx-auto p-4 flex-1 w-full min-h-0 overflow-y-auto">
+                                <div className="darth-glass p-8 rounded-3xl border-2 border-red-900/50 shadow-[0_0_50px_rgba(220,38,38,0.1)] relative overflow-hidden">
+                                    <div className="absolute -right-6 -top-6 text-red-900/20 rotate-12 pointer-events-none">
+                                        <Icon p={icons.bug} size={180} />
+                                    </div>
+                                    
+                                    <h2 className="text-2xl font-bold text-red-100 mb-2 relative z-10">Packet Interceptor</h2>
+                                    <p className="text-red-400/60 text-xs mb-8 font-mono relative z-10">Man-in-the-Middle Simulation Tool</p>
+
                                     {!interceptedPacket ? (
-                                        <div className="grid grid-cols-2 gap-2">
-                                            <button onClick={()=>setScanner('QR')} className="h-32 border-2 border-dashed border-red-500/50 rounded-xl flex flex-col items-center justify-center text-red-400 hover:bg-red-900/20 hover:border-red-400 transition-all cursor-pointer">
-                                                <Icon p={icons.eye} size={40} className="mb-2" />
-                                                <span className="font-mono text-sm">SCAN QR</span>
+                                        <div className="grid grid-cols-2 gap-4 relative z-10">
+                                            <button onClick={()=>setScanner('QR')} className="aspect-square rounded-2xl border border-dashed border-red-500/30 hover:border-red-500 hover:bg-red-950/30 flex flex-col items-center justify-center gap-3 transition-all group">
+                                                <Icon p={icons.eye} size={32} className="text-red-500 group-hover:scale-110 transition-transform" />
+                                                <span className="text-[10px] font-bold text-red-400 tracking-widest">SCAN QR</span>
                                             </button>
-                                            <button onClick={()=>setScanner('AUDIO')} className="h-32 border-2 border-dashed border-purple-500/50 rounded-xl flex flex-col items-center justify-center text-purple-400 hover:bg-purple-900/20 hover:border-purple-400 transition-all cursor-pointer">
-                                                <Icon p={icons.mic} size={40} className="mb-2" />
-                                                <span className="font-mono text-sm">LISTEN</span>
+                                            <button onClick={()=>setScanner('AUDIO')} className="aspect-square rounded-2xl border border-dashed border-red-500/30 hover:border-red-500 hover:bg-red-950/30 flex flex-col items-center justify-center gap-3 transition-all group">
+                                                <Icon p={icons.mic} size={32} className="text-red-500 group-hover:scale-110 transition-transform" />
+                                                <span className="text-[10px] font-bold text-red-400 tracking-widest">LISTEN</span>
                                             </button>
                                         </div>
                                     ) : (
-                                        <div className="space-y-4">
-                                            <div className="bg-black/50 p-4 rounded-xl font-mono text-[10px] break-all border border-red-900/50 relative">
-                                                <div className="absolute top-2 right-2 text-red-500 text-[9px]">CAPTURED AT {interceptedPacket.time}</div>
+                                        <div className="space-y-6 relative z-10">
+                                            <div className="bg-black/60 p-4 rounded-xl border border-red-500/30 font-mono text-[10px] text-red-300 break-all shadow-inner relative">
+                                                <div className="absolute -top-2.5 right-4 bg-red-900 text-red-100 px-2 py-0.5 rounded text-[9px] font-bold">CAPTURED</div>
                                                 {interceptedPacket.raw}
                                             </div>
-                                            <div className="grid grid-cols-2 gap-3">
-                                                <button onClick={()=>{alert("Brute Force Failed: AES-256 Entropy too high.\nKeyspace: 2^256");}} className="bg-red-900/50 hover:bg-red-900 border border-red-700 text-red-200 py-3 rounded-lg text-xs font-bold">
-                                                    ATTEMPT CRACK
+                                            
+                                            <div className="grid grid-cols-1 gap-3">
+                                                <button onClick={darthTamper} className="bg-red-600 hover:bg-red-500 text-white py-4 rounded-xl font-bold shadow-lg shadow-red-600/20 transition-all hover:translate-y-[-2px] active:translate-y-[0px] flex items-center justify-center gap-2">
+                                                    <Icon p={icons.bug} /> Tamper & Replay
                                                 </button>
-                                                <button onClick={darthTamper} className="bg-red-600 hover:bg-red-500 text-white py-3 rounded-lg text-xs font-bold shadow-[0_0_15px_rgba(220,38,38,0.4)]">
-                                                    TAMPER & REPLAY
+                                                <button onClick={()=>setInterceptedPacket(null)} className="py-3 text-xs text-red-500/60 hover:text-red-400 font-bold tracking-widest">
+                                                    DISCARD PACKET
                                                 </button>
                                             </div>
-                                           
-                                            <button onClick={()=>setInterceptedPacket(null)} className="w-full py-2 text-xs text-red-400 hover:text-red-200">
-                                                DISCARD & SCAN NEW
-                                            </button>
                                         </div>
                                     )}
-                                </div>
-                               
-                                <div className="p-4 rounded-xl bg-slate-900/50 border border-slate-800 text-xs text-slate-500">
-                                    <strong className="text-slate-400 block mb-1">DARTH CONSOLE:</strong>
-                                    Use this mode to test the security of the Normal mode. Try to tamper with a packet and scan it on a receiving device. The receiver's integrity check (GCM Auth Tag) should fail.
+
+                                    <div className="mt-8 pt-6 border-t border-red-900/30">
+                                        <h3 className="text-red-500 text-xs font-bold mb-2 uppercase">Console Output</h3>
+                                        <div className="font-mono text-[10px] text-red-400/50 space-y-1">
+                                            <p>> System ready...</p>
+                                            <p>> Passive listening active on port 443...</p>
+                                            <p>> Waiting for handshake frames...</p>
+                                            {interceptedPacket && <p className="text-white">> [!] PACKET INTERCEPTED SUCCESSFULLY</p>}
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         )}
+
                     </main>
-                    {/* MODALS */}
-                    {scanner === 'QR' && (
-                        <QRScanner
-                            onScan={handleScan}
-                            onClose={()=>setScanner(null)}
-                            incomingFile={incomingFile}
-                            isDarth={mode==='DARTH'}
-                        />
-                    )}
-                    {scanner === 'AUDIO' && (
-                        <AudioListener
-                            onData={(d)=>{setScanner(null); handleScan(d);}}
-                            onClose={()=>setScanner(null)}
-                        />
-                    )}
-                    {fileTransfer && (
-                        <AnimatedQR
-                            chunks={fileTransfer.chunks}
-                            label={fileTransfer.label}
-                            theme={fileTransfer.theme}
-                            onClose={()=>setFileTransfer(null)}
-                        />
-                    )}
-                    {pendingDownload && (
-                        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-                            <div className="bg-white p-6 rounded-2xl text-center max-w-sm glass">
-                                <Icon p={icons.download} size={48} className="mx-auto text-green-500 mb-4" />
-                                <h3 className="text-lg font-bold text-slate-900 mb-2">File Received Securely!</h3>
-                                <p className="text-slate-600 mb-4">Ready to download: {pendingDownload.name}</p>
-                                <div className="space-y-3">
-                                    <button onClick={() => handleDownload(pendingDownload)} className="w-full bg-green-600 hover:bg-green-500 text-white py-3 rounded-xl font-bold transition-colors">
-                                        <Icon p={icons.download} size={16} className="inline mr-2" /> Download Now
-                                    </button>
-                                    <button onClick={() => {
-                                        URL.revokeObjectURL(pendingDownload.url);
-                                        setPendingDownload(null);
-                                    }} className="w-full text-slate-500 hover:text-slate-700 py-2 text-sm">
-                                        Cancel
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
+
+                    {/* --- MODALS --- */}
+                    {scanner === 'QR' && <QRScanner onScan={handleScan} onClose={()=>setScanner(null)} isDarth={mode==='DARTH'} />}
+                    {scanner === 'AUDIO' && <AudioListener onData={(d)=>{setScanner(null); handleScan(d);}} onClose={()=>setScanner(null)} />}
+                    {fileTransfer && <AnimatedQR chunks={fileTransfer.chunks} label={fileTransfer.label} theme={fileTransfer.theme} onClose={()=>setFileTransfer(null)} />}
                 </div>
             );
         };
+
         const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(<App />);
     </script>
