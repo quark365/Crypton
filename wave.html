@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🔊 Gibberlink Text Messenger</title>
+    <title>🔊 Gibberlink Text Messenger (Fixed)</title>
     <style>
         :root {
             --bg: #f5f5f5;
@@ -62,23 +62,25 @@
         .theme-toggle:hover { background: #5a6268; }
         h1 { text-align: center; color: var(--text); margin-bottom: 10px; }
         .actions { display: flex; gap: 10px; flex-wrap: wrap; }
+        #debug { font-size: 12px; color: #999; margin-top: 10px; }
     </style>
 </head>
 <body data-theme="light">
-    <h1>🔊 Gibberlink Text Messenger</h1>
-    <div id="status">Ready to chat via sound! Use two devices. 🌟</div>
+    <h1>🔊 Gibberlink Text Messenger (Fixed!)</h1>
+    <div id="status">Loading ggwave... Check console (F12) for errors.</div>
+    <div id="debug"></div>
     
     <div class="chat-log" id="chatLog" role="log" aria-live="polite">
         <div class="message received">
-            <div>Welcome! Type a message and 📤 send via sound. Receiver: Tap 🎤 to listen.</div>
+            <div>Fixed version loaded! Type a message and 📤 send. Receiver: Tap 🎤 to listen.</div>
             <div class="timestamp">Just now</div>
         </div>
     </div>
     
     <div class="controls">
-        <input type="text" id="inputMsg" placeholder="Type your message..." maxlength="100" aria-label="Message input">
+        <input type="text" id="inputMsg" placeholder="Type your message (e.g., Hello!)" maxlength="50" aria-label="Message input">
         <div class="actions">
-            <button onclick="sendMessage()" aria-label="Send message via sound">📤 Send</button>
+            <button id="sendBtn" onclick="sendMessage()" aria-label="Send message via sound">📤 Send</button>
             <button id="listenBtn" onclick="toggleListening()" aria-label="Toggle listening">🎤 Listen</button>
             <button onclick="clearChat()" aria-label="Clear chat">🗑️ Clear</button>
             <button onclick="exportChat()" aria-label="Export chat log">📥 Share</button>
@@ -86,99 +88,125 @@
         </div>
     </div>
 
-    <script src="ggwave.js"></script> <!-- From ggwave repo: examples/ggwave-js -->
+    <script src="ggwave.js"></script> <!-- Or CDN: https://cdn.jsdelivr.net/npm/ggwave@0.5.4/ggwave.js -->
     <script>
         let ggwaveInstance;
         let audioContext;
         let mediaStream;
         let isListening = false;
-        let analyser, dataArray;
+        let processor;
         let chatLog = document.getElementById('chatLog');
         let status = document.getElementById('status');
+        let debug = document.getElementById('debug');
+        let sendBtn = document.getElementById('sendBtn');
         let listenBtn = document.getElementById('listenBtn');
         let notificationPermission = Notification.permission;
 
-        // Init ggwave
-        function initGgwave() {
-            const params = { sampleRate: 48000, isCaptureThreadEnabled: true, isTransmitThreadEnabled: true };
-            ggwaveInstance = ggwave.init(params);
-            if (!ggwaveInstance) {
-                alert('Failed to init ggwave. Check ggwave.js/WASM.');
-                return false;
-            }
-            status.textContent = 'Ggwave ready! 🚀';
-            return true;
+        function logDebug(msg) {
+            console.log(msg);
+            debug.textContent += msg + '\n';
         }
 
-        // Add message to chat log with timestamp
+        // Convert Float32 to Int8Array for decode (from official example)
+        function convertTypedArray(input, TypedArray) {
+            const output = new TypedArray(input.length);
+            for (let i = 0; i < input.length; i++) {
+                output[i] = Math.max(-1, Math.min(1, input[i])) * 127;
+            }
+            return output;
+        }
+
+        // Init ggwave
+        async function initGgwave() {
+            if (typeof ggwave === 'undefined') {
+                status.textContent = 'Error: ggwave.js not loaded! Check src path.';
+                logDebug('ggwave undefined');
+                return false;
+            }
+            try {
+                const parameters = ggwave.getDefaultParameters();
+                ggwaveInstance = ggwave.init(parameters);
+                if (!ggwaveInstance) throw new Error('Init failed');
+                status.textContent = 'Ggwave initialized! Ready to chat. 🚀';
+                logDebug('ggwave init success');
+                return true;
+            } catch (err) {
+                status.textContent = `Init error: ${err.message}`;
+                logDebug(`Init error: ${err}`);
+                return false;
+            }
+        }
+
+        // Add message
         function addMessage(text, isSent = false) {
             const msg = document.createElement('div');
             msg.className = `message ${isSent ? 'sent' : 'received'}`;
             msg.innerHTML = `<div>${escapeHtml(text)}</div><div class="timestamp">${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>`;
             chatLog.appendChild(msg);
             chatLog.scrollTop = chatLog.scrollHeight;
-            if (!isSent) notifyUser(text); // Notify on receive
+            if (!isSent) notifyUser(text);
         }
 
-        // Escape HTML for safety
         function escapeHtml(text) {
             const div = document.createElement('div');
             div.textContent = text;
             return div.innerHTML;
         }
 
-        // Browser notification
         async function notifyUser(text) {
             if (notificationPermission === 'granted') {
-                new Notification('New Message via Sound!', { body: text, icon: '🔊' });
+                new Notification('New Sound Message!', { body: text, icon: '🔊' });
             } else if (notificationPermission === 'default') {
                 notificationPermission = await Notification.requestPermission();
             }
         }
 
-        // Send: Encode & play
+        // Send message
         async function sendMessage() {
             const msg = document.getElementById('inputMsg').value.trim();
             if (!msg) return;
-            if (!ggwaveInstance && !initGgwave()) return;
+            if (!ggwaveInstance && !(await initGgwave())) return;
 
             addMessage(msg, true);
             document.getElementById('inputMsg').value = '';
-            const sendBtn = event?.target || document.querySelector('button[onclick="sendMessage()"]');
             const originalText = sendBtn.innerHTML;
             sendBtn.innerHTML = '<span class="spinner"></span> Sending...';
             sendBtn.disabled = true;
 
-            const payload = ggwave.encode(ggwaveInstance, msg);
-            if (!payload || payload.length === 0) {
-                status.textContent = 'Encoding failed! 😕';
-                resetSendBtn(sendBtn, originalText);
-                return;
+            try {
+                const encoder = new TextEncoder();
+                const payloadBytes = encoder.encode(msg).length;
+                const waveform = ggwave.encode(ggwaveInstance, msg, ggwave.ProtocolId.GGWAVE_PROTOCOL_AUDIBLE_FAST, payloadBytes);
+                if (!waveform || waveform.length === 0) throw new Error('Empty waveform');
+
+                logDebug(`Encoded ${msg} to ${waveform.length} samples`);
+
+                // Convert Uint8 (0-255) to Float32 (-1 to 1) for playback
+                const floatSamples = new Float32Array(waveform.length);
+                for (let i = 0; i < waveform.length; i++) {
+                    floatSamples[i] = (waveform[i] - 128) / 128.0;  // Assume signed 8-bit packed as uint8
+                }
+
+                if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                const buffer = audioContext.createBuffer(1, floatSamples.length, 48000);
+                buffer.copyToChannel(floatSamples, 0);
+                const source = audioContext.createBufferSource();
+                source.buffer = buffer;
+                source.connect(audioContext.destination);
+                source.start();
+                status.textContent = `Playing sound for "${msg}"... (point mic at speaker) 🔊`;
+
+                source.onended = () => {
+                    status.textContent = 'Sent! Listen for replies. 📨';
+                    sendBtn.innerHTML = originalText;
+                    sendBtn.disabled = false;
+                };
+            } catch (err) {
+                status.textContent = `Send error: ${err.message}`;
+                logDebug(`Send error: ${err}`);
+                sendBtn.innerHTML = originalText;
+                sendBtn.disabled = false;
             }
-
-            const floatSamples = new Float32Array(payload.length);
-            for (let i = 0; i < payload.length; i++) {
-                floatSamples[i] = (payload[i] - 128) / 128.0;
-            }
-
-            if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            const buffer = audioContext.createBuffer(1, floatSamples.length, 48000);
-            buffer.copyToChannel(floatSamples, 0);
-            const source = audioContext.createBufferSource();
-            source.buffer = buffer;
-            source.connect(audioContext.destination);
-            source.start();
-            status.textContent = `Beaming "${msg}" via sound... (hold near mic) 🔊`;
-
-            source.onended = () => {
-                status.textContent = 'Sent! Awaiting reply... 📨';
-                resetSendBtn(sendBtn, originalText);
-            };
-        }
-
-        function resetSendBtn(btn, text) {
-            btn.innerHTML = text;
-            btn.disabled = false;
         }
 
         // Toggle listening
@@ -188,67 +216,63 @@
                 return;
             }
 
-            if (!ggwaveInstance && !initGgwave()) return;
+            if (!ggwaveInstance && !(await initGgwave())) return;
 
             try {
                 mediaStream = await navigator.mediaDevices.getUserMedia({ audio: { sampleRate: 48000 } });
-                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
                 const source = audioContext.createMediaStreamSource(mediaStream);
-                analyser = audioContext.createAnalyser();
-                analyser.fftSize = 2048;
-                dataArray = new Uint8Array(analyser.fftSize);
-                source.connect(analyser);
 
-                const processor = audioContext.createScriptProcessor(4096, 1, 1);
+                // Use ScriptProcessor for compatibility (AudioWorklet better but more code)
+                processor = audioContext.createScriptProcessor(4096, 1, 1);
                 processor.onaudioprocess = (e) => {
-                    const inputBuffer = e.inputBuffer.getChannelData(0);
-                    const int16Data = new Int16Array(inputBuffer.length);
-                    for (let i = 0; i < inputBuffer.length; i++) {
-                        int16Data[i] = inputBuffer[i] * 32767;
-                    }
-                    const decoded = ggwave.decode(ggwaveInstance, int16Data.buffer);
+                    const inputBuffer = e.inputBuffer.getChannelData(0);  // Float32Array
+                    const int8Data = convertTypedArray(inputBuffer, Int8Array);
+                    const decoded = ggwave.decode(ggwaveInstance, int8Data);
                     if (decoded && decoded.length > 0) {
-                        const text = new TextDecoder().decode(decoded).trim();
+                        const text = new TextDecoder('utf-8').decode(decoded).trim();
                         if (text) {
                             addMessage(text, false);
-                            status.textContent = `Caught: "${text}" 🎉`;
+                            status.textContent = `Decoded: "${text}" 🎉`;
+                            logDebug(`Decoded: ${text}`);
                         }
                     }
                 };
                 source.connect(processor);
-                processor.connect(audioContext.destination);
+                processor.connect(audioContext.destination);  // Optional: echo for testing
 
                 isListening = true;
                 listenBtn.innerHTML = '<span class="spinner"></span> Stop';
-                status.textContent = 'Ears open... Listening for sound! 🎤';
+                status.textContent = 'Listening for sound... (play near mic) 🎤';
+                logDebug('Listening started');
             } catch (err) {
-                status.textContent = 'Mic access denied. Check settings. 🔒';
-                console.error(err);
+                status.textContent = `Mic error: ${err.message}. Enable in settings.`;
+                logDebug(`Listen error: ${err}`);
             }
         }
 
         function stopListening() {
             if (mediaStream) {
                 mediaStream.getTracks().forEach(track => track.stop());
+                mediaStream = null;
             }
-            if (audioContext) {
-                audioContext.close();
-                audioContext = null;
+            if (processor) {
+                processor.disconnect();
+                processor = null;
             }
             isListening = false;
             listenBtn.innerHTML = '🎤 Listen';
-            status.textContent = 'Stopped. Ready to send or listen again. 😊';
+            status.textContent = 'Stopped listening. 😊';
+            logDebug('Listening stopped');
         }
 
-        // Clear chat
         function clearChat() {
-            if (confirm('Clear the chat log?')) {
+            if (confirm('Clear chat?')) {
                 chatLog.innerHTML = '';
-                addMessage('Chat cleared. Start fresh! ✨', false);
+                addMessage('Chat cleared! Start chatting. ✨', false);
             }
         }
 
-        // Export chat as TXT
         function exportChat() {
             const log = Array.from(chatLog.children).map(msg => msg.textContent).join('\n');
             const blob = new Blob([log], { type: 'text/plain' });
@@ -261,7 +285,6 @@
             status.textContent = 'Chat exported! 📄';
         }
 
-        // Toggle dark mode
         function toggleTheme() {
             const body = document.body;
             const isDark = body.dataset.theme === 'dark';
@@ -269,13 +292,15 @@
             localStorage.setItem('theme', body.dataset.theme);
         }
 
-        // Load theme & init
-        window.addEventListener('load', () => {
+        // Load & init
+        window.addEventListener('load', async () => {
             const savedTheme = localStorage.getItem('theme') || 'light';
             document.body.dataset.theme = savedTheme;
             if ('Notification' in window) notificationPermission = Notification.permission;
-            navigator.mediaDevices.getUserMedia({ audio: true }).catch(() => {});
-            // Keyboard shortcuts
+            await initGgwave();  // Auto-init
+            navigator.mediaDevices.getUserMedia({ audio: true }).catch(() => logDebug('Early perm check failed - grant when prompted'));
+            
+            // Shortcuts
             document.addEventListener('keydown', (e) => {
                 if (e.key === 'Enter' && e.ctrlKey) sendMessage();
                 if (e.key === 'Escape') stopListening();
