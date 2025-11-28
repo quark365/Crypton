@@ -3,242 +3,337 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VisualWave Share</title>
-    <!-- Tailwind CSS for styling -->
+    <title>VisualWave | Kinetic Share</title>
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- QRCode.js for generating the visual signals -->
+    <!-- QRCode.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-    <!-- HTML5-QRCode for scanning -->
+    <!-- HTML5-QRCode -->
     <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
     <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        cyber: {
+                            dark: '#050b14',
+                            panel: '#0f172a',
+                            neon: '#06b6d4',
+                            accent: '#8b5cf6',
+                            success: '#10b981'
+                        }
+                    },
+                    animation: {
+                        'fade-in-up': 'fadeInUp 0.5s ease-out forwards',
+                        'pulse-glow': 'pulseGlow 2s infinite',
+                        'spin-slow': 'spin 3s linear infinite',
+                    },
+                    keyframes: {
+                        fadeInUp: {
+                            '0%': { opacity: '0', transform: 'translateY(20px)' },
+                            '100%': { opacity: '1', transform: 'translateY(0)' },
+                        },
+                        pulseGlow: {
+                            '0%, 100%': { boxShadow: '0 0 10px #06b6d4', borderColor: '#06b6d4' },
+                            '50%': { boxShadow: '0 0 25px #06b6d4', borderColor: '#22d3ee' },
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;500;700&display=swap');
         
         body {
-            font-family: 'JetBrains Mono', monospace;
-            background-color: #0f172a;
+            font-family: 'Space Grotesk', sans-serif;
+            background-color: #020617;
+            background-image: 
+                radial-gradient(circle at 10% 20%, rgba(6, 182, 212, 0.15) 0%, transparent 20%),
+                radial-gradient(circle at 90% 80%, rgba(139, 92, 246, 0.15) 0%, transparent 20%);
             color: #e2e8f0;
+            overflow-x: hidden;
         }
 
         .glass-panel {
-            background: rgba(30, 41, 59, 0.7);
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(148, 163, 184, 0.1);
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            background: rgba(15, 23, 42, 0.6);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
         }
 
-        /* Custom Scrollbar */
-        ::-webkit-scrollbar { width: 8px; }
-        ::-webkit-scrollbar-track { background: #0f172a; }
-        ::-webkit-scrollbar-thumb { background: #3b82f6; border-radius: 4px; }
-
-        .scan-line {
-            width: 100%;
-            height: 2px;
-            background: #10b981;
-            position: absolute;
-            animation: scan 2s linear infinite;
-            display: none;
-        }
-
-        @keyframes scan {
-            0% { top: 0; opacity: 0; }
-            50% { opacity: 1; }
-            100% { top: 100%; opacity: 0; }
-        }
-
-        .signal-box canvas {
-            width: 100%;
-            height: 100%;
-        }
-
-        #qr-reader {
-            width: 100%;
-            max-width: 300px;
-            margin: 0 auto;
-        }
-
-        #qr-reader video {
-            width: 100%;
-            border-radius: 8px;
-        }
-
-        .chunk-qr {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            margin-bottom: 1rem;
-        }
-
-        .chunk-qr .qr-wrapper {
+        .qr-frame {
+            position: relative;
             background: white;
-            padding: 0.5rem;
-            border-radius: 0.5rem;
+            padding: 1rem;
+            border-radius: 1rem;
+            box-shadow: 0 0 40px rgba(6, 182, 212, 0.2);
+        }
+
+        .qr-progress-bar {
+            transition: width 0.1s linear;
+        }
+
+        /* Scanner Overlay Customization */
+        #qr-reader__scan_region {
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        #qr-reader__dashboard_section_csr button {
+            display: none; /* Hide default buttons */
         }
     </style>
 </head>
-<body class="min-h-screen flex flex-col items-center justify-center p-4">
+<body class="min-h-screen flex flex-col items-center justify-center p-4 selection:bg-cyan-500/30">
 
     <!-- Header -->
-    <header class="mb-8 text-center">
-        <div class="flex items-center justify-center gap-2 mb-2">
-            <i data-lucide="waves" class="w-8 h-8 text-cyan-400"></i>
-            <h1 class="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-blue-500">VisualWave</h1>
+    <header class="mb-8 text-center animate-fade-in-up">
+        <div class="flex items-center justify-center gap-3 mb-2">
+            <div class="relative">
+                <div class="absolute inset-0 bg-cyan-500 blur-lg opacity-50 rounded-full"></div>
+                <i data-lucide="zap" class="relative z-10 w-8 h-8 text-cyan-400 fill-cyan-400/20"></i>
+            </div>
+            <h1 class="text-4xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 via-blue-400 to-purple-400">VisualWave</h1>
         </div>
-        <p class="text-slate-400 text-sm">Serverless WebRTC File Sharing</p>
+        <p class="text-slate-400 text-sm font-light tracking-wider">OPTICAL DATA TRANSPORT SYSTEM</p>
     </header>
 
-    <!-- Main Container -->
-    <main id="app" class="w-full max-w-lg glass-panel rounded-2xl p-6 relative overflow-hidden transition-all duration-300">
+    <!-- Main Card -->
+    <main id="app" class="w-full max-w-md glass-panel rounded-3xl p-8 relative transition-all duration-500 min-h-[500px] flex flex-col justify-center">
         
         <!-- STEP 1: Mode Selection -->
-        <div id="step-mode" class="space-y-6">
+        <div id="step-mode" class="space-y-8 animate-fade-in-up">
             <div class="text-center space-y-2">
-                <h2 class="text-xl font-bold text-white">Select Role</h2>
-                <p class="text-slate-400 text-sm">Are you sending or receiving?</p>
+                <h2 class="text-2xl font-bold text-white">Initialize Session</h2>
+                <p class="text-slate-400">Select data flow direction</p>
             </div>
             
             <div class="grid grid-cols-2 gap-4">
-                <button onclick="initSender()" class="group flex flex-col items-center justify-center p-6 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 transition-all hover:border-cyan-400">
-                    <i data-lucide="upload-cloud" class="w-10 h-10 mb-3 text-cyan-400 group-hover:scale-110 transition-transform"></i>
-                    <span class="font-bold">Send File</span>
+                <button onclick="initSender()" class="group relative overflow-hidden p-6 rounded-2xl bg-slate-800/50 border border-slate-700 hover:border-cyan-500/50 hover:bg-slate-800 transition-all duration-300">
+                    <div class="absolute inset-0 bg-gradient-to-br from-cyan-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                    <div class="flex flex-col items-center gap-3 relative z-10">
+                        <div class="p-3 bg-cyan-500/10 rounded-xl group-hover:scale-110 transition-transform duration-300">
+                            <i data-lucide="arrow-up-circle" class="w-8 h-8 text-cyan-400"></i>
+                        </div>
+                        <span class="font-bold text-lg">Send</span>
+                    </div>
                 </button>
-                <button onclick="initReceiver()" class="group flex flex-col items-center justify-center p-6 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 transition-all hover:border-green-400">
-                    <i data-lucide="download-cloud" class="w-10 h-10 mb-3 text-green-400 group-hover:scale-110 transition-transform"></i>
-                    <span class="font-bold">Receive File</span>
+
+                <button onclick="initReceiver()" class="group relative overflow-hidden p-6 rounded-2xl bg-slate-800/50 border border-slate-700 hover:border-purple-500/50 hover:bg-slate-800 transition-all duration-300">
+                    <div class="absolute inset-0 bg-gradient-to-br from-purple-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                    <div class="flex flex-col items-center gap-3 relative z-10">
+                        <div class="p-3 bg-purple-500/10 rounded-xl group-hover:scale-110 transition-transform duration-300">
+                            <i data-lucide="arrow-down-circle" class="w-8 h-8 text-purple-400"></i>
+                        </div>
+                        <span class="font-bold text-lg">Receive</span>
+                    </div>
                 </button>
             </div>
         </div>
 
-        <!-- STEP 2 (Sender): File Selection -->
-        <div id="step-file" class="hidden space-y-6">
+        <!-- STEP 2 (Sender): File Input -->
+        <div id="step-file" class="hidden space-y-6 animate-fade-in-up">
+            <div class="flex items-center gap-4 text-slate-400 mb-2 cursor-pointer hover:text-white transition-colors" onclick="resetApp()">
+                <i data-lucide="arrow-left" class="w-5 h-5"></i>
+                <span class="text-sm">Back</span>
+            </div>
+
             <div class="text-center">
-                <h2 class="text-xl font-bold text-white">Choose File</h2>
+                <h2 class="text-2xl font-bold text-white">Select Payload</h2>
             </div>
             
-            <div class="relative border-2 border-dashed border-slate-600 rounded-xl p-8 hover:bg-slate-800/50 transition-colors text-center cursor-pointer" onclick="document.getElementById('fileInput').click()">
-                <input type="file" id="fileInput" class="hidden" onchange="handleFileSelect(this)">
-                <i data-lucide="file-plus" class="w-12 h-12 mx-auto text-slate-500 mb-2"></i>
-                <p class="text-sm text-slate-300 font-medium" id="fileNameDisplay">Click to browse</p>
-                <p class="text-xs text-slate-500 mt-1">Any file type, any size</p>
+            <div class="relative group cursor-pointer" onclick="document.getElementById('fileInput').click()">
+                <div class="absolute inset-0 bg-gradient-to-r from-cyan-500 to-purple-500 rounded-2xl blur opacity-20 group-hover:opacity-40 transition-opacity"></div>
+                <div class="relative bg-slate-900/90 border-2 border-dashed border-slate-600 group-hover:border-cyan-500/50 rounded-2xl p-10 transition-all text-center">
+                    <input type="file" id="fileInput" class="hidden" onchange="handleFileSelect(this)">
+                    
+                    <div id="uploadIcon" class="mb-4 inline-block p-4 rounded-full bg-slate-800 group-hover:bg-slate-700 transition-colors">
+                        <i data-lucide="file-up" class="w-8 h-8 text-slate-400 group-hover:text-cyan-400"></i>
+                    </div>
+                    
+                    <h3 id="fileNameDisplay" class="text-lg font-medium text-slate-200">Tap to browse files</h3>
+                    <p id="fileSizeDisplay" class="text-sm text-slate-500 mt-1">Ready for any file type</p>
+                </div>
             </div>
             
-            <button id="genOfferBtn" disabled onclick="generateOffer()" class="w-full py-3 rounded-lg font-bold bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-white">
-                Generate Signal
+            <button id="genOfferBtn" disabled onclick="generateOffer()" class="w-full py-4 rounded-xl font-bold text-lg bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 disabled:opacity-50 disabled:grayscale transition-all shadow-lg shadow-cyan-900/20 flex items-center justify-center gap-2">
+                <span>Start Handshake</span>
+                <i data-lucide="chevron-right" class="w-5 h-5"></i>
             </button>
         </div>
 
-        <!-- STEP 3: Exchange Signals (Used by both) -->
-        <div id="step-signal" class="hidden space-y-6">
-            <div class="flex justify-between items-center border-b border-slate-700 pb-4">
-                <h2 class="text-lg font-bold text-white" id="signalTitle">Connection Signal</h2>
-                <button onclick="location.reload()" class="text-xs text-red-400 hover:text-red-300">Reset</button>
+        <!-- STEP 3: Signal Exchange (Shared) -->
+        <div id="step-signal" class="hidden space-y-6 animate-fade-in-up">
+            <div class="flex justify-between items-center pb-2 border-b border-white/5">
+                <h2 class="text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-400" id="signalTitle">Connection Signal</h2>
+                <button onclick="resetApp()" class="p-2 hover:bg-white/5 rounded-lg transition-colors text-slate-400 hover:text-red-400">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
             </div>
 
-            <!-- Loader -->
-            <div id="signalLoader" class="hidden flex-col items-center py-8">
-                <div class="w-8 h-8 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-                <p class="text-sm text-cyan-400 animate-pulse">Generating secure link...</p>
+            <!-- Loader / status -->
+            <div id="signalLoader" class="hidden flex-col items-center py-12">
+                <div class="relative w-16 h-16 mb-6">
+                    <div class="absolute inset-0 border-4 border-slate-700 rounded-full"></div>
+                    <div class="absolute inset-0 border-4 border-t-cyan-500 border-r-transparent border-b-transparent border-l-transparent rounded-full animate-spin"></div>
+                    <div class="absolute inset-0 flex items-center justify-center">
+                        <i data-lucide="cpu" class="w-6 h-6 text-cyan-500/50"></i>
+                    </div>
+                </div>
+                <p class="text-cyan-400 font-mono animate-pulse" id="loaderText">Packaging Data Chunks...</p>
             </div>
 
-            <!-- The QR / Code Display -->
+            <!-- The QR Video Player -->
             <div id="signalOutput" class="hidden space-y-4">
-                <p class="text-xs text-slate-400 text-center" id="qrInstructions">Scan this on the other device OR copy the code.</p>
+                <div class="text-center space-y-1">
+                    <p class="text-sm font-bold text-white">Scan with other device</p>
+                    <p class="text-xs text-slate-400">Keep camera focused. The code cycles automatically.</p>
+                </div>
                 
-                <div id="qrcode-container" class="mx-auto"></div>
+                <div class="flex flex-col items-center">
+                    <div class="qr-frame animate-pulse-glow">
+                        <div id="qrcode-display" class="opacity-100 transition-opacity duration-75"></div>
+                    </div>
+                    
+                    <!-- Progress Bar for QR Loop -->
+                    <div class="w-full max-w-[200px] mt-4 flex items-center gap-3">
+                        <span id="chunkCounter" class="text-xs font-mono text-cyan-400 w-12 text-right">1/1</span>
+                        <div class="h-1.5 flex-1 bg-slate-800 rounded-full overflow-hidden">
+                            <div id="qrLoopProgress" class="h-full bg-cyan-500 rounded-full w-0"></div>
+                        </div>
+                    </div>
+                </div>
 
-                <div class="relative">
-                    <textarea id="localSignalText" readonly class="w-full h-24 bg-slate-900 rounded-lg p-3 text-xs text-slate-400 font-mono resize-none border border-slate-700 focus:outline-none" onclick="this.select()"></textarea>
-                    <button onclick="copySignal()" class="absolute top-2 right-2 p-2 bg-slate-800 rounded hover:bg-slate-700 text-cyan-400" title="Copy to clipboard">
+                <div class="relative mt-4">
+                    <div class="absolute inset-0 flex items-center">
+                        <div class="w-full border-t border-slate-700"></div>
+                    </div>
+                    <div class="relative flex justify-center text-xs uppercase">
+                        <span class="bg-slate-900 px-2 text-slate-500">Or copy manually</span>
+                    </div>
+                </div>
+
+                <div class="flex gap-2">
+                    <input type="text" readonly value="Data hidden for brevity" class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-500 font-mono">
+                    <button onclick="copySignal()" class="px-4 bg-slate-700 hover:bg-slate-600 rounded-lg text-white transition-colors">
                         <i data-lucide="copy" class="w-4 h-4"></i>
                     </button>
                 </div>
             </div>
 
-            <!-- The Input Section -->
-            <div id="signalInputSection" class="pt-4 border-t border-slate-700 space-y-4">
-                <p class="text-sm text-white font-bold mb-2" id="remoteSignalLabel">Paste response from other device:</p>
-                
-                <!-- Scan Progress -->
-                <div id="scanProgress" class="hidden text-center text-sm text-cyan-400 py-2"></div>
-                
-                <!-- QR Scanner -->
-                <div id="qrScannerSection" class="hidden space-y-2">
-                    <div id="qr-reader"></div>
-                    <button id="stopScanBtn" onclick="stopQrScan()" class="w-full py-2 bg-red-600 hover:bg-red-500 text-white rounded text-sm">Stop Scan</button>
+            <!-- The Scanner / Input Section -->
+            <div id="signalInputSection" class="space-y-4">
+                <div id="inputInstruction" class="text-center">
+                    <p class="text-sm font-bold text-white mb-1" id="remoteSignalLabel">Waiting for response...</p>
+                    <p class="text-xs text-slate-400">Scan the QR code shown on the other device</p>
                 </div>
                 
-                <div class="flex gap-2">
-                    <textarea id="remoteSignalInput" placeholder="Paste the code from the other device here..." class="flex-1 h-24 bg-slate-900 rounded-lg p-3 text-xs text-slate-300 font-mono resize-none border border-slate-700 focus:border-cyan-500 focus:outline-none transition-colors"></textarea>
-                    <button onclick="startQrScan()" class="flex-shrink-0 p-2 bg-blue-600 hover:bg-blue-500 text-white rounded" title="Scan QR Code">
-                        <i data-lucide="camera" class="w-5 h-5"></i>
+                <!-- Scanner UI -->
+                <div id="qrScannerSection" class="hidden relative rounded-xl overflow-hidden border border-slate-700 bg-black">
+                    <div id="qr-reader" class="w-full h-64 bg-black"></div>
+                    <div class="absolute bottom-0 inset-x-0 bg-black/80 backdrop-blur p-2 text-center">
+                        <p id="scanStatus" class="text-cyan-400 text-xs font-mono font-bold">Initializing Camera...</p>
+                        <div class="w-full bg-slate-800 h-1 mt-2 rounded-full overflow-hidden">
+                            <div id="scanProgressBar" class="h-full bg-green-500 w-0 transition-all duration-300"></div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="manualInputArea" class="hidden">
+                    <textarea id="remoteSignalInput" placeholder="Paste connection code here..." class="w-full h-20 bg-slate-800/50 border border-slate-700 rounded-xl p-3 text-xs text-white font-mono focus:border-cyan-500 focus:outline-none transition-colors mb-2"></textarea>
+                    <button onclick="connectPeers()" class="w-full py-2 bg-green-600 hover:bg-green-500 text-white rounded-lg font-bold">Verify Code</button>
+                </div>
+
+                <!-- Buttons to toggle modes -->
+                <div id="inputButtons" class="grid grid-cols-2 gap-3">
+                    <button onclick="startQrScan()" class="py-3 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl font-bold flex items-center justify-center gap-2 transition-colors">
+                        <i data-lucide="scan-line" class="w-5 h-5"></i>
+                        Scan QR
+                    </button>
+                    <button onclick="toggleManualInput()" class="py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl font-bold flex items-center justify-center gap-2 transition-colors">
+                        <i data-lucide="keyboard" class="w-5 h-5"></i>
+                        Paste
                     </button>
                 </div>
                 
-                <button onclick="connectPeers()" class="w-full py-3 rounded-lg font-bold bg-green-600 hover:bg-green-500 transition-colors text-white flex items-center justify-center gap-2">
-                    <i data-lucide="link" class="w-4 h-4"></i>
-                    Connect
+                <button id="stopScanBtn" onclick="stopQrScan()" class="hidden w-full py-3 bg-red-500/20 text-red-400 hover:bg-red-500/30 border border-red-500/50 rounded-xl font-bold transition-all">
+                    Stop Camera
                 </button>
             </div>
         </div>
 
         <!-- STEP 4: Transfer Progress -->
-        <div id="step-transfer" class="hidden space-y-6 py-4">
-            <div class="text-center">
-                <div class="w-20 h-20 bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-4 border-2 border-cyan-500 relative">
-                    <i data-lucide="arrow-right-left" class="w-8 h-8 text-cyan-400 animate-pulse"></i>
+        <div id="step-transfer" class="hidden space-y-8 py-8 animate-fade-in-up">
+            <div class="text-center relative">
+                <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-32 h-32 bg-cyan-500/20 blur-3xl rounded-full"></div>
+                <div class="w-24 h-24 bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-6 border-2 border-cyan-500 shadow-[0_0_20px_rgba(6,182,212,0.3)] relative z-10">
+                    <i data-lucide="arrow-right-left" class="w-10 h-10 text-cyan-400 animate-pulse"></i>
                 </div>
-                <h2 class="text-xl font-bold text-white mb-1">Transferring</h2>
-                <p class="text-sm text-slate-400" id="transferStatus">Initializing stream...</p>
+                <h2 class="text-2xl font-bold text-white mb-2">Transferring Data</h2>
+                <p class="text-sm font-mono text-cyan-400" id="transferStatus">Establishing secure tunnel...</p>
             </div>
 
-            <div class="bg-slate-800 rounded-full h-4 w-full overflow-hidden border border-slate-700">
-                <div id="progressBar" class="bg-gradient-to-r from-cyan-500 to-blue-600 h-full w-0 transition-all duration-300 ease-out"></div>
-            </div>
-            
-            <div class="text-center">
-                <span id="speedDisplay" class="text-xs font-mono text-slate-500">0 KB/s</span>
+            <div class="space-y-2">
+                <div class="flex justify-between text-xs text-slate-400 uppercase tracking-wider">
+                    <span>Progress</span>
+                    <span id="speedDisplay">0 KB/s</span>
+                </div>
+                <div class="bg-slate-800 rounded-full h-2 w-full overflow-hidden">
+                    <div id="progressBar" class="bg-gradient-to-r from-cyan-500 to-purple-500 h-full w-0 transition-all duration-200 shadow-[0_0_10px_rgba(6,182,212,0.5)]"></div>
+                </div>
             </div>
         </div>
 
         <!-- Success State -->
-        <div id="step-success" class="hidden text-center py-8 space-y-6">
-            <div class="w-20 h-20 bg-green-900/30 rounded-full flex items-center justify-center mx-auto mb-4 border-2 border-green-500">
-                <i data-lucide="check" class="w-10 h-10 text-green-400"></i>
+        <div id="step-success" class="hidden text-center py-8 space-y-6 animate-fade-in-up">
+            <div class="w-24 h-24 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-4 border-2 border-green-500 shadow-[0_0_30px_rgba(16,185,129,0.3)]">
+                <i data-lucide="check" class="w-12 h-12 text-green-400"></i>
             </div>
-            <h2 class="text-2xl font-bold text-white">Transfer Complete!</h2>
-            <p id="finalFileName" class="text-slate-300"></p>
+            <h2 class="text-3xl font-bold text-white">Transfer Complete</h2>
             
-            <a id="downloadBtn" class="hidden w-full py-3 rounded-lg font-bold bg-blue-600 hover:bg-blue-500 text-white block">
-                Download File
+            <div class="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
+                <p class="text-xs text-slate-400 uppercase mb-1">File Received</p>
+                <p id="finalFileName" class="text-lg font-medium text-white break-all"></p>
+            </div>
+            
+            <a id="downloadBtn" class="hidden w-full py-4 rounded-xl font-bold bg-green-600 hover:bg-green-500 text-white shadow-lg shadow-green-900/20 flex items-center justify-center gap-2 transition-all">
+                <i data-lucide="download" class="w-5 h-5"></i>
+                Save to Device
             </a>
 
-            <button onclick="location.reload()" class="text-slate-500 text-sm hover:text-white mt-4">Send another file</button>
+            <button onclick="resetApp()" class="text-slate-500 hover:text-white transition-colors text-sm">Transfer another file</button>
         </div>
 
     </main>
 
-    <footer class="mt-8 text-slate-600 text-xs">
-        <p>Uses WebRTC. No data is sent to any server.</p>
+    <footer class="mt-8 text-slate-600 text-xs text-center">
+        <p>P2P WebRTC Connection. No Cloud Storage.</p>
     </footer>
 
     <script>
         // --- GLOBALS ---
         lucide.createIcons();
-        let pc; // PeerConnection
+        let pc; 
         let dataChannel;
         let fileToSend;
         let receivedChunks = [];
         let receivedSize = 0;
         let fileMeta = {};
-        let html5QrCode; // QR Scanner instance
-        let collectedSignalChunks = [];
-        let nextExpectedChunk = 1;
-        let expectedTotalChunks = 0;
-        let fullSignalString = ''; // For copy
+        let html5QrCode; 
         
-        // ICE Server configuration (Public STUN servers are usually enough for local/direct)
+        // QR Logic Globals
+        let collectedSignalChunks = new Set(); // Using Set to track unique IDs
+        let totalChunksExpected = 0;
+        let qrPlayInterval;
+        let currentPlayIndex = 0;
+        let signalChunksForPlayback = [];
+
+        // ICE Config
         const rtcConfig = {
             iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
         };
@@ -249,15 +344,34 @@
                 document.getElementById(s).classList.add('hidden');
             });
             document.getElementById(id).classList.remove('hidden');
+            lucide.createIcons();
+        }
+
+        function resetApp() {
+            location.reload();
+        }
+
+        function toggleManualInput() {
+            const area = document.getElementById('manualInputArea');
+            const btns = document.getElementById('inputButtons');
+            const scanner = document.getElementById('qrScannerSection');
+            
+            area.classList.remove('hidden');
+            btns.classList.add('hidden');
+            scanner.classList.add('hidden');
+            stopQrScan();
         }
 
         // --- FILE HANDLING (SENDER) ---
         function handleFileSelect(input) {
             if (input.files.length > 0) {
                 fileToSend = input.files[0];
-                document.getElementById('fileNameDisplay').innerText = `${fileToSend.name} (${formatBytes(fileToSend.size)})`;
-                document.getElementById('fileNameDisplay').classList.add('text-cyan-400');
+                document.getElementById('fileNameDisplay').innerText = fileToSend.name;
+                document.getElementById('fileNameDisplay').className = "text-lg font-bold text-cyan-400 break-all";
+                document.getElementById('fileSizeDisplay').innerText = formatBytes(fileToSend.size);
+                document.getElementById('uploadIcon').innerHTML = `<i data-lucide="file-check" class="w-8 h-8 text-cyan-400"></i>`;
                 document.getElementById('genOfferBtn').disabled = false;
+                lucide.createIcons();
             }
         }
 
@@ -269,74 +383,110 @@
             return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
         }
 
+        // --- QR PLAYBACK (The "Video") ---
+        function startQrPlayback(chunks) {
+            signalChunksForPlayback = chunks;
+            currentPlayIndex = 0;
+            const display = document.getElementById('qrcode-display');
+            const counter = document.getElementById('chunkCounter');
+            const progressBar = document.getElementById('qrLoopProgress');
+            
+            if (qrPlayInterval) clearInterval(qrPlayInterval);
+
+            const showNextQr = () => {
+                display.innerHTML = ''; // Clear previous
+                const chunkData = signalChunksForPlayback[currentPlayIndex];
+                
+                // Visual formatting: ChunkID:Total:Data
+                const qrText = `${currentPlayIndex + 1}:${signalChunksForPlayback.length}:${chunkData}`;
+                
+                new QRCode(display, {
+                    text: qrText,
+                    width: 200,
+                    height: 200,
+                    colorDark: "#000000",
+                    colorLight: "#ffffff",
+                    correctLevel: QRCode.CorrectLevel.L // Low correction for less density, easier scanning
+                });
+
+                // Update Progress UI
+                counter.innerText = `${currentPlayIndex + 1}/${signalChunksForPlayback.length}`;
+                const pct = ((currentPlayIndex + 1) / signalChunksForPlayback.length) * 100;
+                progressBar.style.width = `${pct}%`;
+
+                currentPlayIndex = (currentPlayIndex + 1) % signalChunksForPlayback.length;
+            };
+
+            showNextQr(); // Show first immediately
+            
+            // Loop speed: 700ms seems to be a sweet spot for most cameras
+            if (signalChunksForPlayback.length > 1) {
+                qrPlayInterval = setInterval(showNextQr, 700); 
+            }
+        }
+
         // --- QR SCANNING ---
         function startQrScan() {
-            const inputSection = document.getElementById('remoteSignalInput').parentElement;
-            const scannerSection = document.getElementById('qrScannerSection');
-            const scanBtn = document.querySelector('[onclick="startQrScan()"]');
-            const progressDiv = document.getElementById('scanProgress');
+            const btns = document.getElementById('inputButtons');
+            const scannerDiv = document.getElementById('qrScannerSection');
+            const stopBtn = document.getElementById('stopScanBtn');
+            const statusTxt = document.getElementById('scanStatus');
+            const manualArea = document.getElementById('manualInputArea');
+
+            btns.classList.add('hidden');
+            manualArea.classList.add('hidden');
+            scannerDiv.classList.remove('hidden');
+            stopBtn.classList.remove('hidden');
             
-            collectedSignalChunks = [];
-            nextExpectedChunk = 1;
-            expectedTotalChunks = 0;
-            inputSection.style.display = 'none';
-            scannerSection.classList.remove('hidden');
-            scanBtn.style.display = 'none';
-            progressDiv.classList.remove('hidden');
-            progressDiv.innerText = 'Scan the first chunk (1/N)...';
-            
+            collectedSignalChunks.clear();
+            totalChunksExpected = 0;
+
             html5QrCode = new Html5Qrcode("qr-reader");
-            const config = { fps: 10, qrbox: { width: 250, height: 250 } };
             
             html5QrCode.start(
-                { facingMode: "environment" }, // Use back camera
-                config,
+                { facingMode: "environment" },
+                { fps: 15, qrbox: { width: 250, height: 250 } }, // Higher FPS for video scanning
                 (decodedText) => {
-                    // Parse chunk
+                    // Logic to handle "Video" frames
                     const match = decodedText.match(/^(\d+):(\d+):(.*)$/);
-                    if (!match) {
-                        console.log('Invalid chunk format');
-                        return;
-                    }
+                    if (!match) return; // Not our QR
+
                     const chunkNum = parseInt(match[1]);
                     const total = parseInt(match[2]);
-                    const chunkData = match[3];
+                    const data = match[3];
 
-                    if (expectedTotalChunks === 0) {
-                        expectedTotalChunks = total;
-                    } else if (total !== expectedTotalChunks) {
-                        alert('Inconsistent chunk count. Restart scan.');
-                        stopQrScan();
-                        return;
-                    }
+                    // Set expectation on first read
+                    if (totalChunksExpected === 0) totalChunksExpected = total;
+                    
+                    // Validation
+                    if (total !== totalChunksExpected) return; // Weird state
 
-                    if (chunkNum === nextExpectedChunk) {
-                        collectedSignalChunks[chunkNum - 1] = chunkData;
-                        nextExpectedChunk++;
-                        const scanned = nextExpectedChunk - 1;
-                        if (nextExpectedChunk > expectedTotalChunks) {
-                            // Complete
-                            fullSignalString = collectedSignalChunks.join('');
-                            document.getElementById('remoteSignalInput').value = fullSignalString;
-                            stopQrScan();
-                            connectPeers(); // Auto connect
-                        } else {
-                            progressDiv.innerText = `Scanned ${scanned}/${expectedTotalChunks}. Now scan chunk ${nextExpectedChunk}...`;
+                    if (!collectedSignalChunks.has(chunkNum)) {
+                        collectedSignalChunks.add(chunkNum);
+                        
+                        // Store data in a temporary array or map
+                        if (!window.tempChunks) window.tempChunks = new Array(total);
+                        window.tempChunks[chunkNum - 1] = data;
+
+                        // UI Feedback
+                        const pct = (collectedSignalChunks.size / total) * 100;
+                        document.getElementById('scanProgressBar').style.width = `${pct}%`;
+                        statusTxt.innerText = `Captured ${collectedSignalChunks.size}/${total} frames...`;
+                        statusTxt.classList.add('text-green-400');
+
+                        // Check Completion
+                        if (collectedSignalChunks.size === total) {
+                            html5QrCode.stop();
+                            statusTxt.innerText = "Data Complete. Connecting...";
+                            const fullString = window.tempChunks.join('');
+                            document.getElementById('remoteSignalInput').value = fullString;
+                            connectPeers();
                         }
-                    } else if (chunkNum < nextExpectedChunk) {
-                        // Already scanned, ignore
-                        progressDiv.innerText = `Chunk ${chunkNum} already scanned. Scanning for ${nextExpectedChunk}...`;
-                    } else {
-                        // Out of order
-                        alert(`Please scan chunks in order. Expected ${nextExpectedChunk}, got ${chunkNum}.`);
                     }
                 },
-                (error) => {
-                    // Ignore scan errors
-                }
-            ).catch((err) => {
-                console.error('QR Scan Error:', err);
-                alert('Failed to start camera. Please allow camera access and try again.');
+                (err) => { /* ignore frames with no QR */ }
+            ).catch(err => {
+                alert("Camera error: " + err);
                 stopQrScan();
             });
         }
@@ -346,200 +496,168 @@
                 html5QrCode.stop().then(() => {
                     html5QrCode.clear();
                     html5QrCode = null;
-                }).catch((err) => console.error('Stop QR Error:', err));
+                }).catch(err => console.log(err));
             }
-            
-            const inputSection = document.getElementById('remoteSignalInput').parentElement;
-            const scannerSection = document.getElementById('qrScannerSection');
-            const scanBtn = document.querySelector('[onclick="startQrScan()"]');
-            const progressDiv = document.getElementById('scanProgress');
-            
-            inputSection.style.display = 'flex';
-            scannerSection.classList.add('hidden');
-            scanBtn.style.display = 'block';
-            progressDiv.classList.add('hidden');
-            progressDiv.innerText = '';
+            document.getElementById('qrScannerSection').classList.add('hidden');
+            document.getElementById('stopScanBtn').classList.add('hidden');
+            document.getElementById('inputButtons').classList.remove('hidden');
+        }
+
+        function copySignal() {
+            // Reconstruct full string from playback chunks
+            const full = signalChunksForPlayback.join('');
+            navigator.clipboard.writeText(full).then(() => {
+                const btn = document.querySelector('[onclick="copySignal()"]');
+                const orig = btn.innerHTML;
+                btn.innerHTML = `<i data-lucide="check" class="w-4 h-4 text-green-400"></i>`;
+                lucide.createIcons();
+                setTimeout(() => { 
+                    btn.innerHTML = orig; 
+                    lucide.createIcons();
+                }, 2000);
+            });
         }
 
         // --- WEBRTC CORE ---
 
-        // 1. Initialize Sender
         async function initSender() {
             showStep('step-file');
             pc = new RTCPeerConnection(rtcConfig);
-            
-            // Create Data Channel
             dataChannel = pc.createDataChannel("fileTransfer");
             setupChannelListeners(dataChannel);
-
-            // Handle ICE Candidates
             pc.onicecandidate = e => {
-                if (!e.candidate) {
-                    // Gathering complete - Show the OFFER code
-                    displaySignal(pc.localDescription, "Scan all chunks on Receiver in order");
-                }
+                if (!e.candidate) displaySignal(pc.localDescription, "Sender Signal Ready");
             };
         }
 
-        // 2. Generate Offer (Sender Click)
         async function generateOffer() {
             showStep('step-signal');
             document.getElementById('signalLoader').classList.remove('hidden');
-            document.getElementById('signalTitle').innerText = "Sender: 1. Share Signal";
-            document.getElementById('remoteSignalLabel').innerText = "Sender: 2. Paste Receiver's Reply";
+            document.getElementById('signalOutput').classList.add('hidden');
+            document.getElementById('signalInputSection').classList.add('hidden');
+            document.getElementById('signalTitle').innerText = "1. Sender: Emit Signal";
+            document.getElementById('loaderText').innerText = "Generating encryption keys...";
+            document.getElementById('remoteSignalLabel').innerText = "2. Sender: Scan Reply";
             
             const offer = await pc.createOffer();
             await pc.setLocalDescription(offer);
-            // Wait for onicecandidate (null) to trigger displaySignal
         }
 
-        // 3. Initialize Receiver
         async function initReceiver() {
             showStep('step-signal');
-            document.getElementById('signalOutput').classList.add('hidden'); // Hide output initially
-            document.getElementById('signalTitle').innerText = "Receiver: 1. Paste Sender's Signal";
-            document.getElementById('remoteSignalLabel').innerText = "Paste Sender's Code Here:";
+            document.getElementById('signalLoader').classList.add('hidden');
+            document.getElementById('signalOutput').classList.add('hidden');
+            document.getElementById('signalInputSection').classList.remove('hidden');
+            document.getElementById('signalTitle').innerText = "1. Receiver: Scan Signal";
+            document.getElementById('remoteSignalLabel').innerText = "Scan Sender's QR Code";
             
             pc = new RTCPeerConnection(rtcConfig);
-            
             pc.ondatachannel = e => {
                 dataChannel = e.channel;
                 setupChannelListeners(dataChannel);
             };
-
             pc.onicecandidate = e => {
-                if (!e.candidate) {
-                    // Gathering complete - Show the ANSWER code
-                    displaySignal(pc.localDescription, "Scan all chunks on Sender in order");
-                }
+                if (!e.candidate) displaySignal(pc.localDescription, "Receiver Reply Ready");
             };
         }
 
-        // 4. Connect Peers (Both sides use this button logic differently)
         async function connectPeers() {
             const remoteDataStr = document.getElementById('remoteSignalInput').value.trim();
-            if (!remoteDataStr) return alert("Please paste the code first!");
+            if (!remoteDataStr) return;
 
             try {
-                // Assume it's the full base64
+                // Decode
                 const remoteDesc = JSON.parse(atob(remoteDataStr));
-
+                
                 if (!pc.currentRemoteDescription) {
                     await pc.setRemoteDescription(remoteDesc);
 
                     if (remoteDesc.type === 'offer') {
-                        // If we are Receiver processing an offer, generate Answer
-                        document.getElementById('signalInputSection').classList.add('hidden'); // Hide input
-                        document.getElementById('signalLoader').classList.remove('hidden'); // Show loader
-                        document.getElementById('signalTitle').innerText = "Receiver: 2. Share Reply";
+                        // We are Receiver, generating Answer
+                        document.getElementById('signalInputSection').classList.add('hidden');
+                        document.getElementById('signalLoader').classList.remove('hidden');
+                        document.getElementById('signalTitle').innerText = "2. Receiver: Emit Reply";
+                        document.getElementById('loaderText').innerText = "Establishing handshake...";
                         
                         const answer = await pc.createAnswer();
                         await pc.setLocalDescription(answer);
-                        // Wait for ICE to finish, then displaySignal is called
+                    } else {
+                        // We are Sender, receiving Answer -> Connection happens automatically via ICE
+                        document.getElementById('signalInputSection').classList.add('hidden');
+                        document.getElementById('loaderText').innerText = "Finalizing connection...";
+                        document.getElementById('signalLoader').classList.remove('hidden');
                     }
                 }
             } catch (e) {
-                alert("Invalid code format. Please try scanning or pasting again.");
+                alert("Invalid Code Data: " + e);
+                resetApp();
             }
         }
 
-        // --- SIGNALING HELPERS ---
-        function displaySignal(sdp, instructions) {
+        function displaySignal(sdp, title) {
             document.getElementById('signalLoader').classList.add('hidden');
             document.getElementById('signalOutput').classList.remove('hidden');
-            document.getElementById('qrInstructions').innerText = instructions;
             
-            // Minify SDP JSON
-            let sdpJson = JSON.stringify(sdp);
-            sdpJson = sdpJson.replace(/\s/g, ''); // Remove all whitespace
-            fullSignalString = btoa(sdpJson);
-            
-            document.getElementById('localSignalText').value = fullSignalString;
-            
-            // Chunk the base64 string
-            const chunkSize = 350; // Conservative size for reliable QR scanning with high EC
-            const chunks = [];
-            for (let i = 0; i < fullSignalString.length; i += chunkSize) {
-                chunks.push(fullSignalString.substring(i, i + chunkSize));
+            // Allow input ONLY after output is generated (if we are Sender waiting for answer, we now show input)
+            // But if we are Receiver showing answer, we don't need input anymore.
+            if (sdp.type === 'offer') {
+                document.getElementById('signalInputSection').classList.remove('hidden');
+            } else {
+                document.getElementById('signalInputSection').classList.add('hidden'); // Sender scans answer, then done.
             }
-            const totalChunks = chunks.length;
-            
-            // Generate multiple QRs
-            const container = document.getElementById('qrcode-container');
-            container.innerHTML = `<p class="text-xs text-slate-400 text-center mb-2">Scan all ${totalChunks} chunks in order (1 to ${totalChunks})</p>`;
-            
-            chunks.forEach((chunk, index) => {
-                const chunkNum = index + 1;
-                const qrText = `${chunkNum}:${totalChunks}:${chunk}`;
-                const chunkDiv = document.createElement('div');
-                chunkDiv.className = 'chunk-qr';
-                chunkDiv.innerHTML = `
-                    <span class="text-sm font-bold text-slate-300 mb-1">Chunk ${chunkNum}/${totalChunks}</span>
-                    <div class="qr-wrapper">
-                        <div id="qrcode-${chunkNum}"></div>
-                    </div>
-                `;
-                container.appendChild(chunkDiv);
-                
-                // Generate QR for this chunk
-                new QRCode(document.getElementById(`qrcode-${chunkNum}`), {
-                    text: qrText,
-                    width: 200,
-                    height: 200,
-                    colorDark: "#000000",
-                    colorLight: "#ffffff",
-                    correctLevel: QRCode.CorrectLevel.H  // High error correction
-                });
-            });
+
+            // Prepare Data
+            let sdpJson = JSON.stringify(sdp);
+            sdpJson = sdpJson.replace(/\s/g, ''); 
+            const base64 = btoa(sdpJson);
+
+            // Chunking
+            const CHUNK_LEN = 150; // Smaller chunks for faster QR read/write and lower density
+            const chunks = [];
+            for (let i = 0; i < base64.length; i += CHUNK_LEN) {
+                chunks.push(base64.substring(i, i + CHUNK_LEN));
+            }
+
+            startQrPlayback(chunks);
         }
 
-        function copySignal() {
-            const copyText = document.getElementById("localSignalText");
-            copyText.select();
-            document.execCommand("copy"); // Fallback for older browsers
-            alert("Full code copied!");
-        }
-
-        // --- DATA CHANNEL & TRANSFER ---
+        // --- DATA CHANNEL ---
         function setupChannelListeners(channel) {
             channel.onopen = () => {
                 showStep('step-transfer');
-                if (fileToSend) {
-                    sendFile();
-                }
+                if (fileToSend) sendFile();
             };
-            
             channel.onmessage = handleDataMessage;
         }
 
         function sendFile() {
-            // Send Metadata first
-            const meta = {
-                name: fileToSend.name,
-                size: fileToSend.size,
-                type: fileToSend.type
-            };
+            const meta = { name: fileToSend.name, size: fileToSend.size, type: fileToSend.type };
             dataChannel.send(JSON.stringify({ type: 'meta', data: meta }));
 
-            // Chunk and send
-            const chunkSize = 16384; // 16KB chunks
+            const chunkSize = 16384; 
             const fileReader = new FileReader();
             let offset = 0;
             
-            document.getElementById('transferStatus').innerText = `Sending ${meta.name}...`;
+            document.getElementById('transferStatus').innerText = "Uploading to Peer...";
+            
+            const startTime = Date.now();
 
             fileReader.onload = e => {
+                if (dataChannel.readyState !== 'open') return;
                 dataChannel.send(e.target.result);
                 offset += e.target.result.byteLength;
                 
-                // Update UI
+                // Stats
                 const percent = (offset / fileToSend.size) * 100;
                 document.getElementById('progressBar').style.width = percent + '%';
                 
+                const elapsedTime = (Date.now() - startTime) / 1000; // sec
+                const speed = (offset / 1024) / elapsedTime; // KB/s
+                document.getElementById('speedDisplay').innerText = `${speed.toFixed(0)} KB/s`;
+
                 if (offset < fileToSend.size) {
-                    readSlice(offset);
-                } else {
-                     // Done
+                    // Backpressure handling would be better here, but for simple app:
+                    setTimeout(() => readSlice(offset), 0);
                 }
             };
 
@@ -547,30 +665,30 @@
                 const slice = fileToSend.slice(offset, o + chunkSize);
                 fileReader.readAsArrayBuffer(slice);
             };
-            
             readSlice(0);
         }
 
         function handleDataMessage(event) {
             const data = event.data;
-
             if (typeof data === 'string') {
-                // It's metadata
                 const msg = JSON.parse(data);
                 if (msg.type === 'meta') {
                     fileMeta = msg.data;
-                    document.getElementById('transferStatus').innerText = `Receiving ${fileMeta.name}...`;
+                    document.getElementById('transferStatus').innerText = "Downloading from Peer...";
+                    window.transferStart = Date.now();
                 }
             } else {
-                // It's a file chunk (ArrayBuffer)
                 receivedChunks.push(data);
                 receivedSize += data.byteLength;
                 
-                // Update UI
                 if (fileMeta.size) {
                     const percent = (receivedSize / fileMeta.size) * 100;
                     document.getElementById('progressBar').style.width = percent + '%';
                     
+                    const elapsedTime = (Date.now() - window.transferStart) / 1000;
+                    const speed = (receivedSize / 1024) / elapsedTime;
+                    document.getElementById('speedDisplay').innerText = `${speed.toFixed(0)} KB/s`;
+
                     if (receivedSize >= fileMeta.size) {
                         saveFile();
                     }
@@ -589,11 +707,7 @@
             btn.href = url;
             btn.download = fileMeta.name;
             btn.classList.remove('hidden');
-            btn.innerText = `Download ${fileMeta.name}`;
-
-            // Reset for next
-            receivedChunks = [];
-            receivedSize = 0;
+            lucide.createIcons();
         }
     </script>
 </body>
