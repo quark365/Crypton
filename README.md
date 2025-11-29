@@ -1,7 +1,6 @@
-# QR-Link: Offline Secure Communication Suite
+# Crypton: Offline Secure Communication Suite
 
-![Crypton Demo](https://via.placeholder.com/800x600/0f172a/06b6d4?text=Crypton+Secure+Chat)  
-*(Replace with actual screenshot of the Crypton interface showing QR scanning and chat.)*
+
 
 ## Overview
 
@@ -124,7 +123,7 @@ Ideal for air-gapped environments, protests, or scenarios where connectivity is 
 MIT License. Free for personal/commercial use. No warranties—use at your own risk.
 
 ## Credits
-- Inspired by air-gapped tools like Briar and offline messengers.
+- Inspired by air-gapped tools like and offline messengers.
 - Built with ❤️ for privacy advocates.
 
 **Star/Fork on GitHub?** Contribute QR optimizations or new protocols! 🚀
