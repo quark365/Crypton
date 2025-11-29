@@ -4,7 +4,7 @@
 
 ## Overview
 
-QR-Link is a privacy-focused, serverless toolkit for secure offline communication between devices. Built with modern web technologies, it enables peer-to-peer (P2P) messaging and file sharing without internet, servers, or third-party dependencies. Connections are bootstrapped via QR code scanning, using cryptographic handshakes to ensure end-to-end encryption.
+Crypton is a privacy-focused, serverless toolkit for secure offline communication between devices. Built with modern web technologies, it enables peer-to-peer (P2P) messaging and file sharing without internet, servers, or third-party dependencies. Connections are bootstrapped via QR code scanning, using cryptographic handshakes to ensure end-to-end encryption.
 
 ### Core Components
 - **Crypton** (`index.html`): A secure chat app with RSA/ECDH key exchange, AES-GCM encryption, and visual fingerprint verification. Supports multi-device QR-based message transfer.
