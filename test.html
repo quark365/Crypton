@@ -25,10 +25,7 @@
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;700&display=swap');
         
         :root {
-            --primary-grad: linear-gradient(135deg, #6366f1, #a855f7);
             --bg-dark: #0f172a;
-            --bubble-me: #3b82f6;
-            --bubble-other: #1e293b;
         }
 
         body {
@@ -69,8 +66,6 @@
             border: 1px solid rgba(255, 255, 255, 0.1);
         }
         
-        /* Media Styles */
-        .media-container { max-width: 280px; border-radius: 12px; overflow: hidden; margin-top: 4px; }
         video, img { width: 100%; height: auto; display: block; }
     </style>
 </head>
@@ -117,12 +112,78 @@
             return <i data-lucide={name} width={size} height={size} className={className} style={{ fill: fill || 'none' }}></i>;
         };
 
-        // --- COMPONENTS ---
+        // --- SUB-COMPONENTS ---
 
-        // 1. Camera Modal
+        const QRScanner = ({ onScan }) => {
+            const videoRef = useRef(null);
+            const canvasRef = useRef(null);
+            
+            const scanLoop = useCallback(() => {
+                const video = videoRef.current;
+                const canvas = canvasRef.current;
+                if(video && canvas && video.readyState === video.HAVE_ENOUGH_DATA) {
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+                    ctx.drawImage(video, 0, 0);
+                    const code = jsQR(ctx.getImageData(0,0,canvas.width,canvas.height).data, canvas.width, canvas.height);
+                    if(code && code.data.startsWith('SL:')) onScan(code.data);
+                }
+                requestAnimationFrame(scanLoop);
+            }, [onScan]);
+
+            useEffect(() => {
+                let stream;
+                navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } }).then(s => {
+                    stream = s;
+                    if(videoRef.current) { 
+                        videoRef.current.srcObject = s; 
+                        videoRef.current.play(); 
+                        requestAnimationFrame(scanLoop); 
+                    }
+                }).catch(e => console.log("Cam error", e));
+                return () => { if(stream) stream.getTracks().forEach(t => t.stop()); };
+            }, [scanLoop]);
+
+            return (
+                <>
+                    <video ref={videoRef} className="w-full h-full object-cover" muted playsInline></video>
+                    <canvas ref={canvasRef} className="hidden"></canvas>
+                    <div className="scanline"></div>
+                </>
+            );
+        };
+
+        const QRAnimator = ({ data, label }) => {
+            const [idx, setIdx] = useState(0);
+            const ref = useRef(null);
+            
+            const chunks = useMemo(() => {
+                if(!data) return [];
+                const b64 = btoa(JSON.stringify(data));
+                return Array.from({length: Math.ceil(b64.length/CHUNK_SIZE)}, (_, i) => `SL:${i}:${Math.ceil(b64.length/CHUNK_SIZE)}:${b64.slice(i*CHUNK_SIZE, (i+1)*CHUNK_SIZE)}`);
+            }, [data]);
+
+            useEffect(() => { 
+                const i = setInterval(() => setIdx(p => (p+1)%chunks.length), 150); 
+                return () => clearInterval(i); 
+            }, [chunks]);
+
+            useEffect(() => { 
+                if(ref.current && chunks.length) new QRious({ element: ref.current, value: chunks[idx], size: 300 }); 
+            }, [idx, chunks]);
+
+            return (
+                <div className="bg-white p-4 rounded-xl flex flex-col items-center">
+                    <canvas ref={ref}></canvas>
+                    <p className="text-center text-black font-mono text-xs mt-2 font-bold">{label} {idx+1}/{chunks.length}</p>
+                </div>
+            );
+        };
+
         const CameraModal = ({ isOpen, onClose, onCapture }) => {
             const videoRef = useRef(null);
-            const [mode, setMode] = useState('PHOTO'); // PHOTO, VIDEO
+            const [mode, setMode] = useState('PHOTO'); 
             const [isRecording, setIsRecording] = useState(false);
             const mediaRecorder = useRef(null);
             const chunks = useRef([]);
@@ -134,8 +195,7 @@
                         .then(s => {
                             stream = s;
                             if(videoRef.current) videoRef.current.srcObject = s;
-                        })
-                        .catch(err => console.error("Camera Error:", err));
+                        });
                 }
                 return () => { if(stream) stream.getTracks().forEach(t => t.stop()); };
             }, [isOpen]);
@@ -177,9 +237,7 @@
                 <div className="fixed inset-0 z-50 bg-black flex flex-col">
                     <div className="relative flex-1 bg-black overflow-hidden">
                         <video ref={videoRef} autoPlay playsInline muted className="absolute inset-0 w-full h-full object-cover"></video>
-                        <button onClick={onClose} className="absolute top-4 right-4 p-2 bg-black/40 rounded-full text-white backdrop-blur-md">
-                            <Icon name="x" />
-                        </button>
+                        <button onClick={onClose} className="absolute top-4 right-4 p-2 bg-black/40 rounded-full text-white backdrop-blur-md"><Icon name="x" /></button>
                     </div>
                     <div className="bg-black p-6 pb-10 flex flex-col items-center gap-4">
                         <div className="flex gap-4 text-sm font-bold text-gray-400 mb-2">
@@ -188,10 +246,7 @@
                         </div>
                         <div className="flex items-center justify-between w-full max-w-xs">
                             <div className="w-10"></div>
-                            <button 
-                                onClick={mode === 'PHOTO' ? takePhoto : toggleVideo}
-                                className={`w-20 h-20 rounded-full border-4 border-white flex items-center justify-center transition-all ${isRecording ? 'bg-red-500 scale-110' : 'bg-transparent'}`}
-                            >
+                            <button onClick={mode === 'PHOTO' ? takePhoto : toggleVideo} className={`w-20 h-20 rounded-full border-4 border-white flex items-center justify-center transition-all ${isRecording ? 'bg-red-500 scale-110' : 'bg-transparent'}`}>
                                 <div className={`w-16 h-16 rounded-full bg-white transition-all ${isRecording ? 'scale-50 rounded-md bg-red-600' : ''}`}></div>
                             </button>
                             <button onClick={onClose} className="w-10 flex justify-center"><Icon name="rotate-ccw" className="text-white" /></button>
@@ -201,11 +256,10 @@
             );
         };
 
-        // 2. Identity Modal
         const IdentityModal = ({ fingerprint, onClose }) => {
             if (!fingerprint) return null;
             return (
-                <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-sm flex items-center justify-center p-6 fade-in">
+                <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex items-center justify-center p-6 fade-in">
                     <div className="bg-slate-900 border border-slate-700 p-8 rounded-3xl w-full max-w-xs text-center relative shadow-2xl">
                         <button onClick={onClose} className="absolute top-4 right-4 text-slate-500 hover:text-white"><Icon name="x" /></button>
                         <div className="w-14 h-14 bg-blue-500/20 rounded-full flex items-center justify-center mx-auto mb-4 text-blue-400">
@@ -217,32 +271,222 @@
                             <div className="text-4xl mb-3 tracking-widest animate-pulse">{fingerprint.emoji}</div>
                             <div className="font-mono text-blue-400 text-sm tracking-[0.2em] break-all">{fingerprint.hex}</div>
                         </div>
-                        <button onClick={onClose} className="w-full py-3 bg-blue-600 rounded-xl font-semibold text-white">Verified</button>
+                        <button onClick={onClose} className="w-full py-3 bg-blue-600 hover:bg-blue-500 rounded-xl font-semibold text-white transition-colors cursor-pointer">Verified</button>
                     </div>
                 </div>
             );
         };
 
-        // --- MAIN APP ---
+        const MessageBubble = ({ m, fingerprint }) => {
+            const isMe = m.type.startsWith('TX');
+            const isMedia = m.type === 'FILE' || m.type === 'TX_FILE';
+            const isImg = isMedia && m.mimeType?.startsWith('image/');
+            const isVid = isMedia && m.mimeType?.startsWith('video/');
+            const isAudio = isMedia && m.mimeType?.startsWith('audio/');
+
+            return (
+                <div className={`flex ${isMe ? 'justify-end' : 'justify-start'} mb-3 fade-in group`}>
+                     {!isMe && <div className="w-8 h-8 rounded-full bg-slate-700 flex-shrink-0 mr-2 flex items-center justify-center text-xs font-bold text-slate-300">{fingerprint?.emoji.substring(0,2)}</div>}
+                    <div className={`max-w-[85%] sm:max-w-[70%] p-3 rounded-2xl shadow-sm relative ${isMe ? 'bg-blue-600 text-white rounded-br-none' : 'bg-slate-800 text-slate-100 rounded-bl-none'}`}>
+                        {(m.type === 'TX' || m.type === 'RX') && <p className="leading-relaxed whitespace-pre-wrap text-sm">{m.text}</p>}
+                        {isImg && <div className="rounded-lg overflow-hidden mb-1 border border-white/10"><img src={m.fileUrl} className="max-h-64 object-cover" /></div>}
+                        {isVid && <div className="rounded-lg overflow-hidden mb-1 border border-white/10"><video src={m.fileUrl} controls className="max-h-64 bg-black" /></div>}
+                        {isAudio && <div className="flex items-center gap-3 p-1 min-w-[200px]"><div className={`p-2 rounded-full ${isMe?'bg-white/20':'bg-slate-700'}`}><Icon name="mic" size={16} /></div><audio src={m.fileUrl} controls className="h-8 w-full opacity-90 scale-95 origin-left" /></div>}
+                        {isMedia && !isImg && !isVid && !isAudio && (
+                            <div className="flex items-center gap-3 p-2 bg-black/20 rounded-lg">
+                                <div className="bg-white/10 p-2 rounded-lg"><Icon name="file" /></div>
+                                <div className="overflow-hidden">
+                                    <p className="font-bold truncate text-sm">{m.text}</p>
+                                    <p className="text-[10px] opacity-70">{Math.round(m.fileSize/1024)} KB</p>
+                                </div>
+                                <a href={m.fileUrl} download={m.text} className="ml-auto p-2 bg-white/20 rounded-full hover:bg-white/30"><Icon name="download" size={16} /></a>
+                            </div>
+                        )}
+                        <div className={`text-[9px] mt-1 flex items-center gap-1 opacity-60 ${isMe ? 'justify-end' : 'justify-start'}`}>{new Date(m.id).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})} {isMe && <Icon name="check" size={10} />}</div>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- MAIN VIEW COMPONENTS ---
+
+        const HomeView = ({ onHost, onJoin }) => (
+            <div className="flex flex-col items-center justify-center min-h-screen p-6 bg-slate-950 relative overflow-hidden fade-in">
+                <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-5"></div>
+                <div className="w-64 h-64 bg-blue-600/20 rounded-full blur-[100px] absolute top-1/4 -left-10"></div>
+                <div className="w-64 h-64 bg-purple-600/20 rounded-full blur-[100px] absolute bottom-1/4 -right-10"></div>
+                <div className="relative z-10 text-center space-y-6 mb-12">
+                    <div className="inline-flex p-4 rounded-3xl bg-slate-900 border border-white/10 shadow-2xl mb-2"><Icon name="ghost" size={48} className="text-blue-400" /></div>
+                    <div><h1 className="text-5xl font-bold tracking-tight text-white mb-2">ShadowLink</h1><p className="text-slate-400 text-lg">Secure. Ephemeral. Peer-to-Peer.</p></div>
+                </div>
+                <div className="grid gap-4 w-full max-w-xs relative z-10">
+                    <button onClick={onHost} className="group relative p-1 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:scale-[1.02] transition-transform shadow-lg shadow-blue-900/30">
+                        <div className="bg-slate-950 rounded-xl p-5 h-full flex items-center gap-4 group-hover:bg-opacity-90 transition-all">
+                            <div className="p-3 bg-blue-500/20 rounded-lg text-blue-400"><Icon name="radio-tower" /></div>
+                            <div className="text-left"><h3 className="text-white font-bold text-lg">Create Room</h3><p className="text-slate-500 text-xs">Start a new secure channel</p></div>
+                        </div>
+                    </button>
+                    <button onClick={onJoin} className="group relative p-1 rounded-2xl bg-slate-800 hover:bg-slate-700 transition-all hover:scale-[1.02]">
+                        <div className="rounded-xl p-5 h-full flex items-center gap-4">
+                            <div className="p-3 bg-slate-700 rounded-lg text-slate-300"><Icon name="scan-line" /></div>
+                            <div className="text-left"><h3 className="text-white font-bold text-lg">Join Room</h3><p className="text-slate-500 text-xs">Scan a host to connect</p></div>
+                        </div>
+                    </button>
+                </div>
+            </div>
+        );
+
+        const SignalingView = ({ view, localSignal, scanProgress, onScan, onBack, onScanReply }) => {
+            const isScanner = view.includes('SCAN');
+            const isQR = !isScanner;
+            const title = view === 'HOST_WAIT' ? "Host Signal" : view === 'SCAN_HOST' ? "Scan Host" : view === 'SCAN_JOIN' ? "Scan Reply" : "Your Reply";
+            
+            return (
+                <div className="flex flex-col h-screen p-6 items-center justify-center bg-slate-950 fade-in relative overflow-hidden">
+                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-blue-900/20 via-slate-950 to-slate-950"></div>
+                    <div className="w-full max-w-sm glass-panel rounded-[2rem] p-8 relative z-10 shadow-2xl border border-white/10">
+                        <button onClick={onBack} className="absolute top-6 left-6 text-slate-500 hover:text-white"><Icon name="arrow-left" /></button>
+                        <div className="text-center mb-8 mt-4">
+                            <h2 className="text-2xl font-bold text-white mb-2">{isScanner ? 'Scan QR Code' : 'Share Signal'}</h2>
+                            <p className="text-sm text-slate-400">{isScanner ? "Point camera at peer's screen" : "Ask peer to scan this code"}</p>
+                        </div>
+                        <div className="flex flex-col items-center min-h-[300px] justify-center">
+                            {!isScanner && localSignal ? (
+                                <>
+                                    <QRAnimator data={localSignal} label="Signal" />
+                                    {view === 'HOST_WAIT' && (
+                                        <button onClick={onScanReply} className="mt-6 w-full py-4 bg-slate-800 hover:bg-slate-700 rounded-xl font-semibold text-white transition-colors flex items-center justify-center gap-2 border border-white/5">
+                                            <Icon name="scan-line" /> I've been Scanned
+                                        </button>
+                                    )}
+                                </>
+                            ) : (
+                                <div className="w-full">
+                                    <div className="relative aspect-square rounded-2xl overflow-hidden bg-black border-2 border-blue-500/50 shadow-[0_0_30px_rgba(59,130,246,0.3)]">
+                                        <QRScanner onScan={onScan} />
+                                    </div>
+                                    <div className="mt-4 bg-slate-900 h-2 rounded-full overflow-hidden w-full">
+                                        <div className="h-full bg-blue-500 transition-all duration-200" style={{width: `${scanProgress}%`}}></div>
+                                    </div>
+                                    <p className="text-center text-xs text-slate-500 mt-2 font-mono">{scanProgress}% PACKET CAPTURED</p>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const ChatView = ({ 
+            messages, fingerprint, fileProgress, 
+            onSend, onFileSelect, 
+            isRecordingAudio, audioTime, onAudioStart, onAudioStop, 
+            onCapture, onLeave 
+        }) => {
+            const [msgText, setMsgText] = useState("");
+            const [showVerify, setShowVerify] = useState(false);
+            const [showCamera, setShowCamera] = useState(false);
+            const fileInputRef = useRef(null);
+            const chatEndRef = useRef(null);
+
+            useEffect(() => {
+                chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+            }, [messages, fileProgress]);
+
+            const handleSend = () => {
+                if(msgText.trim()) {
+                    onSend(msgText);
+                    setMsgText("");
+                }
+            };
+
+            return (
+                <div className="flex flex-col h-screen bg-slate-950 relative">
+                    {/* Header */}
+                    <div className="px-4 py-3 bg-slate-900/80 backdrop-blur-md flex items-center justify-between border-b border-white/5 z-10 sticky top-0">
+                        <div className="flex items-center gap-3 cursor-pointer" onClick={() => setShowVerify(true)}>
+                            <div className="relative">
+                                <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center text-lg shadow-lg">{fingerprint?.emoji.substring(0,2)}</div>
+                                <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-slate-900"></div>
+                            </div>
+                            <div>
+                                <h2 className="font-bold text-white text-sm">Secure Channel</h2>
+                                <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-mono"><Icon name="lock" size={10} className="text-green-400" /> End-to-End Encrypted</div>
+                            </div>
+                        </div>
+                        <div className="flex gap-2"><button onClick={onLeave} className="p-2 text-slate-400 hover:text-red-400 rounded-full hover:bg-white/5"><Icon name="log-out" size={20} /></button></div>
+                    </div>
+
+                    {/* Messages */}
+                    <div className="flex-1 overflow-y-auto p-4 space-y-2 bg-[url('https://www.transparenttextures.com/patterns/dark-matter.png')]">
+                        <div className="flex justify-center py-4"><span className="bg-slate-800 text-slate-500 text-[10px] px-3 py-1 rounded-full border border-slate-700">Messages are ephemeral & encrypted</span></div>
+                        {messages.map(m => m.type === 'SYS' ? <div key={m.id} className="text-center my-4"><span className="text-[10px] text-cyan-400 bg-cyan-950/30 px-3 py-1 rounded-full border border-cyan-500/20">{m.text}</span></div> : <MessageBubble key={m.id} m={m} fingerprint={fingerprint} />)}
+                        <div ref={chatEndRef}></div>
+                    </div>
+
+                    {/* Progress */}
+                    {fileProgress > 0 && <div className="h-1 bg-slate-800 w-full"><div className="h-full bg-blue-500 transition-all duration-200" style={{width: `${fileProgress}%`}}></div></div>}
+
+                    {/* Input */}
+                    <div className="p-3 bg-slate-900 border-t border-white/5 pb-6 sm:pb-3">
+                        <div className="flex items-end gap-2 max-w-4xl mx-auto">
+                            <button onClick={() => setShowCamera(true)} className="p-3 rounded-full bg-slate-800 text-blue-400 hover:bg-slate-700 transition-colors flex-shrink-0"><Icon name="camera" size={20} /></button>
+                            <div className="flex-1 bg-slate-800 rounded-2xl flex items-center min-h-[48px] px-2 transition-all border border-transparent focus-within:border-slate-600">
+                                {isRecordingAudio ? (
+                                    <div className="flex-1 flex items-center gap-3 px-2">
+                                        <div className="w-3 h-3 bg-red-500 rounded-full animate-rec"></div>
+                                        <span className="text-red-400 font-mono text-sm">{formatTime(audioTime)}</span>
+                                        <div className="flex-1"></div>
+                                        <button onClick={onAudioStop} className="text-slate-400 text-xs">Cancel</button>
+                                    </div>
+                                ) : (
+                                    <>
+                                        <input type="file" ref={fileInputRef} className="hidden" onChange={onFileSelect} />
+                                        <button onClick={() => fileInputRef.current?.click()} className="p-2 text-slate-400 hover:text-white"><Icon name="paperclip" size={20} /></button>
+                                        <input 
+                                            value={msgText}
+                                            onChange={e => setMsgText(e.target.value)}
+                                            onKeyDown={e => e.key === 'Enter' && handleSend()}
+                                            className="flex-1 bg-transparent border-none outline-none text-white placeholder-slate-500 text-sm px-2 py-3 max-h-32"
+                                            placeholder="Message..."
+                                        />
+                                    </>
+                                )}
+                            </div>
+                            {msgText ? (
+                                <button onClick={handleSend} className="p-3 rounded-full bg-blue-600 text-white shadow-lg hover:scale-105 active:scale-95 transition-all flex-shrink-0"><Icon name="send-horizontal" size={20} fill="currentColor" /></button>
+                            ) : (
+                                <button 
+                                    onMouseDown={onAudioStart} onMouseUp={onAudioStop}
+                                    onTouchStart={onAudioStart} onTouchEnd={onAudioStop}
+                                    className={`p-3 rounded-full transition-all flex-shrink-0 shadow-lg ${isRecordingAudio ? 'bg-red-500 text-white scale-110' : 'bg-slate-800 text-white hover:bg-slate-700'}`}
+                                >
+                                    <Icon name="mic" size={20} fill={isRecordingAudio ? "currentColor" : "none"} />
+                                </button>
+                            )}
+                        </div>
+                    </div>
+
+                    <CameraModal isOpen={showCamera} onClose={() => setShowCamera(false)} onCapture={onCapture} />
+                    {showVerify && <IdentityModal fingerprint={fingerprint} onClose={() => setShowVerify(false)} />}
+                </div>
+            );
+        };
+
         const App = () => {
-            // UI States
             const [view, setView] = useState('HOME');
             const [role, setRole] = useState(null);
-            const [logs, setLogs] = useState([]);
-            const [msgText, setMsgText] = useState("");
             const [messages, setMessages] = useState([]);
-            const [showVerify, setShowVerify] = useState(false);
             const [fileProgress, setFileProgress] = useState(0); 
-            const [showCamera, setShowCamera] = useState(false);
             
-            // Audio Recording State
+            // Audio State
             const [isRecordingAudio, setIsRecordingAudio] = useState(false);
             const [audioTime, setAudioTime] = useState(0);
             const audioRecorder = useRef(null);
             const audioChunks = useRef([]);
             const audioTimer = useRef(null);
             
-            // WebRTC & Crypto Refs
+            // Core Refs
             const pc = useRef(null);
             const dc = useRef(null);
             const candidates = useRef([]);
@@ -250,37 +494,21 @@
             const sessionKey = useRef(null);
             const fingerprint = useRef(null);
             const incomingFiles = useRef({});
-            const fileInputRef = useRef(null);
-            const chatEndRef = useRef(null);
-
-            // Signaling State
+            
+            // Signal State
             const [localSignal, setLocalSignal] = useState(null);
             const scannedChunks = useRef(new Map());
             const [scanProgress, setScanProgress] = useState(0);
 
-            // Initialize
             useEffect(() => {
                 const initKeys = async () => {
-                    keys.current.rsa = await window.crypto.subtle.generateKey(
-                        { name: "RSA-OAEP", modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: "SHA-256" },
-                        true, ["encrypt", "decrypt"]
-                    );
-                    keys.current.ecdh = await window.crypto.subtle.generateKey(
-                        { name: "ECDH", namedCurve: "P-256" },
-                        true, ["deriveKey", "deriveBits"]
-                    );
-                    addLog("Keys Generated.");
+                    keys.current.rsa = await window.crypto.subtle.generateKey({ name: "RSA-OAEP", modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: "SHA-256" }, true, ["encrypt", "decrypt"]);
+                    keys.current.ecdh = await window.crypto.subtle.generateKey({ name: "ECDH", namedCurve: "P-256" }, true, ["deriveKey", "deriveBits"]);
                 };
                 initKeys();
             }, []);
 
-            useEffect(() => {
-                chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-            }, [messages, fileProgress]);
-
-            const addLog = (txt) => setLogs(p => [...p.slice(-4), txt]);
-
-            // Audio Logic
+            // Audio Handlers
             const startAudioRecording = async () => {
                 try {
                     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -296,73 +524,44 @@
                     setIsRecordingAudio(true);
                     setAudioTime(0);
                     audioTimer.current = setInterval(() => setAudioTime(t => t + 100), 100);
-                } catch(e) {
-                    console.error("Mic error", e);
-                }
+                } catch(e) { console.error(e); }
             };
 
             const stopAudioRecording = () => {
-                if (audioRecorder.current) {
+                if (audioRecorder.current && audioRecorder.current.state !== 'inactive') {
                     audioRecorder.current.stop();
                     setIsRecordingAudio(false);
                     clearInterval(audioTimer.current);
                 }
             };
 
-            // Generic File Sender
+            // File Handling
             const processAndSendFile = async (blob, filename, mimeType) => {
                 if (!sessionKey.current) return;
-                
                 const buffer = await blob.arrayBuffer();
                 const fileIv = window.crypto.getRandomValues(new Uint8Array(12));
-                const encryptedFile = await window.crypto.subtle.encrypt(
-                    { name: "AES-GCM", iv: fileIv },
-                    sessionKey.current,
-                    buffer
-                );
+                const encryptedFile = await window.crypto.subtle.encrypt({ name: "AES-GCM", iv: fileIv }, sessionKey.current, buffer);
                 
                 const fileId = crypto.randomUUID();
-                const metaRaw = JSON.stringify({ 
-                    name: filename, 
-                    size: blob.size, 
-                    type: mimeType, 
-                    iv: buf2hex(fileIv), 
-                    encSize: encryptedFile.byteLength 
-                });
-                
+                const metaRaw = JSON.stringify({ name: filename, size: blob.size, type: mimeType, iv: buf2hex(fileIv), encSize: encryptedFile.byteLength });
                 const metaIv = window.crypto.getRandomValues(new Uint8Array(12));
-                const encMeta = await window.crypto.subtle.encrypt(
-                    { name: "AES-GCM", iv: metaIv },
-                    sessionKey.current,
-                    new TextEncoder().encode(metaRaw)
-                );
+                const encMeta = await window.crypto.subtle.encrypt({ name: "AES-GCM", iv: metaIv }, sessionKey.current, new TextEncoder().encode(metaRaw));
 
                 dc.current.send(JSON.stringify({ t: 'FILE_HEADER', id: fileId, iv: buf2hex(metaIv), meta: buf2hex(encMeta) }));
                 
                 const totalChunks = Math.ceil(encryptedFile.byteLength / FILE_CHUNK_SIZE);
                 let offset = 0;
-                
                 for (let i = 0; i < totalChunks; i++) {
                     const chunk = encryptedFile.slice(offset, offset + FILE_CHUNK_SIZE);
                     const b64Chunk = arrayBufferToBase64(chunk);
-                    if (i % 20 === 0) await new Promise(r => setTimeout(r, 10)); // throttle
+                    if (i % 20 === 0) await new Promise(r => setTimeout(r, 10)); 
                     dc.current.send(JSON.stringify({ t: 'FILE_CHUNK', id: fileId, idx: i, d: b64Chunk }));
                     offset += FILE_CHUNK_SIZE;
                     setFileProgress(Math.round(((i + 1) / totalChunks) * 100));
                 }
-
                 setFileProgress(0);
-                
-                // Add to local UI
                 const url = URL.createObjectURL(blob);
-                setMessages(prev => [...prev, { 
-                    id: Date.now(), 
-                    type: 'TX_FILE', 
-                    text: filename,
-                    mimeType: mimeType,
-                    fileUrl: url,
-                    fileSize: blob.size
-                }]);
+                setMessages(prev => [...prev, { id: Date.now(), type: 'TX_FILE', text: filename, mimeType, fileUrl: url, fileSize: blob.size }]);
             };
 
             const handleFileSelect = (e) => {
@@ -370,20 +569,24 @@
                 if(file) processAndSendFile(file, file.name, file.type);
             };
 
-            // Packet Handling
+            const sendMessage = async (txt) => {
+                if(!txt.trim() || !sessionKey.current) return;
+                setMessages(prev => [...prev, { id: Date.now(), type: 'TX', text: txt }]);
+                const iv = window.crypto.getRandomValues(new Uint8Array(12));
+                const enc = await window.crypto.subtle.encrypt({ name: "AES-GCM", iv }, sessionKey.current, new TextEncoder().encode(txt));
+                dc.current.send(JSON.stringify({ t: 'ENC', iv: buf2hex(iv), d: buf2hex(enc) }));
+            };
+
+            // Packet Handling & Crypto
             const handlePacket = async (raw) => {
                 try {
                     const p = JSON.parse(raw);
                     if (p.t === 'HELLO') {
-                        // Handshake
                         const peerRsa = await window.crypto.subtle.importKey("spki", hex2buf(p.rsa), { name: "RSA-OAEP", hash: "SHA-256" }, true, ["encrypt"]);
                         const peerEcdh = await window.crypto.subtle.importKey("raw", hex2buf(p.ecdh), { name: "ECDH", namedCurve: "P-256" }, true, []);
                         const sharedBits = await window.crypto.subtle.deriveBits({ name: "ECDH", public: peerEcdh }, keys.current.ecdh.privateKey, 256);
                         const hkdfKey = await window.crypto.subtle.importKey("raw", sharedBits, { name: "HKDF" }, false, ["deriveKey"]);
-                        sessionKey.current = await window.crypto.subtle.deriveKey(
-                            { name: "HKDF", hash: "SHA-256", salt: new Uint8Array(), info: new TextEncoder().encode("ShadowLink") },
-                            hkdfKey, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]
-                        );
+                        sessionKey.current = await window.crypto.subtle.deriveKey({ name: "HKDF", hash: "SHA-256", salt: new Uint8Array(), info: new TextEncoder().encode("ShadowLink") }, hkdfKey, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
                         const fpHash = await window.crypto.subtle.digest("SHA-256", sharedBits);
                         const fpArr = new Uint8Array(fpHash);
                         const emojis = ["💀","👽","🤖","👻","🤡","👹","👺","👾","🎃","🐉","🦄","🦉","🕸","⚡","🔥","❄️"];
@@ -393,42 +596,29 @@
                         setView('CHAT');
                         setMessages(prev => [...prev, { id: Date.now(), type: 'SYS', text: 'Secured with AES-GCM' }]);
                     } else if (p.t === 'ENC') {
-                        // Text Message
                         const pt = await window.crypto.subtle.decrypt({ name: "AES-GCM", iv: hex2buf(p.iv) }, sessionKey.current, hex2buf(p.d));
-                        const text = new TextDecoder().decode(pt);
-                        setMessages(prev => [...prev, { id: Date.now(), type: 'RX', text: text }]);
+                        setMessages(prev => [...prev, { id: Date.now(), type: 'RX', text: new TextDecoder().decode(pt) }]);
                     } else if (p.t === 'FILE_HEADER') {
-                        // File Start
                         const pt = await window.crypto.subtle.decrypt({ name: "AES-GCM", iv: hex2buf(p.iv) }, sessionKey.current, hex2buf(p.meta));
                         const meta = JSON.parse(new TextDecoder().decode(pt));
                         incomingFiles.current[p.id] = { meta, chunks: [], receivedSize: 0 };
                     } else if (p.t === 'FILE_CHUNK') {
-                        // File Data
                         const ctx = incomingFiles.current[p.id];
                         if (ctx) {
                             const data = base64ToArrayBuffer(p.d);
                             ctx.chunks.push({ idx: p.idx, data });
                             ctx.receivedSize += data.byteLength;
                             if (ctx.receivedSize >= ctx.meta.encSize) {
-                                // Reassemble & Decrypt
                                 ctx.chunks.sort((a,b) => a.idx - b.idx);
                                 const totalLen = ctx.chunks.reduce((acc, c) => acc + c.data.byteLength, 0);
                                 const buf = new Uint8Array(totalLen);
                                 let off = 0;
                                 ctx.chunks.forEach(c => { buf.set(new Uint8Array(c.data), off); off += c.data.byteLength; });
-                                
                                 try {
                                     const dec = await window.crypto.subtle.decrypt({ name: "AES-GCM", iv: hex2buf(ctx.meta.iv) }, sessionKey.current, buf);
                                     const blob = new Blob([dec], { type: ctx.meta.type });
                                     const url = URL.createObjectURL(blob);
-                                    setMessages(prev => [...prev, { 
-                                        id: Date.now(), 
-                                        type: 'FILE', 
-                                        text: ctx.meta.name, 
-                                        mimeType: ctx.meta.type,
-                                        fileUrl: url, 
-                                        fileSize: ctx.meta.size 
-                                    }]);
+                                    setMessages(prev => [...prev, { id: Date.now(), type: 'FILE', text: ctx.meta.name, mimeType: ctx.meta.type, fileUrl: url, fileSize: ctx.meta.size }]);
                                     delete incomingFiles.current[p.id];
                                 } catch(e) { console.error(e); }
                             }
@@ -437,17 +627,6 @@
                 } catch(e) { console.error(e); }
             };
 
-            const sendMessage = async () => {
-                if(!msgText.trim() || !sessionKey.current) return;
-                const txt = msgText;
-                setMsgText("");
-                setMessages(prev => [...prev, { id: Date.now(), type: 'TX', text: txt }]);
-                const iv = window.crypto.getRandomValues(new Uint8Array(12));
-                const enc = await window.crypto.subtle.encrypt({ name: "AES-GCM", iv }, sessionKey.current, new TextEncoder().encode(txt));
-                dc.current.send(JSON.stringify({ t: 'ENC', iv: buf2hex(iv), d: buf2hex(enc) }));
-            };
-
-            // WebRTC Logic (Standard)
             const createPeer = useCallback(() => {
                 const peer = new RTCPeerConnection(ICE_SERVERS);
                 peer.onicecandidate = e => e.candidate && candidates.current.push(e.candidate);
@@ -483,7 +662,6 @@
                 setView('SCAN_HOST');
             };
 
-            // Scanner Logic
             const handleScannedChunk = useCallback((raw) => {
                 const parts = raw.split(':');
                 if(parts.length < 4) return;
@@ -518,292 +696,29 @@
                     setView('JOIN_WAIT');
                 }
             };
-            
-            // --- UI RENDERERS ---
 
-            // Message Bubble Component
-            const MessageBubble = ({ m }) => {
-                const isMe = m.type.startsWith('TX');
-                const isMedia = m.type === 'FILE' || m.type === 'TX_FILE';
-                const isImg = isMedia && m.mimeType?.startsWith('image/');
-                const isVid = isMedia && m.mimeType?.startsWith('video/');
-                const isAudio = isMedia && m.mimeType?.startsWith('audio/');
-
-                return (
-                    <div className={`flex ${isMe ? 'justify-end' : 'justify-start'} mb-3 fade-in group`}>
-                         {!isMe && <div className="w-8 h-8 rounded-full bg-slate-700 flex-shrink-0 mr-2 flex items-center justify-center text-xs font-bold text-slate-300">{fingerprint.current?.emoji.substring(0,2)}</div>}
-                        <div className={`max-w-[85%] sm:max-w-[70%] p-3 rounded-2xl shadow-sm relative ${isMe ? 'bg-blue-600 text-white rounded-br-none' : 'bg-slate-800 text-slate-100 rounded-bl-none'}`}>
-                            
-                            {/* Text Message */}
-                            {(m.type === 'TX' || m.type === 'RX') && <p className="leading-relaxed whitespace-pre-wrap text-sm">{m.text}</p>}
-
-                            {/* Image */}
-                            {isImg && (
-                                <div className="rounded-lg overflow-hidden mb-1 border border-white/10">
-                                    <img src={m.fileUrl} alt="shared" className="max-h-64 object-cover" />
-                                </div>
-                            )}
-
-                            {/* Video */}
-                            {isVid && (
-                                <div className="rounded-lg overflow-hidden mb-1 border border-white/10">
-                                    <video src={m.fileUrl} controls className="max-h-64 bg-black" />
-                                </div>
-                            )}
-
-                            {/* Audio */}
-                            {isAudio && (
-                                <div className="flex items-center gap-3 p-1 min-w-[200px]">
-                                    <div className={`p-2 rounded-full ${isMe?'bg-white/20':'bg-slate-700'}`}><Icon name="mic" size={16} /></div>
-                                    <audio src={m.fileUrl} controls className="h-8 w-full opacity-90 scale-95 origin-left" />
-                                </div>
-                            )}
-
-                            {/* Generic File */}
-                            {isMedia && !isImg && !isVid && !isAudio && (
-                                <div className="flex items-center gap-3 p-2 bg-black/20 rounded-lg">
-                                    <div className="bg-white/10 p-2 rounded-lg"><Icon name="file" /></div>
-                                    <div className="overflow-hidden">
-                                        <p className="font-bold truncate text-sm">{m.text}</p>
-                                        <p className="text-[10px] opacity-70">{Math.round(m.fileSize/1024)} KB</p>
-                                    </div>
-                                    <a href={m.fileUrl} download={m.text} className="ml-auto p-2 bg-white/20 rounded-full hover:bg-white/30"><Icon name="download" size={16} /></a>
-                                </div>
-                            )}
-
-                            <div className={`text-[9px] mt-1 flex items-center gap-1 opacity-60 ${isMe ? 'justify-end' : 'justify-start'}`}>
-                                {new Date(m.id).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}
-                                {isMe && <Icon name="check" size={10} />}
-                            </div>
-                        </div>
-                    </div>
-                );
-            };
-
-            const ChatView = () => (
-                <div className="flex flex-col h-screen bg-slate-950 relative">
-                    {/* Header */}
-                    <div className="px-4 py-3 bg-slate-900/80 backdrop-blur-md flex items-center justify-between border-b border-white/5 z-10 sticky top-0">
-                        <div className="flex items-center gap-3 cursor-pointer" onClick={() => setShowVerify(true)}>
-                            <div className="relative">
-                                <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center text-lg shadow-lg">
-                                    {fingerprint.current?.emoji.substring(0,2)}
-                                </div>
-                                <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-slate-900"></div>
-                            </div>
-                            <div>
-                                <h2 className="font-bold text-white text-sm">Secure Channel</h2>
-                                <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-mono">
-                                    <Icon name="lock" size={10} className="text-green-400" /> End-to-End Encrypted
-                                </div>
-                            </div>
-                        </div>
-                        <div className="flex gap-2">
-                             <button onClick={() => window.location.reload()} className="p-2 text-slate-400 hover:text-red-400 rounded-full hover:bg-white/5"><Icon name="log-out" size={20} /></button>
-                        </div>
-                    </div>
-
-                    {/* Messages Area */}
-                    <div className="flex-1 overflow-y-auto p-4 space-y-2 bg-[url('https://www.transparenttextures.com/patterns/dark-matter.png')]">
-                        <div className="flex justify-center py-4"><span className="bg-slate-800 text-slate-500 text-[10px] px-3 py-1 rounded-full border border-slate-700">Messages are ephemeral & encrypted</span></div>
-                        {messages.map(m => m.type === 'SYS' ? <div key={m.id} className="text-center my-4"><span className="text-[10px] text-cyan-400 bg-cyan-950/30 px-3 py-1 rounded-full border border-cyan-500/20">{m.text}</span></div> : <MessageBubble key={m.id} m={m} />)}
-                        <div ref={chatEndRef}></div>
-                    </div>
-
-                    {/* File Progress */}
-                    {fileProgress > 0 && <div className="h-1 bg-slate-800 w-full"><div className="h-full bg-blue-500 transition-all duration-200" style={{width: `${fileProgress}%`}}></div></div>}
-
-                    {/* Input Area */}
-                    <div className="p-3 bg-slate-900 border-t border-white/5 pb-6 sm:pb-3">
-                        <div className="flex items-end gap-2 max-w-4xl mx-auto">
-                            <button onClick={() => setShowCamera(true)} className="p-3 rounded-full bg-slate-800 text-blue-400 hover:bg-slate-700 transition-colors flex-shrink-0">
-                                <Icon name="camera" size={20} />
-                            </button>
-                            
-                            <div className="flex-1 bg-slate-800 rounded-2xl flex items-center min-h-[48px] px-2 transition-all border border-transparent focus-within:border-slate-600">
-                                {isRecordingAudio ? (
-                                    <div className="flex-1 flex items-center gap-3 px-2">
-                                        <div className="w-3 h-3 bg-red-500 rounded-full animate-rec"></div>
-                                        <span className="text-red-400 font-mono text-sm">{formatTime(audioTime)}</span>
-                                        <div className="flex-1"></div>
-                                        <button onClick={() => { stopAudioRecording(); setIsRecordingAudio(false); }} className="text-slate-400 text-xs">Cancel</button>
-                                    </div>
-                                ) : (
-                                    <>
-                                        <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileSelect} />
-                                        <button onClick={() => fileInputRef.current?.click()} className="p-2 text-slate-400 hover:text-white"><Icon name="paperclip" size={20} /></button>
-                                        <input 
-                                            value={msgText}
-                                            onChange={e => setMsgText(e.target.value)}
-                                            onKeyDown={e => e.key === 'Enter' && sendMessage()}
-                                            className="flex-1 bg-transparent border-none outline-none text-white placeholder-slate-500 text-sm px-2 py-3 max-h-32"
-                                            placeholder="Message..."
-                                        />
-                                    </>
-                                )}
-                            </div>
-
-                            {msgText ? (
-                                <button onClick={sendMessage} className="p-3 rounded-full bg-blue-600 text-white shadow-lg hover:scale-105 active:scale-95 transition-all flex-shrink-0">
-                                    <Icon name="send-horizontal" size={20} fill="currentColor" />
-                                </button>
-                            ) : (
-                                <button 
-                                    onMouseDown={startAudioRecording} 
-                                    onMouseUp={stopAudioRecording}
-                                    onTouchStart={startAudioRecording}
-                                    onTouchEnd={stopAudioRecording}
-                                    className={`p-3 rounded-full transition-all flex-shrink-0 shadow-lg ${isRecordingAudio ? 'bg-red-500 text-white scale-110' : 'bg-slate-800 text-white hover:bg-slate-700'}`}
-                                >
-                                    <Icon name={isRecordingAudio ? "mic" : "mic"} size={20} fill={isRecordingAudio ? "currentColor" : "none"} />
-                                </button>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* Modals */}
-                    <CameraModal isOpen={showCamera} onClose={() => setShowCamera(false)} onCapture={(blob, type) => processAndSendFile(blob, `capture_${Date.now()}.${type.split('/')[1]}`, type)} />
-                    <IdentityModal fingerprint={fingerprint.current} onClose={() => setShowVerify(false)} />
-                </div>
-            );
-            
-            // --- SIGNALING UI ---
-            const SignalingView = () => {
-                const isHost = view.startsWith('HOST') || view === 'SCAN_JOIN';
-                const isScanner = view.includes('SCAN');
-                return (
-                    <div className="flex flex-col h-screen p-6 items-center justify-center bg-slate-950 fade-in relative overflow-hidden">
-                        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-blue-900/20 via-slate-950 to-slate-950"></div>
-                        
-                        <div className="w-full max-w-sm glass-panel rounded-[2rem] p-8 relative z-10 shadow-2xl border border-white/10">
-                             <button onClick={() => window.location.reload()} className="absolute top-6 left-6 text-slate-500 hover:text-white"><Icon name="arrow-left" /></button>
-                            
-                            <div className="text-center mb-8 mt-4">
-                                <h2 className="text-2xl font-bold text-white mb-2">{isScanner ? 'Scan QR Code' : 'Share Signal'}</h2>
-                                <p className="text-sm text-slate-400">
-                                    {isScanner ? "Point camera at peer's screen" : "Ask peer to scan this code"}
-                                </p>
-                            </div>
-
-                            <div className="flex flex-col items-center min-h-[300px] justify-center">
-                                {!isScanner && localSignal ? (
-                                    <>
-                                        <QRAnimator data={localSignal} label="Signal" />
-                                        {view === 'HOST_WAIT' && (
-                                            <button onClick={() => setView('SCAN_JOIN')} className="mt-6 w-full py-4 bg-slate-800 hover:bg-slate-700 rounded-xl font-semibold text-white transition-colors flex items-center justify-center gap-2 border border-white/5">
-                                                <Icon name="scan-line" /> I've been Scanned
-                                            </button>
-                                        )}
-                                    </>
-                                ) : (
-                                    <div className="w-full">
-                                        <div className="relative aspect-square rounded-2xl overflow-hidden bg-black border-2 border-blue-500/50 shadow-[0_0_30px_rgba(59,130,246,0.3)]">
-                                            <QRScanner onScan={handleScannedChunk} />
-                                        </div>
-                                        <div className="mt-4 bg-slate-900 h-2 rounded-full overflow-hidden w-full">
-                                            <div className="h-full bg-blue-500 transition-all duration-200" style={{width: `${scanProgress}%`}}></div>
-                                        </div>
-                                        <p className="text-center text-xs text-slate-500 mt-2 font-mono">{scanProgress}% PACKET CAPTURED</p>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-                );
-            };
-
-            const HomeView = () => (
-                <div className="flex flex-col items-center justify-center min-h-screen p-6 bg-slate-950 relative overflow-hidden fade-in">
-                    <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-5"></div>
-                    <div className="w-64 h-64 bg-blue-600/20 rounded-full blur-[100px] absolute top-1/4 -left-10"></div>
-                    <div className="w-64 h-64 bg-purple-600/20 rounded-full blur-[100px] absolute bottom-1/4 -right-10"></div>
-
-                    <div className="relative z-10 text-center space-y-6 mb-12">
-                        <div className="inline-flex p-4 rounded-3xl bg-slate-900 border border-white/10 shadow-2xl mb-2">
-                            <Icon name="ghost" size={48} className="text-blue-400" />
-                        </div>
-                        <div>
-                            <h1 className="text-5xl font-bold tracking-tight text-white mb-2">ShadowLink</h1>
-                            <p className="text-slate-400 text-lg">Secure. Ephemeral. Peer-to-Peer.</p>
-                        </div>
-                    </div>
-
-                    <div className="grid gap-4 w-full max-w-xs relative z-10">
-                        <button onClick={startHost} className="group relative p-1 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:scale-[1.02] transition-transform shadow-lg shadow-blue-900/30">
-                            <div className="bg-slate-950 rounded-xl p-5 h-full flex items-center gap-4 group-hover:bg-opacity-90 transition-all">
-                                <div className="p-3 bg-blue-500/20 rounded-lg text-blue-400"><Icon name="radio-tower" /></div>
-                                <div className="text-left">
-                                    <h3 className="text-white font-bold text-lg">Create Room</h3>
-                                    <p className="text-slate-500 text-xs">Start a new secure channel</p>
-                                </div>
-                            </div>
-                        </button>
-                        
-                        <button onClick={startJoin} className="group relative p-1 rounded-2xl bg-slate-800 hover:bg-slate-700 transition-all hover:scale-[1.02]">
-                            <div className="rounded-xl p-5 h-full flex items-center gap-4">
-                                <div className="p-3 bg-slate-700 rounded-lg text-slate-300"><Icon name="scan-line" /></div>
-                                <div className="text-left">
-                                    <h3 className="text-white font-bold text-lg">Join Room</h3>
-                                    <p className="text-slate-500 text-xs">Scan a host to connect</p>
-                                </div>
-                            </div>
-                        </button>
-                    </div>
-                </div>
-            );
-
-            // Router
-            if(view === 'HOME') return <HomeView />;
-            if(view === 'CHAT') return <ChatView />;
-            return <SignalingView />;
-        };
-
-        // --- SUB-COMPONENTS (Scan/Gen) ---
-        const QRScanner = ({ onScan }) => {
-            const videoRef = useRef(null);
-            const canvasRef = useRef(null);
-            const scanLoop = useCallback(() => {
-                const video = videoRef.current;
-                const canvas = canvasRef.current;
-                if(video && canvas && video.readyState === video.HAVE_ENOUGH_DATA) {
-                    canvas.width = video.videoWidth;
-                    canvas.height = video.videoHeight;
-                    const ctx = canvas.getContext("2d", { willReadFrequently: true });
-                    ctx.drawImage(video, 0, 0);
-                    const code = jsQR(ctx.getImageData(0,0,canvas.width,canvas.height).data, canvas.width, canvas.height);
-                    if(code && code.data.startsWith('SL:')) onScan(code.data);
-                }
-                requestAnimationFrame(scanLoop);
-            }, [onScan]);
-            useEffect(() => {
-                navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } }).then(s => {
-                    if(videoRef.current) { videoRef.current.srcObject = s; videoRef.current.play(); requestAnimationFrame(scanLoop); }
-                });
-            }, [scanLoop]);
-            return (
-                <>
-                    <video ref={videoRef} className="w-full h-full object-cover" muted playsInline></video>
-                    <canvas ref={canvasRef} className="hidden"></canvas>
-                    <div className="scanline"></div>
-                </>
-            );
-        };
-        const QRAnimator = ({ data }) => {
-            const [idx, setIdx] = useState(0);
-            const ref = useRef(null);
-            const chunks = useMemo(() => {
-                if(!data) return [];
-                const b64 = btoa(JSON.stringify(data));
-                return Array.from({length: Math.ceil(b64.length/CHUNK_SIZE)}, (_, i) => `SL:${i}:${Math.ceil(b64.length/CHUNK_SIZE)}:${b64.slice(i*CHUNK_SIZE, (i+1)*CHUNK_SIZE)}`);
-            }, [data]);
-            useEffect(() => { const i = setInterval(() => setIdx(p => (p+1)%chunks.length), 150); return () => clearInterval(i); }, [chunks]);
-            useEffect(() => { if(ref.current && chunks.length) new QRious({ element: ref.current, value: chunks[idx], size: 300 }); }, [idx, chunks]);
-            return (
-                <div className="bg-white p-4 rounded-xl">
-                    <canvas ref={ref}></canvas>
-                    <p className="text-center text-black font-mono text-xs mt-2">{idx+1}/{chunks.length}</p>
-                </div>
-            );
+            if(view === 'HOME') return <HomeView onHost={startHost} onJoin={startJoin} />;
+            if(view === 'CHAT') return <ChatView 
+                                            messages={messages} 
+                                            fingerprint={fingerprint.current} 
+                                            fileProgress={fileProgress}
+                                            onSend={sendMessage}
+                                            onFileSelect={handleFileSelect}
+                                            onCapture={(b,t) => processAndSendFile(b, `capture_${Date.now()}.${t.split('/')[1]}`, t)}
+                                            isRecordingAudio={isRecordingAudio}
+                                            audioTime={audioTime}
+                                            onAudioStart={startAudioRecording}
+                                            onAudioStop={stopAudioRecording}
+                                            onLeave={() => window.location.reload()}
+                                        />;
+            return <SignalingView 
+                        view={view} 
+                        localSignal={localSignal} 
+                        scanProgress={scanProgress} 
+                        onScan={handleScannedChunk} 
+                        onBack={() => window.location.reload()}
+                        onScanReply={() => setView('SCAN_JOIN')}
+                    />;
         };
 
         const root = ReactDOM.createRoot(document.getElementById('root'));
