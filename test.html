@@ -265,7 +265,7 @@
         };
 
         // --- CALL UI COMPONENT ---
-        const CallOverlay = ({ status, localStream, remoteStream, onAnswer, onHangup, isVideo, onToggleMute, onToggleVideo, onSwitchToVideo }) => {
+        const CallOverlay = ({ status, localStream, remoteStream, onAnswer, onHangup, isVideo, onToggleMute, onToggleVideo }) => {
             const localVideoRef = useRef(null);
             const remoteVideoRef = useRef(null);
             const [isMuted, setIsMuted] = useState(false);
@@ -287,7 +287,6 @@
             }, [remoteStream]);
 
             const handleToggleMute = () => {
-                // Call parent logic, then update local UI state if successful
                 if(onToggleMute()) setIsMuted(prev => !prev);
             };
 
@@ -297,15 +296,25 @@
 
             if (status === 'IDLE') return null;
 
+            // Determine if remote has video tracks
+            const remoteHasVideo = remoteStream && remoteStream.getVideoTracks().length > 0;
+
             return (
                 <div className="fixed inset-0 z-[70] bg-black/95 flex flex-col items-center justify-center app-height animate-fade-in backdrop-blur-md">
                     {/* Main Video Container */}
                     <div className="relative w-full h-full max-w-7xl max-h-[100dvh] mx-auto bg-slate-900 overflow-hidden md:rounded-2xl shadow-2xl">
-                        {/* Remote Video */}
-                        {remoteStream && remoteStream.getVideoTracks().length > 0 && remoteStream.getVideoTracks()[0].enabled ? (
-                            <video ref={remoteVideoRef} autoPlay playsInline className="w-full h-full object-cover" />
-                        ) : (
-                            <div className="w-full h-full flex flex-col items-center justify-center bg-slate-900 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-slate-800 to-slate-950">
+                        
+                        {/* Remote Stream - Always render video element for audio playback, hide if no video */}
+                        <video 
+                            ref={remoteVideoRef} 
+                            autoPlay 
+                            playsInline 
+                            className={`w-full h-full object-cover ${remoteHasVideo ? '' : 'hidden'}`} 
+                        />
+
+                        {/* Audio-only Placeholder */}
+                        {!remoteHasVideo && (
+                            <div className="absolute inset-0 w-full h-full flex flex-col items-center justify-center bg-slate-900 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-slate-800 to-slate-950">
                                 <div className="w-40 h-40 rounded-full bg-gradient-to-br from-cyan-500/20 to-purple-500/20 border border-white/10 animate-pulse flex items-center justify-center mb-6 shadow-[0_0_50px_rgba(6,182,212,0.15)]">
                                     <Icon name="user" size={80} className="text-cyan-100/50" />
                                 </div>
@@ -313,7 +322,7 @@
                             </div>
                         )}
 
-                        {/* Local Video (PiP) */}
+                        {/* Local Video (PiP) - Only show if initiated as Video Call and Camera is On */}
                         {localStream && isVideo && !isCameraOff && (
                             <div className="absolute top-6 right-6 w-32 h-48 sm:w-48 sm:h-64 bg-black rounded-2xl overflow-hidden shadow-2xl border border-slate-700/50 z-10 transition-all hover:scale-105">
                                 <video ref={localVideoRef} autoPlay playsInline muted className="w-full h-full object-cover transform scale-x-[-1]" />
@@ -353,13 +362,10 @@
                                                 <Icon name="phone-off" size={32} />
                                             </button>
 
-                                            <button onClick={handleToggleVideo} className={`p-4 rounded-full transition-all backdrop-blur-md border ${isCameraOff || !isVideo ? 'bg-white text-black border-white' : 'bg-white/10 text-white border-white/20 hover:bg-white/20'}`}>
-                                                <Icon name={isCameraOff || !isVideo ? "video-off" : "video"} size={24} />
-                                            </button>
-                                            
-                                            {!isVideo && (
-                                                <button onClick={onSwitchToVideo} className="p-4 bg-cyan-500/20 text-cyan-400 border border-cyan-500/50 rounded-full hover:bg-cyan-500 hover:text-black transition-all">
-                                                    <Icon name="arrow-up-right" size={24} />
+                                            {/* Only show Video Toggle if it is a Video Call */}
+                                            {isVideo && (
+                                                <button onClick={handleToggleVideo} className={`p-4 rounded-full transition-all backdrop-blur-md border ${isCameraOff ? 'bg-white text-black border-white' : 'bg-white/10 text-white border-white/20 hover:bg-white/20'}`}>
+                                                    <Icon name={isCameraOff ? "video-off" : "video"} size={24} />
                                                 </button>
                                             )}
                                         </>
@@ -985,10 +991,6 @@
                 return false;
             };
 
-            const switchToVideo = async () => {
-                alert("Please hang up and start a video call to switch modes securely.");
-            }
-
             // --- MEDIA HANDLING ---
 
             const startAudioRecord = async () => {
@@ -1277,7 +1279,6 @@
                             onHangup={endCall}
                             onToggleMute={toggleMute}
                             onToggleVideo={toggleVideo}
-                            onSwitchToVideo={switchToVideo}
                         />
                     )}
                 </div>
