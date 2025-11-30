@@ -45,6 +45,7 @@
             animation: scan 2s linear infinite;
             box-shadow: 0 0 15px var(--neon-cyan);
             z-index: 50;
+            pointer-events: none;
         }
         @keyframes scan { 0% { top: 0%; opacity: 0; } 50% { opacity: 1; } 100% { top: 100%; opacity: 0; } }
 
@@ -68,6 +69,8 @@
         .msg-bubble { max-width: 80%; padding: 10px 14px; border-radius: 16px; position: relative; word-break: break-word; }
         .msg-me { background: linear-gradient(135deg, #0891b2, #0e7490); color: white; border-bottom-right-radius: 2px; margin-left: auto; }
         .msg-other { background: #1e293b; color: #e2e8f0; border-bottom-left-radius: 2px; margin-right: auto; }
+        .msg-sys { text-align: center; width: 100%; margin: 8px 0; }
+        .sys-pill { background: rgba(30, 41, 59, 0.8); color: #22d3ee; font-size: 10px; padding: 4px 12px; border-radius: 999px; font-family: 'JetBrains Mono', monospace; border: 1px solid rgba(34, 211, 238, 0.2); }
     </style>
 </head>
 <body>
@@ -79,10 +82,26 @@
         // --- CONFIG ---
         const CHUNK_SIZE = 250; // Size for QR Chunks
         const ICE_SERVERS = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+        const FILE_CHUNK_SIZE = 16384; // 16KB DataChannel Chunks
         
         // --- CRYPTO UTILS ---
         const buf2hex = (buf) => [...new Uint8Array(buf)].map(x => x.toString(16).padStart(2, '0')).join('');
         const hex2buf = (hex) => new Uint8Array(hex.match(/.{1,2}/g).map(byte => parseInt(byte, 16))).buffer;
+        
+        // Base64 Helpers for binary data
+        const arrayBufferToBase64 = (buffer) => {
+            let binary = '';
+            const bytes = new Uint8Array(buffer);
+            for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+            return window.btoa(binary);
+        };
+        const base64ToArrayBuffer = (base64) => {
+            const binary_string = window.atob(base64);
+            const len = binary_string.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) bytes[i] = binary_string.charCodeAt(i);
+            return bytes.buffer;
+        };
 
         // --- COMPONENTS ---
 
@@ -101,17 +120,15 @@
             const chunks = useMemo(() => {
                 if(!data) return [];
                 const str = typeof data === 'string' ? data : JSON.stringify(data);
-                const b64 = btoa(str); // Base64 to ensure safe chars
+                const b64 = btoa(str); 
                 const total = Math.ceil(b64.length / CHUNK_SIZE);
                 const arr = [];
                 for(let i=0; i<total; i++) {
-                    // Protocol: "SL:Index:Total:Data"
                     arr.push(`SL:${i}:${total}:${b64.slice(i*CHUNK_SIZE, (i+1)*CHUNK_SIZE)}`);
                 }
                 return arr;
             }, [data]);
 
-            // Animation Loop
             useEffect(() => {
                 if(chunks.length <= 1) return;
                 const interval = setInterval(() => {
@@ -120,7 +137,6 @@
                 return () => clearInterval(interval);
             }, [chunks]);
 
-            // Draw QR
             useEffect(() => {
                 if(canvasRef.current && chunks.length > 0) {
                     new QRious({
@@ -152,6 +168,7 @@
             const canvasRef = useRef(null);
             const [status, setStatus] = useState("Initializing Camera...");
 
+            // Memoized scan loop to preventing camera restart on re-renders
             const scanLoop = useCallback(() => {
                 const video = videoRef.current;
                 const canvas = canvasRef.current;
@@ -160,13 +177,13 @@
                 if (video.readyState === video.HAVE_ENOUGH_DATA) {
                     canvas.width = video.videoWidth;
                     canvas.height = video.videoHeight;
-                    const ctx = canvas.getContext("2d");
+                    const ctx = canvas.getContext("2d", { willReadFrequently: true });
                     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
                     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
                     const code = jsQR(imageData.data, imageData.width, imageData.height);
                     
                     if (code && code.data.startsWith('SL:')) {
-                        setStatus("Chunk Detected!");
+                        setStatus("Packet Detected");
                         onScan(code.data);
                     } else {
                         setStatus("Scanning...");
@@ -176,21 +193,20 @@
             }, [onScan]);
 
             useEffect(() => {
+                let stream = null;
                 navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
-                    .then(stream => {
+                    .then(s => {
+                        stream = s;
                         if(videoRef.current) {
                             videoRef.current.srcObject = stream;
-                            videoRef.current.play();
+                            videoRef.current.play().catch(e => console.error(e));
                             requestAnimationFrame(scanLoop);
                         }
                     })
                     .catch(err => setStatus("Camera Error: " + err.message));
                 
                 return () => {
-                    // Cleanup stream
-                    if(videoRef.current && videoRef.current.srcObject) {
-                        videoRef.current.srcObject.getTracks().forEach(t => t.stop());
-                    }
+                    if(stream) stream.getTracks().forEach(t => t.stop());
                 };
             }, [scanLoop]);
 
@@ -208,7 +224,35 @@
                         </div>
                     </div>
                     <div className="absolute bottom-4 left-0 right-0 text-center">
-                        <span className="bg-black/60 text-cyan-400 text-xs px-3 py-1 rounded-full font-mono backdrop-blur-md">{status}</span>
+                        <span className={`text-xs px-3 py-1 rounded-full font-mono backdrop-blur-md transition-colors ${status === "Packet Detected" ? "bg-green-500/80 text-white" : "bg-black/60 text-cyan-400"}`}>{status}</span>
+                    </div>
+                </div>
+            );
+        };
+
+        // 4. Identity Verification Modal
+        const IdentityModal = ({ fingerprint, onClose }) => {
+            if (!fingerprint) return null;
+            return (
+                <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 fade-in">
+                    <div className="bg-slate-900 border border-slate-700 p-8 rounded-3xl max-w-sm w-full text-center relative shadow-2xl">
+                        <button onClick={onClose} className="absolute top-4 right-4 p-2 text-slate-500 hover:text-white">
+                            <Icon name="x" size={20} />
+                        </button>
+                        <div className="w-16 h-16 bg-cyan-500/10 rounded-full flex items-center justify-center mx-auto mb-4 border border-cyan-500/30">
+                            <Icon name="shield-check" size={32} className="text-cyan-400" />
+                        </div>
+                        <h3 className="text-xl font-bold text-white mb-2">Safety Number</h3>
+                        <p className="text-slate-400 text-sm mb-6">Compare these values with your peer to ensure the connection is secure.</p>
+                        
+                        <div className="bg-black/50 p-6 rounded-2xl border border-slate-800 mb-6">
+                            <div className="text-5xl mb-4 tracking-widest">{fingerprint.emoji}</div>
+                            <div className="font-mono text-cyan-400 text-lg tracking-[0.2em] break-all">{fingerprint.hex}</div>
+                        </div>
+                        
+                        <button onClick={onClose} className="w-full py-3 bg-cyan-600 hover:bg-cyan-500 rounded-xl font-bold text-white transition-colors">
+                            Verified
+                        </button>
                     </div>
                 </div>
             );
@@ -216,13 +260,13 @@
 
         // --- MAIN APP ---
         const App = () => {
-            // States
-            const [view, setView] = useState('HOME'); // HOME, HOST_WAIT, SCAN_HOST, JOIN_WAIT, SCAN_JOIN, CHAT
-            const [role, setRole] = useState(null); // HOST, JOINER
+            const [view, setView] = useState('HOME');
+            const [role, setRole] = useState(null);
             const [logs, setLogs] = useState([]);
             const [msgText, setMsgText] = useState("");
             const [messages, setMessages] = useState([]);
-            const [progress, setProgress] = useState(null); // File transfer progress
+            const [showVerify, setShowVerify] = useState(false);
+            const [fileProgress, setFileProgress] = useState(0); // 0-100
             
             // WebRTC Refs
             const pc = useRef(null);
@@ -230,259 +274,325 @@
             const candidates = useRef([]);
             
             // Crypto Refs
-            const keys = useRef({ rsa: null, ecdh: null }); // My Keys
-            const sessionKey = useRef(null); // AES-GCM Shared Key
+            const keys = useRef({ rsa: null, ecdh: null });
+            const sessionKey = useRef(null);
             const fingerprint = useRef(null);
+            const incomingFiles = useRef({}); // { id: { meta, chunks: [], receivedSize: 0 } }
+            const fileInputRef = useRef(null);
 
             // Signaling State
-            const [localSignal, setLocalSignal] = useState(null); // My SDP to show
+            const [localSignal, setLocalSignal] = useState(null);
             const scannedChunks = useRef(new Map());
             const [scanProgress, setScanProgress] = useState(0);
 
-            // --- 1. INITIALIZATION & KEYS ---
+            // Initial Key Gen
             useEffect(() => {
                 const initKeys = async () => {
-                    // Generate Identity (RSA)
                     keys.current.rsa = await window.crypto.subtle.generateKey(
                         { name: "RSA-OAEP", modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: "SHA-256" },
                         true, ["encrypt", "decrypt"]
                     );
-                    // Generate Ephemeral (ECDH)
                     keys.current.ecdh = await window.crypto.subtle.generateKey(
                         { name: "ECDH", namedCurve: "P-256" },
                         true, ["deriveKey", "deriveBits"]
                     );
-                    addLog("Keys Generated. Ready.");
+                    addLog("Keys Generated.");
                 };
                 initKeys();
             }, []);
 
             const addLog = (txt) => setLogs(p => [...p.slice(-4), txt]);
 
-            // --- 2. WEBRTC SETUP ---
-            const createPeer = () => {
-                pc.current = new RTCPeerConnection(ICE_SERVERS);
+            // WebRTC Setup
+            const createPeer = useCallback(() => {
+                const peer = new RTCPeerConnection(ICE_SERVERS);
+                peer.onicecandidate = (e) => { if (e.candidate) candidates.current.push(e.candidate); };
+                peer.onconnectionstatechange = () => addLog(`Connection: ${peer.connectionState}`);
+                pc.current = peer;
+                return peer;
+            }, []);
+
+            // Signal Processing (Memoized to prevent scanner restarts)
+            const processSignal = useCallback(async (data) => {
+                if (!pc.current) return;
                 
-                pc.current.onicecandidate = (e) => {
-                    if (e.candidate) candidates.current.push(e.candidate);
-                };
+                if(role === 'HOST' && data.type === 'answer') {
+                    await pc.current.setRemoteDescription(new RTCSessionDescription(data.sdp));
+                    data.candidates.forEach(c => pc.current.addIceCandidate(new RTCIceCandidate(c)));
+                    addLog("Remote Desc Set.");
+                } else if (role === 'JOINER' && data.type === 'offer') {
+                    await pc.current.setRemoteDescription(new RTCSessionDescription(data.sdp));
+                    data.candidates.forEach(c => pc.current.addIceCandidate(new RTCIceCandidate(c)));
+                    
+                    const answer = await pc.current.createAnswer();
+                    await pc.current.setLocalDescription(answer);
+                    await new Promise(r => setTimeout(r, 500)); // Gather candidates
+                    
+                    setLocalSignal({
+                        type: 'answer',
+                        sdp: pc.current.localDescription,
+                        candidates: candidates.current
+                    });
+                    setView('JOIN_WAIT');
+                }
+            }, [role]);
 
-                pc.current.onconnectionstatechange = () => {
-                    addLog(`Connection: ${pc.current.connectionState}`);
-                };
-
-                return pc.current;
-            };
-
-            // --- 3. SIGNALING LOGIC (QR CHUNK HANDLER) ---
-            const handleScannedChunk = (raw) => {
-                // Protocol: "SL:Index:Total:Data"
+            // Scanner Handler (Memoized)
+            const handleScannedChunk = useCallback((raw) => {
                 const parts = raw.split(':');
                 if(parts.length < 4) return;
                 
                 const idx = parseInt(parts[1]);
                 const total = parseInt(parts[2]);
-                const data = parts.slice(3).join(':'); // Rejoin valid base64 chars
+                const data = parts.slice(3).join(':');
 
                 if(!scannedChunks.current.has(idx)) {
                     scannedChunks.current.set(idx, data);
                     setScanProgress(Math.round((scannedChunks.current.size / total) * 100));
                     
                     if(scannedChunks.current.size === total) {
-                        // All chunks received
                         const fullB64 = Array.from({length: total}, (_, i) => scannedChunks.current.get(i)).join('');
-                        const jsonStr = atob(fullB64);
-                        const signalData = JSON.parse(jsonStr);
-                        
-                        addLog("Signal Captured. Processing...");
-                        scannedChunks.current.clear();
-                        processSignal(signalData);
+                        try {
+                            const jsonStr = atob(fullB64);
+                            const signalData = JSON.parse(jsonStr);
+                            addLog("Signal Captured.");
+                            scannedChunks.current.clear();
+                            processSignal(signalData);
+                        } catch(e) {
+                            console.error("Signal parse error", e);
+                            addLog("Error Parsing Signal");
+                        }
                     }
                 }
-            };
+            }, [processSignal]);
 
-            const processSignal = async (data) => {
-                if(role === 'HOST' && data.type === 'answer') {
-                    // Host receives Answer
-                    await pc.current.setRemoteDescription(new RTCSessionDescription(data.sdp));
-                    data.candidates.forEach(c => pc.current.addIceCandidate(new RTCIceCandidate(c)));
-                    addLog("Remote Description Set. Waiting for Channel...");
-                } else if (role === 'JOINER' && data.type === 'offer') {
-                    // Joiner receives Offer
-                    await pc.current.setRemoteDescription(new RTCSessionDescription(data.sdp));
-                    data.candidates.forEach(c => pc.current.addIceCandidate(new RTCIceCandidate(c)));
-                    
-                    const answer = await pc.current.createAnswer();
-                    await pc.current.setLocalDescription(answer);
-                    
-                    // Wait for local candidates
-                    await new Promise(r => setTimeout(r, 500));
-                    
-                    const payload = {
-                        type: 'answer',
-                        sdp: pc.current.localDescription,
-                        candidates: candidates.current
-                    };
-                    setLocalSignal(payload);
-                    setView('JOIN_WAIT'); // Show Answer QR
-                }
-            };
-
-            // --- 4. HOST FLOW ---
+            // Host/Join Flow
             const startHost = async () => {
                 setRole('HOST');
                 const peer = createPeer();
-                
-                // Create Data Channel
                 dc.current = peer.createDataChannel("shadowlink");
                 setupDataChannel(dc.current);
 
                 const offer = await peer.createOffer();
                 await peer.setLocalDescription(offer);
-                
-                // Buffer for candidates
                 await new Promise(r => setTimeout(r, 500));
                 
-                const payload = {
-                    type: 'offer',
-                    sdp: peer.localDescription,
-                    candidates: candidates.current
-                };
-                setLocalSignal(payload);
+                setLocalSignal({ type: 'offer', sdp: peer.localDescription, candidates: candidates.current });
                 setView('HOST_WAIT');
             };
 
-            // --- 5. JOIN FLOW ---
             const startJoin = () => {
                 setRole('JOINER');
                 const peer = createPeer();
-                
                 peer.ondatachannel = (e) => {
                     dc.current = e.channel;
                     setupDataChannel(dc.current);
                 };
-                
-                setView('SCAN_HOST'); // Joiner scans Host first
+                setView('SCAN_HOST');
             };
 
-            // --- 6. DATA CHANNEL & CRYPTO HANDSHAKE ---
+            // Data Channel & Packet Handling
             const setupDataChannel = (channel) => {
                 channel.onopen = () => {
-                    addLog("Tunnel Open. Starting Crypto Handshake...");
+                    addLog("Tunnel Open. Authenticating...");
                     initiateSecureHandshake();
                 };
                 channel.onmessage = async (e) => handlePacket(e.data);
             };
 
             const initiateSecureHandshake = async () => {
-                // Export Public Keys
                 const rsaPub = await window.crypto.subtle.exportKey("spki", keys.current.rsa.publicKey);
                 const ecdhPub = await window.crypto.subtle.exportKey("raw", keys.current.ecdh.publicKey);
+                dc.current.send(JSON.stringify({ t: 'HELLO', rsa: buf2hex(rsaPub), ecdh: buf2hex(ecdhPub) }));
+            };
 
-                // Send HELLO packet
-                const packet = {
-                    t: 'HELLO',
-                    rsa: buf2hex(rsaPub),
-                    ecdh: buf2hex(ecdhPub)
-                };
-                dc.current.send(JSON.stringify(packet));
+            const deriveSession = async (p) => {
+                const peerRsa = await window.crypto.subtle.importKey("spki", hex2buf(p.rsa), { name: "RSA-OAEP", hash: "SHA-256" }, true, ["encrypt"]);
+                const peerEcdh = await window.crypto.subtle.importKey("raw", hex2buf(p.ecdh), { name: "ECDH", namedCurve: "P-256" }, true, []);
+                const sharedBits = await window.crypto.subtle.deriveBits({ name: "ECDH", public: peerEcdh }, keys.current.ecdh.privateKey, 256);
+                const hkdfKey = await window.crypto.subtle.importKey("raw", sharedBits, { name: "HKDF" }, false, ["deriveKey"]);
+                sessionKey.current = await window.crypto.subtle.deriveKey(
+                    { name: "HKDF", hash: "SHA-256", salt: new Uint8Array(), info: new TextEncoder().encode("ShadowLink") },
+                    hkdfKey, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]
+                );
+
+                // Generate Fingerprint
+                const fpHash = await window.crypto.subtle.digest("SHA-256", sharedBits);
+                const fpArr = new Uint8Array(fpHash);
+                const emojis = ["💀","👽","🤖","👻","🤡","👹","👺","👾","🎃","🐉","🦄","🦉","🕸","⚡","🔥","❄️"];
+                let fpEmoji = "";
+                for(let i=0; i<4; i++) fpEmoji += emojis[fpArr[i] % emojis.length];
+                const fpHex = buf2hex(fpHash).substring(0, 8).toUpperCase();
+                
+                fingerprint.current = { emoji: fpEmoji, hex: fpHex };
+                
+                addLog(`Secured: ${fpEmoji}`);
+                setView('CHAT');
+                setMessages(prev => [...prev, { id: Date.now(), type: 'SYS', text: `SECURE CHANNEL ESTABLISHED` }]);
             };
 
             const handlePacket = async (raw) => {
-                if(typeof raw !== 'string') return; // Binary file chunk
-                
-                let p;
-                try { p = JSON.parse(raw); } catch(e) { return; }
-
-                if(p.t === 'HELLO') {
-                    // 1. Import Peer RSA
-                    const peerRsa = await window.crypto.subtle.importKey(
-                        "spki", hex2buf(p.rsa), { name: "RSA-OAEP", hash: "SHA-256" }, true, ["encrypt"]
-                    );
+                try {
+                    const p = JSON.parse(raw);
                     
-                    // 2. Import Peer ECDH
-                    const peerEcdh = await window.crypto.subtle.importKey(
-                        "raw", hex2buf(p.ecdh), { name: "ECDH", namedCurve: "P-256" }, true, []
-                    );
-
-                    // 3. Derive Shared Secret (ECDH)
-                    const sharedBits = await window.crypto.subtle.deriveBits(
-                        { name: "ECDH", public: peerEcdh },
-                        keys.current.ecdh.privateKey,
-                        256
-                    );
-
-                    // 4. Derive AES-GCM Session Key (HKDF)
-                    const hkdfKey = await window.crypto.subtle.importKey(
-                        "raw", sharedBits, { name: "HKDF" }, false, ["deriveKey"]
-                    );
-                    sessionKey.current = await window.crypto.subtle.deriveKey(
-                        { name: "HKDF", hash: "SHA-256", salt: new Uint8Array(), info: new TextEncoder().encode("ShadowLink") },
-                        hkdfKey,
-                        { name: "AES-GCM", length: 256 },
-                        false,
-                        ["encrypt", "decrypt"]
-                    );
-
-                    // 5. Generate Fingerprint (Visual Hash of Shared Key)
-                    const fpHash = await window.crypto.subtle.digest("SHA-256", sharedBits);
-                    const fpArr = new Uint8Array(fpHash);
-                    const emojis = ["💀","👽","🤖","👻","🤡","👹","👺","👾","🎃","🐉","🦄","🦉","🕸","⚡","🔥","❄️"];
-                    let fpStr = "";
-                    for(let i=0; i<4; i++) fpStr += emojis[fpArr[i] % emojis.length];
-                    fingerprint.current = fpStr;
-
-                    addLog(`Secure Handshake Complete. FP: ${fpStr}`);
-                    setView('CHAT');
-                    
-                    // Send system msg
-                    setMessages(prev => [...prev, { id: Date.now(), type: 'SYS', text: `SECURE CHANNEL ESTABLISHED. FINGERPRINT: ${fpStr}` }]);
-                } 
-                else if (p.t === 'ENC') {
-                    // Decrypt Message
-                    if(!sessionKey.current) return;
-                    const iv = hex2buf(p.iv);
-                    const ct = hex2buf(p.d);
-                    try {
-                        const pt = await window.crypto.subtle.decrypt(
-                            { name: "AES-GCM", iv: iv },
-                            sessionKey.current,
-                            ct
-                        );
+                    if (p.t === 'HELLO') {
+                        await deriveSession(p);
+                    } 
+                    else if (p.t === 'ENC') {
+                        // Decrypt Text Message
+                        const pt = await decryptData(p.iv, p.d);
                         const text = new TextDecoder().decode(pt);
                         setMessages(prev => [...prev, { id: Date.now(), type: 'RX', text: text }]);
-                    } catch(e) {
-                        console.error("Decryption failed", e);
                     }
-                }
+                    else if (p.t === 'FILE_HEADER') {
+                        // Decrypt File Metadata
+                        const pt = await decryptData(p.iv, p.meta);
+                        const meta = JSON.parse(new TextDecoder().decode(pt));
+                        incomingFiles.current[p.id] = { meta, chunks: [], receivedSize: 0, startTime: Date.now() };
+                        setMessages(prev => [...prev, { id: Date.now(), type: 'SYS', text: `Receiving file: ${meta.name}...` }]);
+                    }
+                    else if (p.t === 'FILE_CHUNK') {
+                        // Receive Chunk
+                        const fileCtx = incomingFiles.current[p.id];
+                        if (fileCtx) {
+                            const chunkData = base64ToArrayBuffer(p.d);
+                            fileCtx.chunks.push({ idx: p.idx, data: chunkData });
+                            fileCtx.receivedSize += chunkData.byteLength;
+                            
+                            // Check completion (Approx check due to encryption overhead)
+                            // We rely on the decrypted size matching, but for streaming we trust the stream end.
+                            // Actually, let's trigger decrypt when we have enough data or a specific 'END' flag.
+                            // For simplicity: We know the ENCRYPTED size is ~ meta.size + 16. 
+                            // Wait, we are sending chunks of the CIPHERTEXT. 
+                            // So we need to know the total ciphertext length.
+                            
+                            if (fileCtx.receivedSize >= fileCtx.meta.encSize) {
+                                // Assemble
+                                fileCtx.chunks.sort((a,b) => a.idx - b.idx);
+                                const totalLen = fileCtx.chunks.reduce((acc, c) => acc + c.data.byteLength, 0);
+                                const cipherBuffer = new Uint8Array(totalLen);
+                                let offset = 0;
+                                fileCtx.chunks.forEach(c => {
+                                    cipherBuffer.set(new Uint8Array(c.data), offset);
+                                    offset += c.data.byteLength;
+                                });
+
+                                // Decrypt Whole File
+                                try {
+                                    const fileData = await window.crypto.subtle.decrypt(
+                                        { name: "AES-GCM", iv: hex2buf(fileCtx.meta.iv) },
+                                        sessionKey.current,
+                                        cipherBuffer
+                                    );
+                                    
+                                    const blob = new Blob([fileData], { type: fileCtx.meta.type });
+                                    const url = URL.createObjectURL(blob);
+                                    
+                                    setMessages(prev => [...prev, { 
+                                        id: Date.now(), 
+                                        type: 'FILE', 
+                                        text: fileCtx.meta.name,
+                                        fileUrl: url,
+                                        fileSize: fileCtx.meta.size 
+                                    }]);
+                                    delete incomingFiles.current[p.id];
+                                } catch(e) {
+                                    console.error("File Decrypt Fail", e);
+                                    setMessages(prev => [...prev, { id: Date.now(), type: 'SYS', text: `File Decryption Failed` }]);
+                                }
+                            }
+                        }
+                    }
+                } catch(e) { console.error("Packet Error", e); }
             };
 
-            // --- 7. MESSAGING & UI ---
+            // Helpers
+            const decryptData = async (ivHex, dataHex) => {
+                return await window.crypto.subtle.decrypt(
+                    { name: "AES-GCM", iv: hex2buf(ivHex) },
+                    sessionKey.current,
+                    hex2buf(dataHex)
+                );
+            };
+
             const sendMessage = async () => {
                 if(!msgText.trim() || !sessionKey.current) return;
-                
                 const txt = msgText;
                 setMsgText("");
                 setMessages(prev => [...prev, { id: Date.now(), type: 'TX', text: txt }]);
 
-                // Encrypt
                 const iv = window.crypto.getRandomValues(new Uint8Array(12));
                 const enc = await window.crypto.subtle.encrypt(
                     { name: "AES-GCM", iv: iv },
                     sessionKey.current,
                     new TextEncoder().encode(txt)
                 );
-                
-                const packet = {
-                    t: 'ENC',
-                    iv: buf2hex(iv),
-                    d: buf2hex(enc)
-                };
-                dc.current.send(JSON.stringify(packet));
+                dc.current.send(JSON.stringify({ t: 'ENC', iv: buf2hex(iv), d: buf2hex(enc) }));
             };
 
-            // --- RENDERERS ---
+            const handleFileSelect = async (e) => {
+                const file = e.target.files[0];
+                if (!file || !sessionKey.current) return;
+                
+                // 1. Read File
+                const buffer = await file.arrayBuffer();
+                
+                // 2. Encrypt File (Whole)
+                // Note: For large files in prod, use streams. For demo, buffer is fine.
+                const fileIv = window.crypto.getRandomValues(new Uint8Array(12));
+                const encryptedFile = await window.crypto.subtle.encrypt(
+                    { name: "AES-GCM", iv: fileIv },
+                    sessionKey.current,
+                    buffer
+                );
+                
+                // 3. Encrypt Metadata
+                const fileId = crypto.randomUUID();
+                const metaRaw = JSON.stringify({ name: file.name, size: file.size, type: file.type, iv: buf2hex(fileIv), encSize: encryptedFile.byteLength });
+                const metaIv = window.crypto.getRandomValues(new Uint8Array(12));
+                const encMeta = await window.crypto.subtle.encrypt(
+                    { name: "AES-GCM", iv: metaIv },
+                    sessionKey.current,
+                    new TextEncoder().encode(metaRaw)
+                );
 
+                // 4. Send Header
+                dc.current.send(JSON.stringify({
+                    t: 'FILE_HEADER',
+                    id: fileId,
+                    iv: buf2hex(metaIv),
+                    meta: buf2hex(encMeta)
+                }));
+                
+                setMessages(prev => [...prev, { id: Date.now(), type: 'SYS', text: `Sending ${file.name}...` }]);
+
+                // 5. Send Chunks
+                const totalChunks = Math.ceil(encryptedFile.byteLength / FILE_CHUNK_SIZE);
+                let offset = 0;
+                
+                for (let i = 0; i < totalChunks; i++) {
+                    const chunk = encryptedFile.slice(offset, offset + FILE_CHUNK_SIZE);
+                    const b64Chunk = arrayBufferToBase64(chunk);
+                    
+                    // Simple flow control: Wait 10ms every few chunks to prevent buffer overflow
+                    if (i % 10 === 0) await new Promise(r => setTimeout(r, 10));
+                    
+                    dc.current.send(JSON.stringify({
+                        t: 'FILE_CHUNK',
+                        id: fileId,
+                        idx: i,
+                        d: b64Chunk
+                    }));
+                    
+                    offset += FILE_CHUNK_SIZE;
+                    setFileProgress(Math.round(((i + 1) / totalChunks) * 100));
+                }
+
+                setFileProgress(0);
+                setMessages(prev => [...prev, { id: Date.now(), type: 'TX_FILE', text: `Sent: ${file.name}` }]);
+            };
+
+            // Render Logic
             const renderHome = () => (
                 <div className="flex flex-col items-center justify-center min-h-screen p-6 space-y-8 animate-fade-in">
                     <div className="text-center space-y-2">
@@ -513,25 +623,13 @@
                             <p className="text-xs text-slate-400 mt-1">Scan a signal to connect.</p>
                         </button>
                     </div>
-
-                    <div className="text-[10px] text-slate-600 font-mono text-center">
-                        RSA-2048 • ECDH P-256 • AES-GCM • WebRTC
-                    </div>
                 </div>
             );
 
             const renderSignaling = () => {
                 const isScanner = view === 'SCAN_HOST' || view === 'SCAN_JOIN';
                 const isQR = view === 'HOST_WAIT' || view === 'JOIN_WAIT';
-                const title = view === 'HOST_WAIT' ? "Host Signal" 
-                            : view === 'SCAN_HOST' ? "Scan Host" 
-                            : view === 'SCAN_JOIN' ? "Scan Reply" 
-                            : "Your Reply";
-                
-                const instr = view === 'HOST_WAIT' ? "Ask peer to SCAN this." 
-                            : view === 'SCAN_HOST' ? "Point camera at Host's screen." 
-                            : view === 'SCAN_JOIN' ? "Host must scan Joiner's screen." 
-                            : "Show this back to Host.";
+                const title = view === 'HOST_WAIT' ? "Host Signal" : view === 'SCAN_HOST' ? "Scan Host" : view === 'SCAN_JOIN' ? "Scan Reply" : "Your Reply";
 
                 return (
                     <div className="flex flex-col h-screen p-4 items-center justify-center space-y-6 fade-in">
@@ -542,7 +640,9 @@
                             
                             <div className="text-center mb-6">
                                 <h2 className="text-2xl font-bold text-white mb-1">{title}</h2>
-                                <p className="text-xs text-cyan-400 font-mono">{instr}</p>
+                                <p className="text-xs text-cyan-400 font-mono">
+                                    {isScanner ? "Point camera at peer's screen" : "Show this to peer"}
+                                </p>
                             </div>
 
                             <div className="flex justify-center min-h-[250px] items-center">
@@ -551,12 +651,11 @@
                                         <QRAnimator data={localSignal} label="Signal Packet" />
                                         {view === 'HOST_WAIT' && (
                                             <button onClick={() => setView('SCAN_JOIN')} className="w-full py-4 bg-gradient-to-r from-purple-600 to-indigo-600 rounded-xl font-bold shadow-lg shadow-purple-900/40 flex items-center justify-center gap-2">
-                                                <Icon name="scan-eye" /> I've been Scanned, Scan Reply
+                                                <Icon name="scan-eye" /> I've been Scanned
                                             </button>
                                         )}
                                     </div>
                                 )}
-
                                 {isScanner && (
                                     <div className="w-full space-y-4">
                                         <QRScanner onScan={handleScannedChunk} />
@@ -569,7 +668,6 @@
                                 )}
                             </div>
                         </div>
-
                         <div className="font-mono text-[10px] text-slate-500 bg-black/50 px-4 py-2 rounded-lg">
                             {logs[logs.length-1] || "Initializing..."}
                         </div>
@@ -579,16 +677,15 @@
 
             const renderChat = () => (
                 <div className="flex flex-col h-screen bg-[#0b141a]">
-                    {/* Header */}
                     <header className="px-4 py-3 bg-[#1f2c34] flex items-center justify-between shadow-md z-10">
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-3 cursor-pointer" onClick={() => setShowVerify(true)}>
                             <div className="w-10 h-10 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center text-white font-bold text-xl shadow-[0_0_15px_rgba(6,182,212,0.5)]">
-                                {fingerprint.current ? fingerprint.current[0] : '?'}
+                                {fingerprint.current?.emoji.substring(0,2)}
                             </div>
                             <div>
                                 <h2 className="font-bold text-slate-100 text-sm">Secure Peer</h2>
-                                <p className="text-[10px] text-emerald-400 font-mono tracking-wider">
-                                    AES-GCM-256 • {fingerprint.current}
+                                <p className="text-[10px] text-emerald-400 font-mono tracking-wider flex items-center gap-1">
+                                    <Icon name="lock" size={10} /> AES-GCM-256
                                 </p>
                             </div>
                         </div>
@@ -597,20 +694,36 @@
                         </button>
                     </header>
 
-                    {/* Chat Area */}
                     <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')]">
                         {messages.map((m) => (
                             m.type === 'SYS' ? (
-                                <div key={m.id} className="flex justify-center">
-                                    <span className="bg-slate-800/80 text-cyan-400 text-[10px] px-3 py-1 rounded-full font-mono border border-cyan-900">
-                                        {m.text}
-                                    </span>
+                                <div key={m.id} className="msg-sys"><span className="sys-pill">{m.text}</span></div>
+                            ) : m.type === 'FILE' ? (
+                                <div key={m.id} className="flex justify-start">
+                                    <div className="msg-bubble msg-other shadow-sm text-sm border-l-4 border-purple-500">
+                                        <div className="flex items-center gap-3">
+                                            <div className="bg-purple-500/20 p-2 rounded-lg"><Icon name="file" size={24} className="text-purple-400" /></div>
+                                            <div>
+                                                <p className="font-bold text-slate-200">{m.text}</p>
+                                                <p className="text-[10px] text-slate-400">{Math.round(m.fileSize/1024)} KB • Encrypted</p>
+                                            </div>
+                                        </div>
+                                        <a href={m.fileUrl} download={m.text} className="mt-3 block w-full text-center py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-xs font-bold transition-colors">
+                                            Download
+                                        </a>
+                                    </div>
+                                </div>
+                            ) : m.type === 'TX_FILE' ? (
+                                <div key={m.id} className="flex justify-end">
+                                    <div className="msg-bubble msg-me shadow-sm text-sm opacity-80 italic">
+                                        <Icon name="file-check" size={14} className="inline mr-1" /> {m.text}
+                                    </div>
                                 </div>
                             ) : (
                                 <div key={m.id} className={`flex ${m.type === 'TX' ? 'justify-end' : 'justify-start'}`}>
                                     <div className={`msg-bubble ${m.type === 'TX' ? 'msg-me' : 'msg-other'} shadow-sm text-sm`}>
                                         {m.text}
-                                        <div className={`text-[9px] mt-1 opacity-60 text-right font-mono`}>
+                                        <div className="text-[9px] mt-1 opacity-60 text-right font-mono">
                                             {new Date(m.id).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}
                                         </div>
                                     </div>
@@ -619,9 +732,15 @@
                         ))}
                     </div>
 
-                    {/* Input */}
+                    {fileProgress > 0 && (
+                        <div className="h-1 bg-slate-800 w-full">
+                            <div className="h-full bg-purple-500 transition-all duration-100" style={{width: `${fileProgress}%`}}></div>
+                        </div>
+                    )}
+
                     <div className="p-2 bg-[#1f2c34] flex items-center gap-2">
-                         <button className="p-3 rounded-full text-slate-400 hover:bg-white/5 transition-colors">
+                        <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileSelect} />
+                        <button onClick={() => fileInputRef.current?.click()} className="p-3 rounded-full text-slate-400 hover:bg-white/5 transition-colors">
                             <Icon name="paperclip" size={20} />
                         </button>
                         <div className="flex-1 bg-[#2a3942] rounded-2xl flex items-center px-4 py-2">
@@ -629,22 +748,20 @@
                                 value={msgText}
                                 onChange={e => setMsgText(e.target.value)}
                                 onKeyDown={e => e.key === 'Enter' && sendMessage()}
-                                type="text" 
-                                placeholder="Message" 
-                                className="bg-transparent border-none outline-none text-slate-200 w-full placeholder-slate-500 text-sm"
+                                type="text" placeholder="Message" className="bg-transparent border-none outline-none text-slate-200 w-full placeholder-slate-500 text-sm"
                             />
                         </div>
-                        <button 
-                            onClick={sendMessage}
-                            className={`p-3 rounded-full transition-all ${msgText ? 'bg-cyan-600 text-white shadow-[0_0_15px_rgba(8,145,178,0.4)]' : 'bg-[#2a3942] text-slate-500'}`}
-                        >
+                        <button onClick={sendMessage} className={`p-3 rounded-full transition-all ${msgText ? 'bg-cyan-600 text-white shadow-[0_0_15px_rgba(8,145,178,0.4)]' : 'bg-[#2a3942] text-slate-500'}`}>
                             <Icon name="send-horizontal" size={20} />
                         </button>
                     </div>
+
+                    {showVerify && fingerprint.current && (
+                        <IdentityModal fingerprint={fingerprint.current} onClose={() => setShowVerify(false)} />
+                    )}
                 </div>
             );
 
-            // Router Logic
             if(view === 'HOME') return renderHome();
             if(view === 'CHAT') return renderChat();
             return renderSignaling();
