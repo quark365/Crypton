@@ -645,6 +645,9 @@
                         setHandshakeExpiresAt(Date.now() + PROTOCOL.HANDSHAKE_TTL); 
                         setScanner(null);
                         
+                        // FIX: Reset chunk buffer after processing
+                        chunkBuffer.current = { chunks: [], total: 0, count: 0 };
+                        
                         setModal({
                             title: "Identity Scanned",
                             message: `Identity Fingerprint: ${p.fp}\n\nVerify this matches the partner's identity.\n\nA secure session key has been derived.`,
@@ -693,6 +696,10 @@
                         setSessionKey(sessionKey);
                         setFingerprint(fp);
                         setScanner(null);
+                        
+                        // FIX: Reset chunk buffer after processing
+                        chunkBuffer.current = { chunks: [], total: 0, count: 0 };
+                        
                         setActiveTab('VERIFY');
                         showAlert("Secure Tunnel Established", "Handshake verified. Encryption keys derived.");
                     }
@@ -706,6 +713,10 @@
                         const text = new TextDecoder().decode(pt);
                         setChat(prev => [...prev, { from: 'Partner', text }]);
                         setScanner(null);
+                        
+                        // FIX: Reset chunk buffer after processing
+                        chunkBuffer.current = { chunks: [], total: 0, count: 0 };
+                        
                         setActiveTab('CHAT');
                     }
                 } catch (e) {
