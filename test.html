@@ -355,7 +355,7 @@
                                     ) : (
                                         <>
                                             <button onClick={handleToggleMute} className={`p-4 rounded-full transition-all backdrop-blur-md border ${isMuted ? 'bg-white text-black border-white' : 'bg-white/10 text-white border-white/20 hover:bg-white/20'}`}>
-                                                <Icon name={isMuted ? "mic-off" : "mic"} size={24} />
+                                                <Icon key={isMuted ? "mic-off" : "mic"} name={isMuted ? "mic-off" : "mic"} size={24} />
                                             </button>
                                             
                                             <button onClick={onHangup} className="p-5 bg-red-600 rounded-full text-white shadow-xl hover:bg-red-500 hover:scale-105 transition-all">
@@ -365,7 +365,7 @@
                                             {/* Only show Video Toggle if it is a Video Call */}
                                             {isVideo && (
                                                 <button onClick={handleToggleVideo} className={`p-4 rounded-full transition-all backdrop-blur-md border ${isCameraOff ? 'bg-white text-black border-white' : 'bg-white/10 text-white border-white/20 hover:bg-white/20'}`}>
-                                                    <Icon name={isCameraOff ? "video-off" : "video"} size={24} />
+                                                    <Icon key={isCameraOff ? "video-off" : "video"} name={isCameraOff ? "video-off" : "video"} size={24} />
                                                 </button>
                                             )}
                                         </>
