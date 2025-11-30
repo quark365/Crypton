@@ -3,353 +3,256 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>GhostLink | Secure P2P</title>
+    <title>ShadowLink | Secure P2P</title>
     
-    <!-- React & Babel -->
+    <!-- React & DOM -->
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>    
     
-    <!-- Styling -->
+    <!-- Tailwind -->
     <!-- <script src="https://cdn.tailwindcss.com"></script> -->
     <script src="https://unpkg.com/@tailwindcss/browser@4"></script>
     
-    <!-- QR Libraries -->
+    <!-- QR Tools -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
     
-    <!-- Icons: Removed external script, using inline SVGs for stability -->
+    <!-- Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
 
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=JetBrains+Mono:wght@400;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;500;700&family=JetBrains+Mono:wght@400;700&display=swap');
         
         :root {
-            --glass-border: rgba(255, 255, 255, 0.08);
-            --glass-bg: rgba(15, 23, 42, 0.7);
-            --neon-accent: #06b6d4;
+            --neon-cyan: #00f3ff;
+            --neon-purple: #bc13fe;
+            --bg-dark: #050510;
         }
 
         body {
-            font-family: 'Inter', sans-serif;
-            background-color: #020617;
-            background-image: 
-                radial-gradient(at 0% 0%, rgba(6, 182, 212, 0.15) 0px, transparent 50%),
-                radial-gradient(at 100% 100%, rgba(124, 58, 237, 0.15) 0px, transparent 50%);
-            background-attachment: fixed;
-            color: #f1f5f9;
-            height: 100dvh;
-            overflow: hidden;
+            background-color: var(--bg-dark);
+            color: #e2e8f0;
+            font-family: 'Space Grotesk', sans-serif;
+            overflow: hidden; /* App handles scrolling */
         }
 
-        .glass-panel {
-            background: var(--glass-bg);
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
-            border: 1px solid var(--glass-border);
-        }
-
-        .mono { font-family: 'JetBrains Mono', monospace; }
-
-        /* Custom Scrollbar */
-        .no-scrollbar::-webkit-scrollbar { display: none; }
-        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-
-        /* Animations */
-        @keyframes scanline {
-            0% { transform: translateY(-100%); }
-            100% { transform: translateY(100%); }
-        }
-        .scanner-beam {
-            position: absolute; inset: 0;
-            background: linear-gradient(to bottom, transparent, rgba(6,182,212,0.3), transparent);
-            animation: scanline 2s linear infinite;
+        /* Scanlines & CRT Effects */
+        .scanline {
+            width: 100%; height: 2px;
+            background: var(--neon-cyan);
+            position: absolute;
+            animation: scan 2s linear infinite;
+            box-shadow: 0 0 15px var(--neon-cyan);
+            z-index: 50;
             pointer-events: none;
         }
+        @keyframes scan { 0% { top: 0%; opacity: 0; } 50% { opacity: 1; } 100% { top: 100%; opacity: 0; } }
 
-        @keyframes pulse-ring {
-            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(6, 182, 212, 0.7); }
-            70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(6, 182, 212, 0); }
-            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(6, 182, 212, 0); }
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.7);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
         }
-        .animate-pulse-ring { animation: pulse-ring 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite; }
+
+        /* Utilities */
+        .font-mono { font-family: 'JetBrains Mono', monospace; }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         
-        .chat-bubble-me { border-radius: 18px 18px 4px 18px; }
-        .chat-bubble-them { border-radius: 18px 18px 18px 4px; }
+        /* Animations */
+        .fade-in { animation: fadeIn 0.3s ease-in; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* Message Bubbles */
+        .msg-bubble { max-width: 80%; padding: 10px 14px; border-radius: 16px; position: relative; word-break: break-word; }
+        .msg-me { background: linear-gradient(135deg, #0891b2, #0e7490); color: white; border-bottom-right-radius: 2px; margin-left: auto; }
+        .msg-other { background: #1e293b; color: #e2e8f0; border-bottom-left-radius: 2px; margin-right: auto; }
+        .msg-sys { text-align: center; width: 100%; margin: 8px 0; }
+        .sys-pill { background: rgba(30, 41, 59, 0.8); color: #22d3ee; font-size: 10px; padding: 4px 12px; border-radius: 999px; font-family: 'JetBrains Mono', monospace; border: 1px solid rgba(34, 211, 238, 0.2); }
     </style>
 </head>
 <body>
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect, useRef, useCallback } = React;
+        const { useState, useEffect, useRef, useMemo, useCallback } = React;
 
-        /**
-         * ------------------------------------------------------------------
-         * CRYPTOGRAPHY ENGINE (RSA-OAEP + ECDH + HKDF + AES-GCM)
-         * ------------------------------------------------------------------
-         */
-        const CryptoEngine = {
-            // 1. Generate Identity Keys (RSA & ECDH)
-            generateKeys: async () => {
-                // RSA for Identity / Signing Handshake
-                const rsa = await window.crypto.subtle.generateKey(
-                    { name: "RSA-OAEP", modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: "SHA-256" },
-                    true, ["encrypt", "decrypt"]
-                );
-                // ECDH for Forward Secrecy Session Keys
-                const ecdh = await window.crypto.subtle.generateKey(
-                    { name: "ECDH", namedCurve: "P-256" },
-                    true, ["deriveKey", "deriveBits"]
-                );
-                return { rsa, ecdh };
-            },
-
-            // 2. Export Public Key to send to peer
-            exportKey: async (key) => {
-                const exported = await window.crypto.subtle.exportKey("spki", key);
-                return btoa(String.fromCharCode(...new Uint8Array(exported)));
-            },
-
-            // 3. Import Peer's Public Key
-            importKey: async (str, type) => {
-                const binaryDer = Uint8Array.from(atob(str), c => c.charCodeAt(0));
-                const algo = type === 'RSA' 
-                    ? { name: "RSA-OAEP", hash: "SHA-256" }
-                    : { name: "ECDH", namedCurve: "P-256" };
-                const usage = type === 'RSA' ? ["encrypt"] : [];
-                return await window.crypto.subtle.importKey("spki", binaryDer, algo, true, usage);
-            },
-
-            // 4. Derive Shared AES-GCM Session Key
-            deriveSessionKey: async (privateEcdh, publicEcdh) => {
-                const sharedBits = await window.crypto.subtle.deriveBits(
-                    { name: "ECDH", public: publicEcdh },
-                    privateEcdh, 256
-                );
-                
-                // Use HKDF to make it robust
-                const hkdfKey = await window.crypto.subtle.importKey("raw", sharedBits, { name: "HKDF" }, false, ["deriveKey"]);
-                const sessionKey = await window.crypto.subtle.deriveKey(
-                    { name: "HKDF", hash: "SHA-256", salt: new Uint8Array(), info: new TextEncoder().encode("GhostLink_Session_v1") },
-                    hkdfKey,
-                    { name: "AES-GCM", length: 256 },
-                    false, ["encrypt", "decrypt"]
-                );
-                
-                // Fingerprint for visual verification
-                const fingerprintHash = await window.crypto.subtle.digest("SHA-256", sharedBits);
-                const fingerprint = Array.from(new Uint8Array(fingerprintHash)).map(b => b.toString(16).padStart(2,'0')).join('').slice(0, 8).toUpperCase();
-                
-                return { sessionKey, fingerprint };
-            },
-
-            // 5. Encrypt Data
-            encrypt: async (key, data) => {
-                const iv = window.crypto.getRandomValues(new Uint8Array(12));
-                const encoded = typeof data === 'string' ? new TextEncoder().encode(data) : data;
-                const encrypted = await window.crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, encoded);
-                
-                // Combine IV + Ciphertext
-                const combined = new Uint8Array(iv.length + encrypted.byteLength);
-                combined.set(iv);
-                combined.set(new Uint8Array(encrypted), iv.length);
-                return combined; // Returns Uint8Array
-            },
-
-            // 6. Decrypt Data
-            decrypt: async (key, buffer) => {
-                const arr = new Uint8Array(buffer);
-                const iv = arr.slice(0, 12);
-                const data = arr.slice(12);
-                const decrypted = await window.crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, data);
-                return decrypted; // Returns ArrayBuffer
-            }
-        };
-
-        /**
-         * ------------------------------------------------------------------
-         * COMPONENTS
-         * ------------------------------------------------------------------
-         */
-
-        const Icons = {
-            Ghost: ({size, className}) => (
-                <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-                    <path d="M9 10h.01" /><path d="M15 10h.01" /><path d="M12 2a8 8 0 0 0-8 8v12l3-3 2.5 2.5L12 19l2.5 2.5L17 19l3 3V10a8 8 0 0 0-8-8z" />
-                </svg>
-            ),
-            QrCode: ({size, className}) => (
-                <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-                    <rect width="5" height="5" x="3" y="3" rx="1"/><rect width="5" height="5" x="16" y="3" rx="1"/><rect width="5" height="5" x="3" y="16" rx="1"/><path d="M21 16h-3a2 2 0 0 0-2 2v3"/><path d="M21 21v.01"/><path d="M12 7v3a2 2 0 0 1-2 2H7"/><path d="M3 12h.01"/><path d="M12 3h.01"/><path d="M12 16v.01"/><path d="M16 12h1"/><path d="M21 12v.01"/><path d="M12 21v-1"/>
-                </svg>
-            ),
-            ScanLine: ({size, className}) => (
-                <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-                    <path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 12h10"/>
-                </svg>
-            ),
-            User: ({size, className}) => (
-                <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-                    <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
-                </svg>
-            ),
-            LogOut: ({size, className}) => (
-                <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/>
-                </svg>
-            ),
-            Lock: ({size, className}) => (
-                <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-                    <rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-                </svg>
-            ),
-            File: ({size, className}) => (
-                <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-                    <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/>
-                </svg>
-            ),
-            Paperclip: ({size, className}) => (
-                <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-                    <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
-                </svg>
-            ),
-            Send: ({size, className}) => (
-                <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-                    <path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/>
-                </svg>
-            )
-        };
+        // --- CONFIG ---
+        const CHUNK_SIZE = 250; // Size for QR Chunks
+        const ICE_SERVERS = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+        const FILE_CHUNK_SIZE = 16384; // 16KB DataChannel Chunks
         
-        const Icon = ({ name, size = 24, className }) => {
-            const LucideIcon = Icons[name];
-            if (!LucideIcon) return null;
-            return <LucideIcon size={size} className={className} />;
+        // --- CRYPTO UTILS ---
+        const buf2hex = (buf) => [...new Uint8Array(buf)].map(x => x.toString(16).padStart(2, '0')).join('');
+        const hex2buf = (hex) => new Uint8Array(hex.match(/.{1,2}/g).map(byte => parseInt(byte, 16))).buffer;
+        
+        // Base64 Helpers for binary data
+        const arrayBufferToBase64 = (buffer) => {
+            let binary = '';
+            const bytes = new Uint8Array(buffer);
+            for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+            return window.btoa(binary);
+        };
+        const base64ToArrayBuffer = (base64) => {
+            const binary_string = window.atob(base64);
+            const len = binary_string.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) bytes[i] = binary_string.charCodeAt(i);
+            return bytes.buffer;
         };
 
-        // --- QR GENERATOR COMPONENT (Chunked for SDP) ---
-        const QRStream = ({ data, label }) => {
+        // --- COMPONENTS ---
+
+        // 1. Icon Component
+        const Icon = ({ name, size = 24, className }) => {
+            useEffect(() => { lucide.createIcons(); }, [name]);
+            return <i data-lucide={name} width={size} height={size} className={className}></i>;
+        };
+
+        // 2. Animated QR Generator (For Signaling)
+        const QRAnimator = ({ data, label }) => {
+            const [index, setIndex] = useState(0);
             const canvasRef = useRef(null);
-            const [chunkIndex, setChunkIndex] = useState(0);
-            const chunksRef = useRef([]);
-
-            useEffect(() => {
-                // Chunk the data
-                const str = JSON.stringify(data);
-                const base64 = btoa(str);
-                const CHUNK_SIZE = 150; // Safe size for quick scanning
-                const total = Math.ceil(base64.length / CHUNK_SIZE);
-                const newChunks = [];
-                for (let i = 0; i < total; i++) {
-                    newChunks.push(`GL:${i}:${total}:${base64.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE)}`);
+            
+            // Chunking Logic
+            const chunks = useMemo(() => {
+                if(!data) return [];
+                const str = typeof data === 'string' ? data : JSON.stringify(data);
+                const b64 = btoa(str); 
+                const total = Math.ceil(b64.length / CHUNK_SIZE);
+                const arr = [];
+                for(let i=0; i<total; i++) {
+                    arr.push(`SL:${i}:${total}:${b64.slice(i*CHUNK_SIZE, (i+1)*CHUNK_SIZE)}`);
                 }
-                chunksRef.current = newChunks;
-
-                const interval = setInterval(() => {
-                    setChunkIndex(prev => (prev + 1) % newChunks.length);
-                }, 300); // 300ms frame rate
-
-                return () => clearInterval(interval);
+                return arr;
             }, [data]);
 
             useEffect(() => {
-                if (canvasRef.current && chunksRef.current.length > 0) {
+                if(chunks.length <= 1) return;
+                const interval = setInterval(() => {
+                    setIndex(prev => (prev + 1) % chunks.length);
+                }, 250); // 4 FPS
+                return () => clearInterval(interval);
+            }, [chunks]);
+
+            useEffect(() => {
+                if(canvasRef.current && chunks.length > 0) {
                     new QRious({
                         element: canvasRef.current,
-                        value: chunksRef.current[chunkIndex],
-                        size: 300,
-                        level: 'L'
+                        value: chunks[index],
+                        size: 250,
+                        level: 'L',
+                        foreground: '#000',
+                        background: '#fff'
                     });
                 }
-            }, [chunkIndex]);
+            }, [index, chunks]);
 
             return (
-                <div className="flex flex-col items-center animate-in fade-in zoom-in duration-300">
-                    <div className="bg-white p-4 rounded-3xl shadow-2xl shadow-cyan-500/20 relative">
-                        <canvas ref={canvasRef} className="rounded-xl"></canvas>
-                        <div className="absolute -bottom-3 -right-3 bg-cyan-500 text-black font-bold px-3 py-1 rounded-full text-xs font-mono border-4 border-[#020617]">
-                            {chunkIndex + 1}/{chunksRef.current.length}
-                        </div>
+                <div className="flex flex-col items-center bg-white p-4 rounded-xl shadow-[0_0_30px_rgba(0,243,255,0.2)]">
+                    <canvas ref={canvasRef} className="rounded-lg mb-2"></canvas>
+                    <div className="w-full bg-slate-200 h-1 rounded overflow-hidden">
+                        <div className="h-full bg-cyan-500 transition-all duration-100" 
+                             style={{width: `${((index+1)/chunks.length)*100}%`}}></div>
                     </div>
-                    <p className="mt-6 text-cyan-400 font-mono text-sm tracking-widest uppercase animate-pulse">{label}</p>
+                    <p className="text-black font-mono text-xs mt-2 font-bold">{label} ({index+1}/{chunks.length})</p>
                 </div>
             );
         };
 
-        // --- QR SCANNER COMPONENT ---
-        const QRScanner = ({ onScan, onClose }) => {
+        // 3. QR Scanner (For Signaling)
+        const QRScanner = ({ onScan }) => {
             const videoRef = useRef(null);
             const canvasRef = useRef(null);
             const [status, setStatus] = useState("Initializing Camera...");
-            const chunksRef = useRef({});
-            const totalChunksRef = useRef(0);
+
+            // Memoized scan loop to preventing camera restart on re-renders
+            const scanLoop = useCallback(() => {
+                const video = videoRef.current;
+                const canvas = canvasRef.current;
+                if(!video || !canvas) return;
+
+                if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                    const code = jsQR(imageData.data, imageData.width, imageData.height);
+                    
+                    if (code && code.data.startsWith('SL:')) {
+                        setStatus("Packet Detected");
+                        onScan(code.data);
+                    } else {
+                        setStatus("Scanning...");
+                    }
+                }
+                requestAnimationFrame(scanLoop);
+            }, [onScan]);
 
             useEffect(() => {
-                let stream;
-                navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } }).then(s => {
-                    stream = s;
-                    if(videoRef.current) {
-                        videoRef.current.srcObject = stream;
-                        videoRef.current.play();
-                        requestAnimationFrame(tick);
-                    }
-                });
-
-                const tick = () => {
-                    if (videoRef.current && videoRef.current.readyState === 4) {
-                        const canvas = canvasRef.current;
-                        const video = videoRef.current;
-                        canvas.width = video.videoWidth;
-                        canvas.height = video.videoHeight;
-                        const ctx = canvas.getContext("2d");
-                        ctx.drawImage(video, 0, 0);
-                        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                        const code = jsQR(imageData.data, imageData.width, imageData.height);
-
-                        if (code && code.data.startsWith("GL:")) {
-                            const [_, idx, total, payload] = code.data.split(":");
-                            if (!chunksRef.current[idx]) {
-                                chunksRef.current[idx] = payload;
-                                totalChunksRef.current = parseInt(total);
-                                setStatus(`Capturing Data Packet: ${Object.keys(chunksRef.current).length}/${total}`);
-                                
-                                if (Object.keys(chunksRef.current).length === totalChunksRef.current) {
-                                    // Assemble
-                                    const fullBase64 = Array.from({length: totalChunksRef.current})
-                                        .map((_, i) => chunksRef.current[i]).join("");
-                                    try {
-                                        const json = JSON.parse(atob(fullBase64));
-                                        onScan(json);
-                                    } catch(e) { console.error(e); }
-                                }
-                            }
-                        } else {
-                            setStatus("Align QR Code...");
+                let stream = null;
+                navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+                    .then(s => {
+                        stream = s;
+                        if(videoRef.current) {
+                            videoRef.current.srcObject = stream;
+                            videoRef.current.play().catch(e => console.error(e));
+                            requestAnimationFrame(scanLoop);
                         }
-                    }
-                    requestAnimationFrame(tick);
+                    })
+                    .catch(err => setStatus("Camera Error: " + err.message));
+                
+                return () => {
+                    if(stream) stream.getTracks().forEach(t => t.stop());
                 };
-
-                return () => { if(stream) stream.getTracks().forEach(t => t.stop()); }
-            }, []);
+            }, [scanLoop]);
 
             return (
-                <div className="fixed inset-0 bg-black z-50 flex flex-col">
-                    <div className="relative flex-1 bg-black">
-                        <video ref={videoRef} className="w-full h-full object-cover opacity-60"></video>
-                        <canvas ref={canvasRef} className="hidden"></canvas>
-                        <div className="scanner-beam"></div>
-                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                            <div className="w-64 h-64 border-2 border-cyan-400/50 rounded-3xl relative">
-                                <div className="absolute top-0 left-0 w-6 h-6 border-t-4 border-l-4 border-cyan-400 rounded-tl-xl -mt-1 -ml-1"></div>
-                                <div className="absolute top-0 right-0 w-6 h-6 border-t-4 border-r-4 border-cyan-400 rounded-tr-xl -mt-1 -mr-1"></div>
-                                <div className="absolute bottom-0 left-0 w-6 h-6 border-b-4 border-l-4 border-cyan-400 rounded-bl-xl -mb-1 -ml-1"></div>
-                                <div className="absolute bottom-0 right-0 w-6 h-6 border-b-4 border-r-4 border-cyan-400 rounded-br-xl -mb-1 -mr-1"></div>
-                            </div>
+                <div className="relative w-full max-w-sm aspect-square bg-black rounded-2xl overflow-hidden border-2 border-cyan-500/50 shadow-2xl">
+                    <video ref={videoRef} className="absolute inset-0 w-full h-full object-cover opacity-80" muted playsInline></video>
+                    <canvas ref={canvasRef} className="hidden"></canvas>
+                    <div className="scanline"></div>
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                        <div className="w-48 h-48 border-2 border-white/30 rounded-lg relative">
+                            <div className="absolute top-0 left-0 w-4 h-4 border-t-4 border-l-4 border-cyan-400 -mt-1 -ml-1"></div>
+                            <div className="absolute top-0 right-0 w-4 h-4 border-t-4 border-r-4 border-cyan-400 -mt-1 -mr-1"></div>
+                            <div className="absolute bottom-0 left-0 w-4 h-4 border-b-4 border-l-4 border-cyan-400 -mb-1 -ml-1"></div>
+                            <div className="absolute bottom-0 right-0 w-4 h-4 border-b-4 border-r-4 border-cyan-400 -mb-1 -mr-1"></div>
                         </div>
                     </div>
-                    <div className="bg-slate-900 p-6 rounded-t-3xl border-t border-slate-800 -mt-6 relative z-10 text-center">
-                        <p className="text-cyan-400 font-mono text-xs mb-4">{status}</p>
-                        <button onClick={onClose} className="w-full py-4 bg-slate-800 text-white rounded-xl font-bold">Cancel</button>
+                    <div className="absolute bottom-4 left-0 right-0 text-center">
+                        <span className={`text-xs px-3 py-1 rounded-full font-mono backdrop-blur-md transition-colors ${status === "Packet Detected" ? "bg-green-500/80 text-white" : "bg-black/60 text-cyan-400"}`}>{status}</span>
+                    </div>
+                </div>
+            );
+        };
+
+        // 4. Identity Verification Modal
+        const IdentityModal = ({ fingerprint, onClose }) => {
+            if (!fingerprint) return null;
+            return (
+                <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 fade-in">
+                    <div className="bg-slate-900 border border-slate-700 p-8 rounded-3xl max-w-sm w-full text-center relative shadow-2xl">
+                        <button onClick={onClose} className="absolute top-4 right-4 p-2 text-slate-500 hover:text-white">
+                            <Icon name="x" size={20} />
+                        </button>
+                        <div className="w-16 h-16 bg-cyan-500/10 rounded-full flex items-center justify-center mx-auto mb-4 border border-cyan-500/30">
+                            <Icon name="shield-check" size={32} className="text-cyan-400" />
+                        </div>
+                        <h3 className="text-xl font-bold text-white mb-2">Safety Number</h3>
+                        <p className="text-slate-400 text-sm mb-6">Compare these values with your peer to ensure the connection is secure.</p>
+                        
+                        <div className="bg-black/50 p-6 rounded-2xl border border-slate-800 mb-6">
+                            <div className="text-5xl mb-4 tracking-widest">{fingerprint.emoji}</div>
+                            <div className="font-mono text-cyan-400 text-lg tracking-[0.2em] break-all">{fingerprint.hex}</div>
+                        </div>
+                        
+                        <button onClick={onClose} className="w-full py-3 bg-cyan-600 hover:bg-cyan-500 rounded-xl font-bold text-white transition-colors">
+                            Verified
+                        </button>
                     </div>
                 </div>
             );
@@ -357,388 +260,511 @@
 
         // --- MAIN APP ---
         const App = () => {
-            const [view, setView] = useState('home'); // home, host, join, chat
-            const [keys, setKeys] = useState(null);
-            const [peerKeys, setPeerKeys] = useState(null); // { rsa, ecdh }
-            const [session, setSession] = useState(null); // { key, fingerprint }
+            const [view, setView] = useState('HOME');
+            const [role, setRole] = useState(null);
+            const [logs, setLogs] = useState([]);
+            const [msgText, setMsgText] = useState("");
+            const [messages, setMessages] = useState([]);
+            const [showVerify, setShowVerify] = useState(false);
+            const [fileProgress, setFileProgress] = useState(0); // 0-100
             
-            const [offer, setOffer] = useState(null);
-            const [connectionStatus, setConnectionStatus] = useState('idle');
-            const [chatHistory, setChatHistory] = useState([]);
-            const [message, setMessage] = useState("");
+            // WebRTC Refs
+            const pc = useRef(null);
+            const dc = useRef(null);
+            const candidates = useRef([]);
             
-            const pcRef = useRef(null);
-            const dcRef = useRef(null);
-            const fileChunksRef = useRef([]);
+            // Crypto Refs
+            const keys = useRef({ rsa: null, ecdh: null });
+            const sessionKey = useRef(null);
+            const fingerprint = useRef(null);
+            const incomingFiles = useRef({}); // { id: { meta, chunks: [], receivedSize: 0 } }
+            const fileInputRef = useRef(null);
 
-            // 1. Initialize Crypto Keys on Load
+            // Signaling State
+            const [localSignal, setLocalSignal] = useState(null);
+            const scannedChunks = useRef(new Map());
+            const [scanProgress, setScanProgress] = useState(0);
+
+            // Initial Key Gen
             useEffect(() => {
-                CryptoEngine.generateKeys().then(setKeys);
+                const initKeys = async () => {
+                    keys.current.rsa = await window.crypto.subtle.generateKey(
+                        { name: "RSA-OAEP", modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: "SHA-256" },
+                        true, ["encrypt", "decrypt"]
+                    );
+                    keys.current.ecdh = await window.crypto.subtle.generateKey(
+                        { name: "ECDH", namedCurve: "P-256" },
+                        true, ["deriveKey", "deriveBits"]
+                    );
+                    addLog("Keys Generated.");
+                };
+                initKeys();
             }, []);
 
-            // 2. WebRTC Setup Helper
-            const setupPeer = async (initiator) => {
-                const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
-                pcRef.current = pc;
+            const addLog = (txt) => setLogs(p => [...p.slice(-4), txt]);
 
-                pc.onicecandidate = (e) => {
-                    if (!e.candidate) {
-                        // Gathering complete, generating payload
-                        const sdp = pc.localDescription;
-                        setOffer(sdp);
-                    }
-                };
+            // WebRTC Setup
+            const createPeer = useCallback(() => {
+                const peer = new RTCPeerConnection(ICE_SERVERS);
+                peer.onicecandidate = (e) => { if (e.candidate) candidates.current.push(e.candidate); };
+                peer.onconnectionstatechange = () => addLog(`Connection: ${peer.connectionState}`);
+                pc.current = peer;
+                return peer;
+            }, []);
 
-                if (initiator) {
-                    const dc = pc.createDataChannel("ghostlink");
-                    setupDataChannel(dc);
-                } else {
-                    pc.ondatachannel = (e) => setupDataChannel(e.channel);
+            // Signal Processing (Memoized to prevent scanner restarts)
+            const processSignal = useCallback(async (data) => {
+                if (!pc.current) return;
+                
+                if(role === 'HOST' && data.type === 'answer') {
+                    await pc.current.setRemoteDescription(new RTCSessionDescription(data.sdp));
+                    data.candidates.forEach(c => pc.current.addIceCandidate(new RTCIceCandidate(c)));
+                    addLog("Remote Desc Set.");
+                } else if (role === 'JOINER' && data.type === 'offer') {
+                    await pc.current.setRemoteDescription(new RTCSessionDescription(data.sdp));
+                    data.candidates.forEach(c => pc.current.addIceCandidate(new RTCIceCandidate(c)));
+                    
+                    const answer = await pc.current.createAnswer();
+                    await pc.current.setLocalDescription(answer);
+                    await new Promise(r => setTimeout(r, 500)); // Gather candidates
+                    
+                    setLocalSignal({
+                        type: 'answer',
+                        sdp: pc.current.localDescription,
+                        candidates: candidates.current
+                    });
+                    setView('JOIN_WAIT');
                 }
-            };
+            }, [role]);
 
-            const setupDataChannel = (dc) => {
-                dcRef.current = dc;
-                dc.onopen = () => {
-                    setConnectionStatus('handshaking');
-                    performCryptoHandshake();
-                };
-                dc.onmessage = handleMessage;
-            };
-
-            // 3. Crypto Handshake over Data Channel
-            const performCryptoHandshake = async () => {
-                if (!keys) return;
-                // Export my keys
-                const myRsaPub = await CryptoEngine.exportKey(keys.rsa.publicKey);
-                const myEcdhPub = await CryptoEngine.exportKey(keys.ecdh.publicKey);
-
-                // Send Identity Packet
-                dcRef.current.send(JSON.stringify({
-                    type: 'HANDSHAKE_INIT',
-                    rsa: myRsaPub,
-                    ecdh: myEcdhPub
-                }));
-            };
-
-            const handleMessage = async (e) => {
-                const raw = e.data;
-
-                // If buffer, it's encrypted data
-                if (raw instanceof ArrayBuffer) {
-                    if (!session) return; // Drop if no session
-                    try {
-                        const decrypted = await CryptoEngine.decrypt(session.sessionKey, raw);
-                        // Decode to see if it's text or file chunk
-                        // Simple protocol: First byte 0 = text, 1 = file
-                        const view = new Uint8Array(decrypted);
-                        const type = view[0];
-                        const content = view.slice(1);
-
-                        if (type === 0) {
-                            const text = new TextDecoder().decode(content);
-                            setChatHistory(prev => [...prev, { sender: 'them', text, type: 'text', time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) }]);
-                        } else if (type === 1) {
-                            handleIncomingFileChunk(content);
-                        }
-                    } catch (err) {
-                        console.error("Decryption failed", err);
-                    }
-                    return;
-                }
-
-                // If string, it's handshake protocol (Cleartext inside tunnel, but keys are public anyway)
-                try {
-                    const msg = JSON.parse(raw);
-                    if (msg.type === 'HANDSHAKE_INIT') {
-                        // Import Peer Keys
-                        const peerRsa = await CryptoEngine.importKey(msg.rsa, 'RSA');
-                        const peerEcdh = await CryptoEngine.importKey(msg.ecdh, 'ECDH');
-                        setPeerKeys({ rsa: peerRsa, ecdh: peerEcdh });
-
-                        // Derive Session Key
-                        const sess = await CryptoEngine.deriveSessionKey(keys.ecdh.privateKey, peerEcdh);
-                        setSession(sess);
-                        setConnectionStatus('connected');
-                        setView('chat');
-                    }
-                } catch (err) { console.error(err); }
-            };
-
-            // 4. Send Message Logic
-            const sendMessage = async () => {
-                if (!message.trim() || !session || !dcRef.current) return;
+            // Scanner Handler (Memoized)
+            const handleScannedChunk = useCallback((raw) => {
+                const parts = raw.split(':');
+                if(parts.length < 4) return;
                 
-                const textBytes = new TextEncoder().encode(message);
-                const payload = new Uint8Array(textBytes.length + 1);
-                payload[0] = 0; // Text type
-                payload.set(textBytes, 1);
+                const idx = parseInt(parts[1]);
+                const total = parseInt(parts[2]);
+                const data = parts.slice(3).join(':');
 
-                const encrypted = await CryptoEngine.encrypt(session.sessionKey, payload);
-                dcRef.current.send(encrypted);
-
-                setChatHistory(prev => [...prev, { sender: 'me', text: message, type: 'text', time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) }]);
-                setMessage("");
-            };
-
-            // 5. File Handling
-            const sendFile = async (file) => {
-                if (!session || !dcRef.current) return;
-                
-                // Send Meta Message first (as text)
-                const meta = JSON.stringify({ name: file.name, size: file.size, type: file.type });
-                const metaBytes = new TextEncoder().encode("FILE_META:" + meta);
-                const payload = new Uint8Array(metaBytes.length + 1);
-                payload[0] = 0; // Send meta as text
-                payload.set(metaBytes, 1);
-                
-                const encMeta = await CryptoEngine.encrypt(session.sessionKey, payload);
-                dcRef.current.send(encMeta);
-
-                // Chunk and Send File
-                const CHUNK_SIZE = 16 * 1024; // 16KB
-                const reader = new FileReader();
-                let offset = 0;
-
-                reader.onload = async (e) => {
-                    const chunk = new Uint8Array(e.target.result);
-                    const chunkPayload = new Uint8Array(chunk.length + 1);
-                    chunkPayload[0] = 1; // File type
-                    chunkPayload.set(chunk, 1);
-
-                    const encChunk = await CryptoEngine.encrypt(session.sessionKey, chunkPayload);
-                    dcRef.current.send(encChunk);
-
-                    offset += chunk.length;
-                    if (offset < file.size) {
-                        readNextChunk();
-                    } else {
-                        // Done
-                        setChatHistory(prev => [...prev, { sender: 'me', text: `Sent file: ${file.name}`, type: 'system' }]);
-                    }
-                };
-
-                const readNextChunk = () => {
-                    const slice = file.slice(offset, offset + CHUNK_SIZE);
-                    reader.readAsArrayBuffer(slice);
-                };
-                
-                setChatHistory(prev => [...prev, { sender: 'me', text: `Sending ${file.name}...`, type: 'system' }]);
-                readNextChunk();
-            };
-
-            const incomingFileMetaRef = useRef(null);
-            const incomingFileBufferRef = useRef([]);
-
-            const handleIncomingFileChunk = (data) => {
-                // If we don't have meta, this might be a raw chunk error, but protocol handles meta as text first
-                incomingFileBufferRef.current.push(data);
-                
-                // Check if done (Simplified logic: assumes reliable ordering which SCTP/DataChannel provides)
-                if (incomingFileMetaRef.current) {
-                    const currentSize = incomingFileBufferRef.current.reduce((acc, val) => acc + val.length, 0);
-                    if (currentSize >= incomingFileMetaRef.current.size) {
-                        // Reconstruct
-                        const blob = new Blob(incomingFileBufferRef.current, { type: incomingFileMetaRef.current.type });
-                        const url = URL.createObjectURL(blob);
-                        setChatHistory(prev => [...prev, { 
-                            sender: 'them', 
-                            text: incomingFileMetaRef.current.name, 
-                            type: 'file', 
-                            url: url,
-                            size: incomingFileMetaRef.current.size
-                        }]);
-                        
-                        // Reset
-                        incomingFileMetaRef.current = null;
-                        incomingFileBufferRef.current = [];
-                    }
-                }
-            };
-
-            // Intercept meta messages in text handler
-            useEffect(() => {
-                if (chatHistory.length > 0) {
-                    const last = chatHistory[chatHistory.length - 1];
-                    if (last.sender === 'them' && last.type === 'text' && last.text.startsWith("FILE_META:")) {
+                if(!scannedChunks.current.has(idx)) {
+                    scannedChunks.current.set(idx, data);
+                    setScanProgress(Math.round((scannedChunks.current.size / total) * 100));
+                    
+                    if(scannedChunks.current.size === total) {
+                        const fullB64 = Array.from({length: total}, (_, i) => scannedChunks.current.get(i)).join('');
                         try {
-                            const meta = JSON.parse(last.text.substring(10));
-                            incomingFileMetaRef.current = meta;
-                            // Remove the meta message from UI
-                            setChatHistory(prev => prev.slice(0, -1));
-                        } catch(e) {}
+                            const jsonStr = atob(fullB64);
+                            const signalData = JSON.parse(jsonStr);
+                            addLog("Signal Captured.");
+                            scannedChunks.current.clear();
+                            processSignal(signalData);
+                        } catch(e) {
+                            console.error("Signal parse error", e);
+                            addLog("Error Parsing Signal");
+                        }
                     }
                 }
-            }, [chatHistory]);
+            }, [processSignal]);
 
-
-            // --- UI HANDLERS ---
+            // Host/Join Flow
             const startHost = async () => {
-                setView('host');
-                setupPeer(true);
-                const offer = await pcRef.current.createOffer();
-                await pcRef.current.setLocalDescription(offer);
+                setRole('HOST');
+                const peer = createPeer();
+                dc.current = peer.createDataChannel("shadowlink");
+                setupDataChannel(dc.current);
+
+                const offer = await peer.createOffer();
+                await peer.setLocalDescription(offer);
+                await new Promise(r => setTimeout(r, 500));
+                
+                setLocalSignal({ type: 'offer', sdp: peer.localDescription, candidates: candidates.current });
+                setView('HOST_WAIT');
             };
 
             const startJoin = () => {
-                setView('scan_offer');
+                setRole('JOINER');
+                const peer = createPeer();
+                peer.ondatachannel = (e) => {
+                    dc.current = e.channel;
+                    setupDataChannel(dc.current);
+                };
+                setView('SCAN_HOST');
             };
 
-            const handleScanOffer = async (data) => {
-                setupPeer(false);
-                await pcRef.current.setRemoteDescription(data);
-                const answer = await pcRef.current.createAnswer();
-                await pcRef.current.setLocalDescription(answer);
-                setOffer(answer); // This is actually the Answer SDP to show
-                setView('show_answer');
+            // Data Channel & Packet Handling
+            const setupDataChannel = (channel) => {
+                channel.onopen = () => {
+                    addLog("Tunnel Open. Authenticating...");
+                    initiateSecureHandshake();
+                };
+                channel.onmessage = async (e) => handlePacket(e.data);
             };
 
-            const handleScanAnswer = async (data) => {
-                await pcRef.current.setRemoteDescription(data);
-                setView('connecting');
+            const initiateSecureHandshake = async () => {
+                const rsaPub = await window.crypto.subtle.exportKey("spki", keys.current.rsa.publicKey);
+                const ecdhPub = await window.crypto.subtle.exportKey("raw", keys.current.ecdh.publicKey);
+                dc.current.send(JSON.stringify({ t: 'HELLO', rsa: buf2hex(rsaPub), ecdh: buf2hex(ecdhPub) }));
             };
 
-            // --- RENDERERS ---
+            const deriveSession = async (p) => {
+                const peerRsa = await window.crypto.subtle.importKey("spki", hex2buf(p.rsa), { name: "RSA-OAEP", hash: "SHA-256" }, true, ["encrypt"]);
+                const peerEcdh = await window.crypto.subtle.importKey("raw", hex2buf(p.ecdh), { name: "ECDH", namedCurve: "P-256" }, true, []);
+                const sharedBits = await window.crypto.subtle.deriveBits({ name: "ECDH", public: peerEcdh }, keys.current.ecdh.privateKey, 256);
+                const hkdfKey = await window.crypto.subtle.importKey("raw", sharedBits, { name: "HKDF" }, false, ["deriveKey"]);
+                sessionKey.current = await window.crypto.subtle.deriveKey(
+                    { name: "HKDF", hash: "SHA-256", salt: new Uint8Array(), info: new TextEncoder().encode("ShadowLink") },
+                    hkdfKey, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]
+                );
 
-            if (view === 'home') return (
-                <div className="flex flex-col h-full items-center justify-center p-6 space-y-8 animate-in fade-in duration-500">
-                    <div className="relative">
-                        <div className="absolute inset-0 bg-cyan-500 blur-3xl opacity-20 rounded-full"></div>
-                        <Icon name="Ghost" size={80} className="text-cyan-400 relative z-10" />
-                    </div>
-                    <div className="text-center space-y-2">
-                        <h1 className="text-4xl font-bold tracking-tighter text-white">Ghost<span className="text-cyan-400">Link</span></h1>
-                        <p className="text-slate-400 text-sm tracking-wide">P2P Encrypted Tunnel</p>
-                    </div>
+                // Generate Fingerprint
+                const fpHash = await window.crypto.subtle.digest("SHA-256", sharedBits);
+                const fpArr = new Uint8Array(fpHash);
+                const emojis = ["💀","👽","🤖","👻","🤡","👹","👺","👾","🎃","🐉","🦄","🦉","🕸","⚡","🔥","❄️"];
+                let fpEmoji = "";
+                for(let i=0; i<4; i++) fpEmoji += emojis[fpArr[i] % emojis.length];
+                const fpHex = buf2hex(fpHash).substring(0, 8).toUpperCase();
+                
+                fingerprint.current = { emoji: fpEmoji, hex: fpHex };
+                
+                addLog(`Secured: ${fpEmoji}`);
+                setView('CHAT');
+                setMessages(prev => [...prev, { id: Date.now(), type: 'SYS', text: `SECURE CHANNEL ESTABLISHED` }]);
+            };
+
+            const handlePacket = async (raw) => {
+                try {
+                    const p = JSON.parse(raw);
                     
-                    <div className="grid gap-4 w-full max-w-xs">
-                        <button onClick={startHost} className="glass-panel py-4 rounded-xl flex items-center justify-center gap-3 hover:bg-white/5 transition-all group">
-                            <Icon name="QrCode" className="text-cyan-400 group-hover:scale-110 transition-transform"/>
-                            <span className="font-bold">Start New Chat</span>
-                        </button>
-                        <button onClick={startJoin} className="glass-panel py-4 rounded-xl flex items-center justify-center gap-3 hover:bg-white/5 transition-all group">
-                            <Icon name="ScanLine" className="text-purple-400 group-hover:scale-110 transition-transform"/>
-                            <span className="font-bold">Join Chat</span>
-                        </button>
+                    if (p.t === 'HELLO') {
+                        await deriveSession(p);
+                    } 
+                    else if (p.t === 'ENC') {
+                        // Decrypt Text Message
+                        const pt = await decryptData(p.iv, p.d);
+                        const text = new TextDecoder().decode(pt);
+                        setMessages(prev => [...prev, { id: Date.now(), type: 'RX', text: text }]);
+                    }
+                    else if (p.t === 'FILE_HEADER') {
+                        // Decrypt File Metadata
+                        const pt = await decryptData(p.iv, p.meta);
+                        const meta = JSON.parse(new TextDecoder().decode(pt));
+                        incomingFiles.current[p.id] = { meta, chunks: [], receivedSize: 0, startTime: Date.now() };
+                        setMessages(prev => [...prev, { id: Date.now(), type: 'SYS', text: `Receiving file: ${meta.name}...` }]);
+                    }
+                    else if (p.t === 'FILE_CHUNK') {
+                        // Receive Chunk
+                        const fileCtx = incomingFiles.current[p.id];
+                        if (fileCtx) {
+                            const chunkData = base64ToArrayBuffer(p.d);
+                            fileCtx.chunks.push({ idx: p.idx, data: chunkData });
+                            fileCtx.receivedSize += chunkData.byteLength;
+                            
+                            // Check completion (Approx check due to encryption overhead)
+                            // We rely on the decrypted size matching, but for streaming we trust the stream end.
+                            // Actually, let's trigger decrypt when we have enough data or a specific 'END' flag.
+                            // For simplicity: We know the ENCRYPTED size is ~ meta.size + 16. 
+                            // Wait, we are sending chunks of the CIPHERTEXT. 
+                            // So we need to know the total ciphertext length.
+                            
+                            if (fileCtx.receivedSize >= fileCtx.meta.encSize) {
+                                // Assemble
+                                fileCtx.chunks.sort((a,b) => a.idx - b.idx);
+                                const totalLen = fileCtx.chunks.reduce((acc, c) => acc + c.data.byteLength, 0);
+                                const cipherBuffer = new Uint8Array(totalLen);
+                                let offset = 0;
+                                fileCtx.chunks.forEach(c => {
+                                    cipherBuffer.set(new Uint8Array(c.data), offset);
+                                    offset += c.data.byteLength;
+                                });
+
+                                // Decrypt Whole File
+                                try {
+                                    const fileData = await window.crypto.subtle.decrypt(
+                                        { name: "AES-GCM", iv: hex2buf(fileCtx.meta.iv) },
+                                        sessionKey.current,
+                                        cipherBuffer
+                                    );
+                                    
+                                    const blob = new Blob([fileData], { type: fileCtx.meta.type });
+                                    const url = URL.createObjectURL(blob);
+                                    
+                                    setMessages(prev => [...prev, { 
+                                        id: Date.now(), 
+                                        type: 'FILE', 
+                                        text: fileCtx.meta.name,
+                                        fileUrl: url,
+                                        fileSize: fileCtx.meta.size 
+                                    }]);
+                                    delete incomingFiles.current[p.id];
+                                } catch(e) {
+                                    console.error("File Decrypt Fail", e);
+                                    setMessages(prev => [...prev, { id: Date.now(), type: 'SYS', text: `File Decryption Failed` }]);
+                                }
+                            }
+                        }
+                    }
+                } catch(e) { console.error("Packet Error", e); }
+            };
+
+            // Helpers
+            const decryptData = async (ivHex, dataHex) => {
+                return await window.crypto.subtle.decrypt(
+                    { name: "AES-GCM", iv: hex2buf(ivHex) },
+                    sessionKey.current,
+                    hex2buf(dataHex)
+                );
+            };
+
+            const sendMessage = async () => {
+                if(!msgText.trim() || !sessionKey.current) return;
+                const txt = msgText;
+                setMsgText("");
+                setMessages(prev => [...prev, { id: Date.now(), type: 'TX', text: txt }]);
+
+                const iv = window.crypto.getRandomValues(new Uint8Array(12));
+                const enc = await window.crypto.subtle.encrypt(
+                    { name: "AES-GCM", iv: iv },
+                    sessionKey.current,
+                    new TextEncoder().encode(txt)
+                );
+                dc.current.send(JSON.stringify({ t: 'ENC', iv: buf2hex(iv), d: buf2hex(enc) }));
+            };
+
+            const handleFileSelect = async (e) => {
+                const file = e.target.files[0];
+                if (!file || !sessionKey.current) return;
+                
+                // 1. Read File
+                const buffer = await file.arrayBuffer();
+                
+                // 2. Encrypt File (Whole)
+                // Note: For large files in prod, use streams. For demo, buffer is fine.
+                const fileIv = window.crypto.getRandomValues(new Uint8Array(12));
+                const encryptedFile = await window.crypto.subtle.encrypt(
+                    { name: "AES-GCM", iv: fileIv },
+                    sessionKey.current,
+                    buffer
+                );
+                
+                // 3. Encrypt Metadata
+                const fileId = crypto.randomUUID();
+                const metaRaw = JSON.stringify({ name: file.name, size: file.size, type: file.type, iv: buf2hex(fileIv), encSize: encryptedFile.byteLength });
+                const metaIv = window.crypto.getRandomValues(new Uint8Array(12));
+                const encMeta = await window.crypto.subtle.encrypt(
+                    { name: "AES-GCM", iv: metaIv },
+                    sessionKey.current,
+                    new TextEncoder().encode(metaRaw)
+                );
+
+                // 4. Send Header
+                dc.current.send(JSON.stringify({
+                    t: 'FILE_HEADER',
+                    id: fileId,
+                    iv: buf2hex(metaIv),
+                    meta: buf2hex(encMeta)
+                }));
+                
+                setMessages(prev => [...prev, { id: Date.now(), type: 'SYS', text: `Sending ${file.name}...` }]);
+
+                // 5. Send Chunks
+                const totalChunks = Math.ceil(encryptedFile.byteLength / FILE_CHUNK_SIZE);
+                let offset = 0;
+                
+                for (let i = 0; i < totalChunks; i++) {
+                    const chunk = encryptedFile.slice(offset, offset + FILE_CHUNK_SIZE);
+                    const b64Chunk = arrayBufferToBase64(chunk);
+                    
+                    // Simple flow control: Wait 10ms every few chunks to prevent buffer overflow
+                    if (i % 10 === 0) await new Promise(r => setTimeout(r, 10));
+                    
+                    dc.current.send(JSON.stringify({
+                        t: 'FILE_CHUNK',
+                        id: fileId,
+                        idx: i,
+                        d: b64Chunk
+                    }));
+                    
+                    offset += FILE_CHUNK_SIZE;
+                    setFileProgress(Math.round(((i + 1) / totalChunks) * 100));
+                }
+
+                setFileProgress(0);
+                setMessages(prev => [...prev, { id: Date.now(), type: 'TX_FILE', text: `Sent: ${file.name}` }]);
+            };
+
+            // Render Logic
+            const renderHome = () => (
+                <div className="flex flex-col items-center justify-center min-h-screen p-6 space-y-8 animate-fade-in">
+                    <div className="text-center space-y-2">
+                        <div className="relative inline-block">
+                            <Icon name="ghost" size={64} className="text-cyan-400 mx-auto" />
+                            <div className="absolute top-0 right-0 w-3 h-3 bg-purple-500 rounded-full animate-ping"></div>
+                        </div>
+                        <h1 className="text-4xl font-bold tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-purple-500">
+                            ShadowLink
+                        </h1>
+                        <p className="text-slate-400 text-sm font-mono">Zero-Knowledge Kinetic Mesh</p>
                     </div>
 
-                    <div className="text-[10px] text-slate-600 font-mono fixed bottom-6">
-                        AES-256-GCM • RSA-2048 • ECDH-P256
+                    <div className="grid grid-cols-1 gap-4 w-full max-w-xs">
+                        <button onClick={startHost} className="group relative overflow-hidden p-6 rounded-2xl bg-slate-800 border border-slate-700 hover:border-cyan-500 transition-all text-left">
+                            <div className="absolute top-0 left-0 w-1 h-full bg-cyan-500 group-hover:w-full transition-all duration-300 opacity-20"></div>
+                            <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                                <Icon name="radio-tower" size={20} /> Host Room
+                            </h3>
+                            <p className="text-xs text-slate-400 mt-1">Create a secure signal.</p>
+                        </button>
+
+                        <button onClick={startJoin} className="group relative overflow-hidden p-6 rounded-2xl bg-slate-800 border border-slate-700 hover:border-purple-500 transition-all text-left">
+                            <div className="absolute top-0 left-0 w-1 h-full bg-purple-500 group-hover:w-full transition-all duration-300 opacity-20"></div>
+                            <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                                <Icon name="scan-line" size={20} /> Join Room
+                            </h3>
+                            <p className="text-xs text-slate-400 mt-1">Scan a signal to connect.</p>
+                        </button>
                     </div>
                 </div>
             );
 
-            if (view === 'host') return (
-                <div className="h-full flex flex-col items-center justify-center p-6">
-                    <h2 className="text-xl font-bold mb-6 text-center">Let Partner Scan This</h2>
-                    {offer ? <QRStream data={offer} label="Handshake Offer" /> : <div className="animate-spin w-12 h-12 border-4 border-cyan-500 rounded-full border-t-transparent"></div>}
-                    <button onClick={() => setView('scan_answer')} className="mt-8 px-8 py-3 bg-cyan-500 text-black font-bold rounded-full shadow-[0_0_20px_rgba(6,182,212,0.4)] animate-pulse-ring">
-                        Scan Reply
-                    </button>
-                    <button onClick={() => setView('home')} className="mt-4 text-slate-500 text-sm">Cancel</button>
-                </div>
-            );
+            const renderSignaling = () => {
+                const isScanner = view === 'SCAN_HOST' || view === 'SCAN_JOIN';
+                const isQR = view === 'HOST_WAIT' || view === 'JOIN_WAIT';
+                const title = view === 'HOST_WAIT' ? "Host Signal" : view === 'SCAN_HOST' ? "Scan Host" : view === 'SCAN_JOIN' ? "Scan Reply" : "Your Reply";
 
-            if (view === 'scan_offer' || view === 'scan_answer') return (
-                <QRScanner 
-                    onScan={view === 'scan_offer' ? handleScanOffer : handleScanAnswer} 
-                    onClose={() => setView('home')} 
-                />
-            );
+                return (
+                    <div className="flex flex-col h-screen p-4 items-center justify-center space-y-6 fade-in">
+                        <div className="w-full max-w-md glass-panel rounded-3xl p-6 relative">
+                            <button onClick={() => window.location.reload()} className="absolute top-4 left-4 p-2 bg-slate-800 rounded-full hover:bg-red-500/20 text-slate-400 hover:text-red-400 transition-all">
+                                <Icon name="x" size={16} />
+                            </button>
+                            
+                            <div className="text-center mb-6">
+                                <h2 className="text-2xl font-bold text-white mb-1">{title}</h2>
+                                <p className="text-xs text-cyan-400 font-mono">
+                                    {isScanner ? "Point camera at peer's screen" : "Show this to peer"}
+                                </p>
+                            </div>
 
-            if (view === 'show_answer') return (
-                <div className="h-full flex flex-col items-center justify-center p-6">
-                    <h2 className="text-xl font-bold mb-6 text-center">Show This To Host</h2>
-                    {offer ? <QRStream data={offer} label="Handshake Reply" /> : <div className="animate-spin w-12 h-12 border-4 border-purple-500 rounded-full border-t-transparent"></div>}
-                    <p className="mt-8 text-slate-400 text-sm animate-pulse">Waiting for connection...</p>
-                </div>
-            );
+                            <div className="flex justify-center min-h-[250px] items-center">
+                                {isQR && localSignal && (
+                                    <div className="space-y-4 w-full">
+                                        <QRAnimator data={localSignal} label="Signal Packet" />
+                                        {view === 'HOST_WAIT' && (
+                                            <button onClick={() => setView('SCAN_JOIN')} className="w-full py-4 bg-gradient-to-r from-purple-600 to-indigo-600 rounded-xl font-bold shadow-lg shadow-purple-900/40 flex items-center justify-center gap-2">
+                                                <Icon name="scan-eye" /> I've been Scanned
+                                            </button>
+                                        )}
+                                    </div>
+                                )}
+                                {isScanner && (
+                                    <div className="w-full space-y-4">
+                                        <QRScanner onScan={handleScannedChunk} />
+                                        {scanProgress > 0 && scanProgress < 100 && (
+                                            <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                                                <div className="h-full bg-green-500 transition-all" style={{width: `${scanProgress}%`}}></div>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                        <div className="font-mono text-[10px] text-slate-500 bg-black/50 px-4 py-2 rounded-lg">
+                            {logs[logs.length-1] || "Initializing..."}
+                        </div>
+                    </div>
+                );
+            };
 
-            if (view === 'connecting') return (
-                <div className="h-full flex flex-col items-center justify-center space-y-4">
-                    <div className="w-16 h-16 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin"></div>
-                    <h2 className="text-xl font-bold">Securing Tunnel...</h2>
-                    <p className="text-xs font-mono text-cyan-500">Diffie-Hellman Key Exchange</p>
-                </div>
-            );
-
-            if (view === 'chat') return (
-                <div className="flex flex-col h-full bg-[#020617] relative">
-                    {/* Header */}
-                    <div className="glass-panel p-4 flex items-center justify-between z-20">
-                        <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center">
-                                <Icon name="User" size={20} className="text-white" />
+            const renderChat = () => (
+                <div className="flex flex-col h-screen bg-[#0b141a]">
+                    <header className="px-4 py-3 bg-[#1f2c34] flex items-center justify-between shadow-md z-10">
+                        <div className="flex items-center gap-3 cursor-pointer" onClick={() => setShowVerify(true)}>
+                            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center text-white font-bold text-xl shadow-[0_0_15px_rgba(6,182,212,0.5)]">
+                                {fingerprint.current?.emoji.substring(0,2)}
                             </div>
                             <div>
-                                <h3 className="font-bold text-sm">Encrypted Peer</h3>
-                                <div className="flex items-center gap-1.5">
-                                    <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
-                                    <span className="text-[10px] text-slate-400 font-mono tracking-widest">{session?.fingerprint}</span>
-                                </div>
+                                <h2 className="font-bold text-slate-100 text-sm">Secure Peer</h2>
+                                <p className="text-[10px] text-emerald-400 font-mono tracking-wider flex items-center gap-1">
+                                    <Icon name="lock" size={10} /> AES-GCM-256
+                                </p>
                             </div>
                         </div>
-                        <button onClick={() => window.location.reload()} className="p-2 hover:bg-white/10 rounded-full">
-                            <Icon name="LogOut" size={20} className="text-red-400" />
+                        <button onClick={() => window.location.reload()} className="p-2 text-slate-400 hover:text-red-400">
+                            <Icon name="log-out" size={20} />
+                        </button>
+                    </header>
+
+                    <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')]">
+                        {messages.map((m) => (
+                            m.type === 'SYS' ? (
+                                <div key={m.id} className="msg-sys"><span className="sys-pill">{m.text}</span></div>
+                            ) : m.type === 'FILE' ? (
+                                <div key={m.id} className="flex justify-start">
+                                    <div className="msg-bubble msg-other shadow-sm text-sm border-l-4 border-purple-500">
+                                        <div className="flex items-center gap-3">
+                                            <div className="bg-purple-500/20 p-2 rounded-lg"><Icon name="file" size={24} className="text-purple-400" /></div>
+                                            <div>
+                                                <p className="font-bold text-slate-200">{m.text}</p>
+                                                <p className="text-[10px] text-slate-400">{Math.round(m.fileSize/1024)} KB • Encrypted</p>
+                                            </div>
+                                        </div>
+                                        <a href={m.fileUrl} download={m.text} className="mt-3 block w-full text-center py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-xs font-bold transition-colors">
+                                            Download
+                                        </a>
+                                    </div>
+                                </div>
+                            ) : m.type === 'TX_FILE' ? (
+                                <div key={m.id} className="flex justify-end">
+                                    <div className="msg-bubble msg-me shadow-sm text-sm opacity-80 italic">
+                                        <Icon name="file-check" size={14} className="inline mr-1" /> {m.text}
+                                    </div>
+                                </div>
+                            ) : (
+                                <div key={m.id} className={`flex ${m.type === 'TX' ? 'justify-end' : 'justify-start'}`}>
+                                    <div className={`msg-bubble ${m.type === 'TX' ? 'msg-me' : 'msg-other'} shadow-sm text-sm`}>
+                                        {m.text}
+                                        <div className="text-[9px] mt-1 opacity-60 text-right font-mono">
+                                            {new Date(m.id).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}
+                                        </div>
+                                    </div>
+                                </div>
+                            )
+                        ))}
+                    </div>
+
+                    {fileProgress > 0 && (
+                        <div className="h-1 bg-slate-800 w-full">
+                            <div className="h-full bg-purple-500 transition-all duration-100" style={{width: `${fileProgress}%`}}></div>
+                        </div>
+                    )}
+
+                    <div className="p-2 bg-[#1f2c34] flex items-center gap-2">
+                        <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileSelect} />
+                        <button onClick={() => fileInputRef.current?.click()} className="p-3 rounded-full text-slate-400 hover:bg-white/5 transition-colors">
+                            <Icon name="paperclip" size={20} />
+                        </button>
+                        <div className="flex-1 bg-[#2a3942] rounded-2xl flex items-center px-4 py-2">
+                            <input 
+                                value={msgText}
+                                onChange={e => setMsgText(e.target.value)}
+                                onKeyDown={e => e.key === 'Enter' && sendMessage()}
+                                type="text" placeholder="Message" className="bg-transparent border-none outline-none text-slate-200 w-full placeholder-slate-500 text-sm"
+                            />
+                        </div>
+                        <button onClick={sendMessage} className={`p-3 rounded-full transition-all ${msgText ? 'bg-cyan-600 text-white shadow-[0_0_15px_rgba(8,145,178,0.4)]' : 'bg-[#2a3942] text-slate-500'}`}>
+                            <Icon name="send-horizontal" size={20} />
                         </button>
                     </div>
 
-                    {/* Messages */}
-                    <div className="flex-1 overflow-y-auto p-4 space-y-4 no-scrollbar">
-                        <div className="text-center py-6">
-                            <Icon name="Lock" size={32} className="mx-auto text-slate-700 mb-2" />
-                            <p className="text-xs text-slate-600">Messages are end-to-end encrypted. No server in between.</p>
-                        </div>
-                        
-                        {chatHistory.map((msg, idx) => (
-                            <div key={idx} className={`flex ${msg.sender === 'me' ? 'justify-end' : 'justify-start'}`}>
-                                <div className={`max-w-[80%] p-3 ${msg.sender === 'me' ? 'bg-cyan-600 text-white chat-bubble-me' : 'glass-panel text-slate-200 chat-bubble-them'}`}>
-                                    {msg.type === 'text' && <p>{msg.text}</p>}
-                                    {msg.type === 'system' && <p className="text-xs opacity-70 italic">{msg.text}</p>}
-                                    {msg.type === 'file' && (
-                                        <div className="space-y-2">
-                                            <div className="flex items-center gap-2">
-                                                <Icon name="File" size={16} />
-                                                <span className="text-sm font-bold truncate max-w-[150px]">{msg.text}</span>
-                                            </div>
-                                            <div className="text-xs opacity-70">{(msg.size / 1024).toFixed(1)} KB</div>
-                                            <a href={msg.url} download={msg.text} className="block w-full text-center py-2 bg-black/20 rounded-lg text-xs font-bold hover:bg-black/40">
-                                                Download
-                                            </a>
-                                        </div>
-                                    )}
-                                    <span className="text-[10px] opacity-50 block text-right mt-1">{msg.time}</span>
-                                </div>
-                            </div>
-                        ))}
-                        <div ref={el => el && el.scrollIntoView({behavior:'smooth'})}></div>
-                    </div>
-
-                    {/* Input */}
-                    <div className="p-4 glass-panel pb-8">
-                        <div className="flex items-center gap-3 bg-slate-900/50 p-2 rounded-2xl border border-white/5">
-                            <label className="p-2 rounded-full hover:bg-white/10 cursor-pointer transition-colors text-cyan-400">
-                                <Icon name="Paperclip" size={20} />
-                                <input type="file" className="hidden" onChange={(e) => e.target.files[0] && sendFile(e.target.files[0])} />
-                            </label>
-                            <input 
-                                type="text" 
-                                value={message}
-                                onChange={(e) => setMessage(e.target.value)}
-                                onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
-                                placeholder="Message..." 
-                                className="flex-1 bg-transparent outline-none text-white text-sm placeholder-slate-500"
-                            />
-                            <button 
-                                onClick={sendMessage} 
-                                className={`p-2 rounded-full transition-all ${message.trim() ? 'bg-cyan-500 text-black shadow-[0_0_10px_rgba(6,182,212,0.5)]' : 'bg-slate-800 text-slate-500'}`}
-                            >
-                                <Icon name="Send" size={18} />
-                            </button>
-                        </div>
-                    </div>
+                    {showVerify && fingerprint.current && (
+                        <IdentityModal fingerprint={fingerprint.current} onClose={() => setShowVerify(false)} />
+                    )}
                 </div>
             );
+
+            if(view === 'HOME') return renderHome();
+            if(view === 'CHAT') return renderChat();
+            return renderSignaling();
         };
 
         const root = ReactDOM.createRoot(document.getElementById('root'));
