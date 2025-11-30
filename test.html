@@ -3,36 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Crypton Secure</title>
+    <title>Crypton</title>
     
-    <!-- SECURITY HEADERS -->
-    <meta http-equiv="Content-Security-Policy" content="
-        default-src 'self';
-        script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com https://cdnjs.cloudflare.com https://cdn.jsdelivr.net;
-        style-src 'self' 'unsafe-inline' https://unpkg.com https://fonts.googleapis.com;
-        font-src https://fonts.gstatic.com;
-        img-src 'self' data: blob:;
-        connect-src 'self';
-        media-src 'self' blob:;
-        object-src 'none';
-        base-uri 'none';
-        form-action 'none';
-        frame-ancestors 'none';
-    ">
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>    
+    <!-- <script src="https://cdn.tailwindcss.com"></script> -->
+    <script src="https://unpkg.com/@tailwindcss/browser@4"></script>
     
-    <meta http-equiv="Permissions-Policy" content="camera=(self), microphone=(), geolocation=(), payment=(), usb=(), magnetometer=(), accelerometer=()">
-    <meta http-equiv="X-Content-Type-Options" content="nosniff">
-    <meta name="referrer" content="strict-origin-when-cross-origin">
-
-    <!-- DEPENDENCIES -->
-    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js" crossorigin></script> 
-    <script src="https://unpkg.com/@tailwindcss/browser@4" crossorigin></script>
-    
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js" crossorigin="anonymous"></script>
-
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@400;600;800&display=swap');
         
@@ -89,7 +69,6 @@
         .scan-line {
             width: 100%; height: 2px; background: #06b6d4; position: absolute;
             animation: scan 2s linear infinite; box-shadow: 0 0 15px #06b6d4;
-            z-index: 10;
         }
         .darth-scan-line { background: #ef4444 !important; box-shadow: 0 0 15px #ef4444 !important; }
         
@@ -118,22 +97,13 @@
 <body class="matrix-bg selection:bg-cyan-500 selection:text-white">
     <div id="root"></div>
     <script type="text/babel">
-        const { useState, useEffect, useRef, useMemo, useCallback } = React;
+        const { useState, useEffect, useRef, useMemo } = React;
         
-        // --- SECURITY CONFIG ---
-        const SEC_CONFIG = {
-            VERSION: '2.5-SECURE-FIXED',
-            QR_CHUNK_SIZE: 300, 
-            MAX_PAYLOAD_SIZE: 4096,
-            SESSION_TTL_MS: 1000 * 60 * 60,
-            HANDSHAKE_WINDOW_MS: 1000 * 60 * 5, 
-            DEFAULT_QR_FPS: 200,
-            VIDEO_CONSTRAINTS: {
-                facingMode: "environment",
-                // IMPORTANT: Increased resolution to handle dense RSA+ECDH keys
-                width: { ideal: 1280 }, 
-                height: { ideal: 720 }
-            }
+        // --- CONSTANTS & CONFIG ---
+        const PROTOCOL = {
+            VERSION: '2.4',
+            QR_CHUNK_SIZE: 350,
+            DEFAULT_QR_FPS: 200
         };
 
         // --- ICONS ---
@@ -159,13 +129,6 @@
         // --- CRYPTO UTILS ---
         const buf2hex = (buf) => [...new Uint8Array(buf)].map(x => x.toString(16).padStart(2, '0')).join('');
         const hex2buf = (hex) => new Uint8Array(hex.match(/.{1,2}/g).map(byte => parseInt(byte, 16))).buffer;
-        
-        const generateNonce = (length = 16) => {
-            const arr = new Uint8Array(length);
-            window.crypto.getRandomValues(arr);
-            return buf2hex(arr);
-        };
-
         const generateFingerprint = async (buffer) => {
             const hash = await window.crypto.subtle.digest('SHA-256', buffer);
             const arr = new Uint8Array(hash);
@@ -176,39 +139,13 @@
             return { emoji: em, hex: hex, full: buf2hex(hash) };
         };
 
-        const safeParsePayload = (jsonString) => {
-            if (typeof jsonString !== 'string') return null;
-            if (jsonString.length > SEC_CONFIG.MAX_PAYLOAD_SIZE) return null;
-            
-            try {
-                const p = JSON.parse(jsonString);
-                const allowedTypes = ["ID", "HSH", "MSG"];
-                
-                if (p.iv && p.d && p.ts) return p; 
-                if (!allowedTypes.includes(p.t)) return null;
-                
-                const now = Date.now();
-                // If checking old packets, loosen this for debugging or remove
-                if (p.ts && (Math.abs(now - p.ts) > SEC_CONFIG.HANDSHAKE_WINDOW_MS)) {
-                    // console.warn("Packet expired");
-                    // return null; // Un-comment for strict security
-                }
-                
-                return p;
-            } catch (e) {
-                return null;
-            }
-        };
-
         // --- COMPONENTS ---
 
         const QRDisplay = ({ data, label, subLabel, color="black" }) => {
             const canvasRef = useRef(null);
             useEffect(() => {
                 if (canvasRef.current && data) {
-                    try {
-                        new QRious({ element: canvasRef.current, value: data, size: 256, level: 'L', foreground: 'black', background: 'white' });
-                    } catch(e) { console.error("QR Gen Error", e); }
+                    new QRious({ element: canvasRef.current, value: data, size: 256, level: 'L', foreground: 'black', background: 'white' });
                 }
             }, [data, color]);
             return (
@@ -226,7 +163,7 @@
 
         const AnimatedQR = ({ chunks, label, onClose, theme="cyan" }) => {
             const [index, setIndex] = useState(0);
-            const [speed, setSpeed] = useState(SEC_CONFIG.DEFAULT_QR_FPS);
+            const [speed, setSpeed] = useState(PROTOCOL.DEFAULT_QR_FPS);
             const [isPaused, setIsPaused] = useState(false);
             const isMultiChunk = chunks.length > 1;
             
@@ -239,6 +176,7 @@
             }, [chunks, speed, isPaused, isMultiChunk]);
 
             const btnClass = theme === "red" ? "bg-red-600 hover:bg-red-500" : "bg-cyan-600 hover:bg-cyan-500";
+            const accentText = theme === "red" ? "text-red-500" : "text-cyan-500";
 
             return (
                 <div className="fixed inset-0 z-[100] bg-slate-950/95 backdrop-blur-sm flex flex-col items-center justify-center p-6 anim-enter">
@@ -249,6 +187,7 @@
                             subLabel={isMultiChunk ? `Part ${index+1}/${chunks.length}` : 'Single Block'} 
                         />
                         
+                        {/* Only show controls if there are multiple chunks */}
                         {isMultiChunk && (
                             <div className="mt-6 bg-white/5 p-4 rounded-2xl border border-white/10 space-y-4 anim-enter">
                                 <div className="flex items-center gap-3">
@@ -286,96 +225,39 @@
         const QRScanner = ({ onScan, onClose, isDarth }) => {
             const videoRef = useRef(null);
             const canvasRef = useRef(null);
-            const overlayRef = useRef(null); // New Canvas for drawing bounding box
             const [error, setError] = useState(null);
-            
-            const onScanRef = useRef(onScan);
-            useEffect(() => { onScanRef.current = onScan; }, [onScan]);
 
             useEffect(() => {
-                let stream = null;
-                let animFrameId = null;
-
-                const startCamera = async () => {
-                    try {
-                        stream = await navigator.mediaDevices.getUserMedia({ 
-                            video: SEC_CONFIG.VIDEO_CONSTRAINTS 
-                        });
-                        
+                let stream;
+                let animFrame;
+                navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+                    .then(s => {
+                        stream = s;
                         if(videoRef.current) {
-                            videoRef.current.srcObject = stream;
-                            // Wait for video to be ready to play
-                            videoRef.current.onloadedmetadata = async () => {
-                                await videoRef.current.play();
-                                requestAnimationFrame(tick);
-                            };
+                            videoRef.current.srcObject = s;
+                            videoRef.current.play();
+                            requestAnimationFrame(tick);
                         }
-                    } catch (err) {
-                        console.error(err);
-                        setError("Camera unavailable. Ensure permission is granted and no other app is using it.");
-                    }
-                };
+                    })
+                    .catch(err => setError("Camera access denied."));
 
                 const tick = () => {
                     if (videoRef.current && videoRef.current.readyState === 4) {
                         const cvs = canvasRef.current;
-                        const ovl = overlayRef.current;
                         const vid = videoRef.current;
-                        
-                        if(cvs && vid && ovl && vid.videoWidth > 0 && vid.videoHeight > 0) {
-                            // Setup dimensions
-                            if (cvs.width !== vid.videoWidth) {
-                                cvs.width = vid.videoWidth;
-                                cvs.height = vid.videoHeight;
-                                ovl.width = vid.videoWidth;
-                                ovl.height = vid.videoHeight;
-                            }
-
-                            const ctx = cvs.getContext("2d", {willReadFrequently: true});
-                            const ovlCtx = ovl.getContext("2d");
-                            
-                            // Draw video to hidden canvas for analysis
-                            ctx.drawImage(vid, 0, 0);
-                            
-                            try {
-                                const img = ctx.getImageData(0, 0, cvs.width, cvs.height);
-                                const code = jsQR(img.data, img.width, img.height, { inversionAttempts: "dontInvert" });
-                                
-                                // Clear overlay
-                                ovlCtx.clearRect(0, 0, ovl.width, ovl.height);
-
-                                if (code) {
-                                    // Visual Feedback: Draw bounding box
-                                    const loc = code.location;
-                                    ovlCtx.beginPath();
-                                    ovlCtx.moveTo(loc.topLeftCorner.x, loc.topLeftCorner.y);
-                                    ovlCtx.lineTo(loc.topRightCorner.x, loc.topRightCorner.y);
-                                    ovlCtx.lineTo(loc.bottomRightCorner.x, loc.bottomRightCorner.y);
-                                    ovlCtx.lineTo(loc.bottomLeftCorner.x, loc.bottomLeftCorner.y);
-                                    ovlCtx.lineTo(loc.topLeftCorner.x, loc.topLeftCorner.y);
-                                    ovlCtx.lineWidth = 4;
-                                    ovlCtx.strokeStyle = "#00ff00";
-                                    ovlCtx.stroke();
-
-                                    if (onScanRef.current) {
-                                        onScanRef.current(code.data);
-                                    }
-                                }
-                            } catch (e) {
-                                // Ignore frame errors
-                            }
-                        }
+                        cvs.width = vid.videoWidth;
+                        cvs.height = vid.videoHeight;
+                        const ctx = cvs.getContext("2d", {willReadFrequently: true});
+                        ctx.drawImage(vid, 0, 0);
+                        const img = ctx.getImageData(0, 0, cvs.width, cvs.height);
+                        const code = jsQR(img.data, img.width, img.height);
+                        if (code) onScan(code.data);
                     }
-                    animFrameId = requestAnimationFrame(tick);
+                    animFrame = requestAnimationFrame(tick);
                 };
-
-                startCamera();
-
                 return () => {
-                    if (animFrameId) cancelAnimationFrame(animFrameId);
-                    if (stream) {
-                        stream.getTracks().forEach(t => t.stop());
-                    }
+                    if(stream) stream.getTracks().forEach(t => t.stop());
+                    cancelAnimationFrame(animFrame);
                 };
             }, []);
 
@@ -389,9 +271,7 @@
                     ) : (
                         <div className={`relative w-full max-w-sm aspect-square bg-slate-900 rounded-[2rem] overflow-hidden border-4 shadow-2xl transition-colors duration-300 ${isDarth ? 'border-red-600 shadow-red-900/40' : 'border-cyan-500 shadow-cyan-900/40'}`}>
                             <video ref={videoRef} className="absolute inset-0 w-full h-full object-cover" playsInline muted />
-                            <canvas ref={canvasRef} className="hidden" /> {/* Hidden calculation canvas */}
-                            <canvas ref={overlayRef} className="absolute inset-0 w-full h-full object-cover" /> {/* Visible overlay canvas */}
-                            
+                            <canvas ref={canvasRef} className="hidden" />
                             <div className={`scan-line ${isDarth ? 'darth-scan-line' : ''}`}></div>
                             
                             <div className="absolute inset-0 border-[30px] border-black/30 rounded-[2rem] pointer-events-none"></div>
@@ -414,94 +294,56 @@
         const App = () => {
             const [mode, setMode] = useState('NORMAL');
             const [activeTab, setActiveTab] = useState('CONNECT');
-            
-            // Session State
             const [keys, setKeys] = useState(null);
-            const [myNonce, setMyNonce] = useState(null);
             const [identityPayload, setIdentityPayload] = useState(null);
             const [handshakeReply, setHandshakeReply] = useState(null);
             const [sessionKey, setSessionKey] = useState(null);
-            const [sessionStart, setSessionStart] = useState(null);
             const [fingerprint, setFingerprint] = useState(null);
-            
-            // Timer State
-            const [timeLeft, setTimeLeft] = useState(Math.floor(SEC_CONFIG.HANDSHAKE_WINDOW_MS / 1000));
-            
-            // UI State
             const [scanner, setScanner] = useState(null);
             const [chat, setChat] = useState([]);
             const [msg, setMsg] = useState("");
             const [fileTransfer, setFileTransfer] = useState(null);
             const [interceptedPacket, setInterceptedPacket] = useState(null);
             const [showPill, setShowPill] = useState(true);
+            const [showWave, setShowWave] = useState(false);
 
-            const lastScanRef = useRef({ data: "", time: 0 });
-            const processingRef = useRef(false); // New: Prevents double-processing async scans
+            const lastScanRef = useRef("");
             const chatEndRef = useRef(null);
             const lastScrollY = useRef(0);
             
             useEffect(() => {
-                if (scanner) {
-                    lastScanRef.current = { data: "", time: 0 };
-                    processingRef.current = false;
-                }
+                if (scanner) lastScanRef.current = "";
             }, [scanner]);
             
             useEffect(() => {
                 chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
             }, [chat]);
 
-            // Session TTL Check
+            // Reset wave frame when switching tabs
             useEffect(() => {
-                const checkSession = setInterval(() => {
-                    if (sessionKey && sessionStart) {
-                        if (Date.now() - sessionStart > SEC_CONFIG.SESSION_TTL_MS) {
-                            alert("Session Expired for Security.");
-                            setSessionKey(null);
-                            setFingerprint(null);
-                            setChat([]);
-                        }
-                    }
-                }, 30000);
-                return () => clearInterval(checkSession);
-            }, [sessionKey, sessionStart]);
-
-            // Handshake Timer (Auto-Regenerate ID)
-            useEffect(() => {
-                let interval;
-                if (activeTab === 'CONNECT' && !sessionKey && mode === 'NORMAL') {
-                    interval = setInterval(() => {
-                        setTimeLeft((prev) => {
-                            if (prev <= 1) {
-                                genKeys(); // Time up: Regenerate identity
-                                return Math.floor(SEC_CONFIG.HANDSHAKE_WINDOW_MS / 1000);
-                            }
-                            return prev - 1;
-                        });
-                    }, 1000);
+                if(activeTab !== 'FILES') {
+                    setShowWave(false);
                 }
-                return () => clearInterval(interval);
-            }, [activeTab, sessionKey, mode]);
-
-            const formatTime = (seconds) => {
-                const m = Math.floor(seconds / 60);
-                const s = seconds % 60;
-                return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-            };
+            }, [activeTab]);
 
             const handleScroll = (e) => {
                 const currentScrollY = e.target.scrollTop;
-                if (currentScrollY < 10) setShowPill(true);
-                else if (currentScrollY > lastScrollY.current) setShowPill(false);
-                else setShowPill(true);
+                
+                if (currentScrollY < 10) {
+                    // Always show at top
+                    setShowPill(true);
+                } else if (currentScrollY > lastScrollY.current) {
+                    // Scrolling Down -> Hide
+                    setShowPill(false);
+                } else {
+                    // Scrolling Up -> Show
+                    setShowPill(true);
+                }
                 lastScrollY.current = currentScrollY;
             };
 
-            const genKeys = useCallback(async () => {
-                setKeys(null); setSessionKey(null); setFingerprint(null); setChat([]); setHandshakeReply(null); setIdentityPayload(null);
-                setTimeLeft(Math.floor(SEC_CONFIG.HANDSHAKE_WINDOW_MS / 1000));
-                
-                // Generate all keys AT ONCE to avoid race conditions with display
+            const genKeys = async () => {
+                setKeys(null); setSessionKey(null); setFingerprint(null); setChat([]);
                 const rsa = await window.crypto.subtle.generateKey(
                     { name: "RSA-OAEP", modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: "SHA-256" },
                     true, ["encrypt", "decrypt"]
@@ -510,196 +352,107 @@
                     { name: "ECDH", namedCurve: "P-256" },
                     true, ["deriveKey", "deriveBits"]
                 );
-                
-                const nonce = generateNonce(16);
-                setMyNonce(nonce);
                 setKeys({ rsa, ecdh });
-                
                 const rsaExp = await window.crypto.subtle.exportKey("spki", rsa.publicKey);
                 const rsaStr = btoa(String.fromCharCode(...new Uint8Array(rsaExp)));
                 const myFp = await generateFingerprint(rsaExp);
-                
-                const ecdhExp = await window.crypto.subtle.exportKey("raw", ecdh.publicKey);
-
-                // Set full payload immediately
                 setIdentityPayload({
                     t: "ID",
                     k: rsaStr,
-                    fp: myFp.hex,
-                    n: nonce,
-                    ts: Date.now(),
-                    ek: buf2hex(ecdhExp) // Include ECDH key immediately
+                    fp: myFp.hex
                 });
-            }, []);
+            };
+            useEffect(() => { genKeys(); }, []);
             
-            useEffect(() => { genKeys(); }, [genKeys]);
-            
-            const handleScan = useCallback(async (raw) => {
-                // Rate Limiting & Processing Lock
-                const now = Date.now();
-                if (processingRef.current) return; // Prevent overlapping processing
-                if (raw === lastScanRef.current.data && (now - lastScanRef.current.time < 2000)) return;
-                
-                lastScanRef.current = { data: raw, time: now };
-
+            const handleScan = async (raw) => {
+                if (raw === lastScanRef.current) return;
+                lastScanRef.current = raw;
                 if (mode === 'DARTH') {
                     setScanner(null);
                     setInterceptedPacket({ raw, time: new Date().toLocaleTimeString() });
                     return;
                 }
-
                 try {
-                    processingRef.current = true; // Lock
-                    const p = safeParsePayload(raw);
-                    
-                    if (!p) {
-                         processingRef.current = false;
-                         return;
-                    }
-
-                    // --- STEP 1: SCANNING ID (INITIATOR) ---
+                    const p = JSON.parse(raw);
                     if (p.t === "ID") {
-                        if (!p.ek) throw new Error("Partner missing ECDH key");
-
                         const kData = Uint8Array.from(atob(p.k), c => c.charCodeAt(0));
                         const partnerRsa = await window.crypto.subtle.importKey(
                             "spki", kData, { name: "RSA-OAEP", hash: "SHA-256" }, true, ["encrypt"]
                         );
-                        
                         const myEcdhRaw = await window.crypto.subtle.exportKey("raw", keys.ecdh.publicKey);
                         const encEcdh = await window.crypto.subtle.encrypt(
                             { name: "RSA-OAEP" }, partnerRsa, myEcdhRaw
                         );
-                        
-                        // Reply
-                        const reply = { 
-                            t: "HSH", 
-                            d: buf2hex(encEcdh),
-                            n: myNonce,
-                            pn: p.n,
-                            ts: Date.now()
-                        };
-                        
-                        const partnerEcdhRaw = hex2buf(p.ek);
-                        const partnerEcdhKey = await window.crypto.subtle.importKey(
-                            "raw", partnerEcdhRaw, { name: "ECDH", namedCurve: "P-256" }, true, []
-                        );
-                        
-                        const saltBuffer = new TextEncoder().encode(p.n + myNonce);
-                        const saltHash = await window.crypto.subtle.digest('SHA-256', saltBuffer);
-
-                        const sharedBits = await window.crypto.subtle.deriveBits(
-                            { name: "ECDH", public: partnerEcdhKey },
-                            keys.ecdh.privateKey, 256
-                        );
-                        
-                        const hkdfKey = await window.crypto.subtle.importKey(
-                            "raw", sharedBits, { name: "HKDF" }, false, ["deriveKey"]
-                        );
-                        
-                        const sessionKey = await window.crypto.subtle.deriveKey(
-                            {
-                                name: "HKDF", hash: "SHA-256",
-                                salt: new Uint8Array(saltHash),
-                                info: new TextEncoder().encode("Crypton_v2.5_Secure_Session")
-                            },
-                            hkdfKey, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]
-                        );
-                        
-                        setSessionKey(sessionKey);
-                        setSessionStart(Date.now());
-                        setFingerprint(await generateFingerprint(sharedBits));
+                        const reply = { t: "HSH", d: buf2hex(encEcdh) };
                         setHandshakeReply(JSON.stringify(reply));
                         setScanner(null);
-                        
-                    } else if (p.t === "HSH") {
-                        // --- STEP 2: ID HOLDER SCANS REPLY ---
+                        alert(`Partner Identity Scanned!\nFingerprint: ${p.fp}\n\nVerify this matches their screen!`);
+                    }
+                    else if (p.t === "HSH") {
                         if (!keys) return;
                         const encBuf = hex2buf(p.d);
-                        
                         const partnerEcdhRaw = await window.crypto.subtle.decrypt(
                             { name: "RSA-OAEP" }, keys.rsa.privateKey, encBuf
                         );
-                        
                         const partnerEcdhKey = await window.crypto.subtle.importKey(
                             "raw", partnerEcdhRaw, { name: "ECDH", namedCurve: "P-256" }, true, []
                         );
-                        
-                        const saltBuffer = new TextEncoder().encode(myNonce + p.n);
-                        const saltHash = await window.crypto.subtle.digest('SHA-256', saltBuffer);
-
                         const sharedBits = await window.crypto.subtle.deriveBits(
                             { name: "ECDH", public: partnerEcdhKey },
-                            keys.ecdh.privateKey, 256
+                            keys.ecdh.privateKey,
+                            256
                         );
-                        
                         const hkdfKey = await window.crypto.subtle.importKey(
                             "raw", sharedBits, { name: "HKDF" }, false, ["deriveKey"]
                         );
-                        
                         const sessionKey = await window.crypto.subtle.deriveKey(
                             {
-                                name: "HKDF", hash: "SHA-256",
-                                salt: new Uint8Array(saltHash),
-                                info: new TextEncoder().encode("Crypton_v2.5_Secure_Session")
+                                name: "HKDF",
+                                hash: "SHA-256",
+                                salt: new Uint8Array(),
+                                info: new TextEncoder().encode("GibberLinkv2_Session")
                             },
-                            hkdfKey, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]
+                            hkdfKey,
+                            { name: "AES-GCM", length: 256 },
+                            false,
+                            ["encrypt", "decrypt"]
                         );
-                        
                         const fp = await generateFingerprint(sharedBits);
                         setSessionKey(sessionKey);
-                        setSessionStart(Date.now());
                         setFingerprint(fp);
                         setScanner(null);
                         setActiveTab('VERIFY');
                         alert("Handshake Complete. Secure Tunnel Established.");
-                        
-                    } else if (p.iv && p.d && p.ts) {
-                        // --- STEP 3: CHAT MESSAGE ---
+                    }
+                    else if (p.iv) {
                         if (!sessionKey) throw new Error("No secure session.");
-                        
                         const iv = hex2buf(p.iv);
                         const ct = hex2buf(p.d);
-                        const additionalData = new TextEncoder().encode(String(p.ts));
-                        
                         const pt = await window.crypto.subtle.decrypt(
-                            { name: "AES-GCM", iv, additionalData }, sessionKey, ct
+                            { name: "AES-GCM", iv }, sessionKey, ct
                         );
-                        
                         const text = new TextDecoder().decode(pt);
                         setChat(prev => [...prev, { from: 'Partner', text }]);
                         setScanner(null);
                         setActiveTab('CHAT');
                     }
                 } catch (e) {
-                    console.error("Scan/Crypto Error:", e);
-                    // Don't alert on every frame, only major failures if needed
-                    // alert("Scan Failed. Try moving closer/further.");
-                } finally {
-                    processingRef.current = false;
+                    console.error(e);
+                    alert("Scan Error or Decryption Failed.");
                 }
-            }, [keys, myNonce, mode, sessionKey]);
+            };
 
             const sendMessage = async () => {
                 if (!msg || !sessionKey) return;
                 const iv = window.crypto.getRandomValues(new Uint8Array(12));
-                const ts = Date.now();
-                const additionalData = new TextEncoder().encode(String(ts));
-                
                 const enc = await window.crypto.subtle.encrypt(
-                    { name: "AES-GCM", iv, additionalData }, sessionKey, new TextEncoder().encode(msg)
+                    { name: "AES-GCM", iv }, sessionKey, new TextEncoder().encode(msg)
                 );
-                
-                const packet = { 
-                    iv: buf2hex(iv), 
-                    d: buf2hex(enc), 
-                    ts: ts 
-                };
-                
+                const packet = { iv: buf2hex(iv), d: buf2hex(enc) };
                 const json = JSON.stringify(packet);
                 // Chunk if necessary
-                const chunks = json.length > SEC_CONFIG.QR_CHUNK_SIZE ? 
-                    json.match(new RegExp(`.{1,${SEC_CONFIG.QR_CHUNK_SIZE}}`, 'g')) : [json];
+                const chunks = json.length > PROTOCOL.QR_CHUNK_SIZE ? 
+                    json.match(new RegExp(`.{1,${PROTOCOL.QR_CHUNK_SIZE}}`, 'g')) : [json];
                 setFileTransfer({ chunks, label: "Encrypted Message" });
                 setChat(prev => [...prev, { from: 'Me', text: msg, isTyping: true }]);
                 setMsg("");
@@ -710,19 +463,14 @@
 
             const darthTamper = () => {
                 if (!interceptedPacket) return;
+                let badRaw = interceptedPacket.raw.replace(/[a-fA-F0-9]/, "X");
                 try {
                     const p = JSON.parse(interceptedPacket.raw);
-                    if (p.d) {
-                        const lastChar = p.d.slice(-1);
-                        const newChar = lastChar === "A" ? "B" : "A";
-                        p.d = p.d.slice(0, -1) + newChar;
-                    }
-                    const badRaw = JSON.stringify(p);
-                    const id = Math.random().toString(36).substr(2,5);
-                    setFileTransfer({ chunks: [badRaw], label: `Tampered Packet #${id}`, theme: "red" });
-                } catch(e) {
-                    alert("Packet Format Unknown");
-                }
+                    if (p.d) p.d = p.d.replace(/^../, "FF");
+                    badRaw = JSON.stringify(p);
+                } catch(e) {}
+                const id = Math.random().toString(36).substr(2,5);
+                setFileTransfer({ chunks: [badRaw], label: `Tampered Packet #${id}`, theme: "red" });
             };
 
             // UI HELPERS
@@ -730,11 +478,13 @@
                 setMode(mode === 'NORMAL' ? 'DARTH' : 'NORMAL');
                 setScanner(null);
                 setInterceptedPacket(null);
-                if(mode === 'NORMAL') setActiveTab('DARTH'); 
+                if(mode === 'NORMAL') setActiveTab('DARTH'); // Switch tab context visually
                 else setActiveTab('CONNECT');
             };
 
+            // COLORS
             const themeColor = mode === 'DARTH' ? 'red' : 'cyan';
+            const bgClass = mode === 'DARTH' ? 'bg-red-500' : 'bg-cyan-500';
             const textClass = mode === 'DARTH' ? 'text-red-400' : 'text-cyan-400';
             const borderClass = mode === 'DARTH' ? 'border-red-500' : 'border-cyan-500';
 
@@ -750,7 +500,7 @@
                             <div>
                                 <h1 className="font-bold text-lg leading-none tracking-tight">Crypton</h1>
                                 <span className={`text-[10px] font-bold tracking-widest ${textClass} opacity-80`}>
-                                    {mode==='DARTH' ? 'INTERCEPTOR ACTIVE' : 'SECURE CHANNEL v2.5'}
+                                    {mode==='DARTH' ? 'INTERCEPTOR ACTIVE' : 'SECURE CHANNEL v2.4'}
                                 </span>
                             </div>
                         </div>
@@ -776,15 +526,10 @@
                                             {identityPayload && (
                                                 <QRDisplay 
                                                     data={JSON.stringify(identityPayload)} 
-                                                    label="MY RSA+ECDH IDENTITY" 
+                                                    label="MY RSA IDENTITY" 
                                                     subLabel={identityPayload.fp} 
                                                 />
                                             )}
-                                        </div>
-                                        
-                                        {/* Timer Display */}
-                                        <div className="text-xs font-mono text-slate-500">
-                                            Keys auto-regenerate in <span className="text-cyan-400 font-bold">{formatTime(timeLeft)}</span>
                                         </div>
                                     </div>
 
@@ -844,7 +589,6 @@
                                             <div className="text-center py-20 opacity-30">
                                                 <Icon p={icons.shield} size={64} className="mx-auto mb-4"/>
                                                 <p>History is never stored.</p>
-                                                <p className="text-xs mt-2 font-mono">Session TTL: 60m</p>
                                             </div>
                                         )}
                                         {chat.map((c, i) => (
@@ -878,19 +622,28 @@
                             {/* TAB: FILES */}
                             {mode === 'NORMAL' && activeTab === 'FILES' && (
                                 <div className="h-full w-full anim-enter flex flex-col justify-center">
-                                    <div className="glass-panel p-8 rounded-[2.5rem] text-center space-y-6 shadow-2xl max-w-md mx-auto w-full">
-                                        <div className="w-20 h-20 mx-auto rounded-full flex items-center justify-center text-3xl shadow-lg bg-cyan-900/50 text-cyan-200">
-                                            <Icon p={icons.file} size={36} />
+                                    {!showWave ? (
+                                        <div className="glass-panel p-8 rounded-[2.5rem] text-center space-y-6 shadow-2xl max-w-md mx-auto w-full">
+                                            <div className="w-20 h-20 mx-auto rounded-full flex items-center justify-center text-3xl shadow-lg bg-cyan-900/50 text-cyan-200">
+                                                <Icon p={icons.file} size={36} />
+                                            </div>
+                                            <div>
+                                                <h2 className="text-2xl font-bold mb-2">Wave-Share</h2>
+                                                <p className="text-xs text-slate-400">Encrypted P2P Transfer</p>
+                                            </div>
+                                            <div className="border-2 border-dashed border-white/10 rounded-2xl p-8 flex flex-col items-center gap-4">
+                                                <button onClick={() => setShowWave(true)} className="px-6 py-2 bg-slate-800 rounded-full text-xs font-bold hover:bg-slate-700 transition-colors">Launch</button>
+                                            </div>
                                         </div>
-                                        <div>
-                                            <h2 className="text-2xl font-bold mb-2">Wave-Share</h2>
-                                            <p className="text-xs text-slate-400">Encrypted P2P Transfer</p>
+                                    ) : (
+                                        <div className="w-full h-full flex flex-col relative rounded-3xl overflow-hidden border border-white/10 shadow-2xl bg-black">
+                                            <div className="bg-slate-900/80 backdrop-blur p-2 flex justify-between items-center border-b border-white/5">
+                                                <span className="text-xs font-bold text-slate-400 ml-2">WAVE SHARE PROTOCOL</span>
+                                                <button onClick={() => setShowWave(false)} className="px-3 py-1 bg-red-500/20 text-red-400 text-xs rounded-full hover:bg-red-500/30 transition-colors">CLOSE</button>
+                                            </div>
+                                            <iframe src="wave.html" className="w-full flex-1 bg-white/5" frameBorder="0" title="Wave Share"></iframe>
                                         </div>
-                                        <div className="border-2 border-dashed border-white/10 rounded-2xl p-8 flex flex-col items-center gap-4 bg-black/20">
-                                            <p className="text-xs text-slate-500">Feature disabled in Secure Mode v2.5</p>
-                                            <p className="text-[10px] text-slate-600">Requires strict CSP blob: permission audit.</p>
-                                        </div>
-                                    </div>
+                                    )}
                                 </div>
                             )}
 
@@ -921,7 +674,7 @@
                                         )}
                                     </div>
                                     <p className="text-center text-xs text-red-500/30 max-w-xs mx-auto">
-                                        Tampered packets will fail GCM auth tags on receiver. The timestamp in AAD prevents replays.
+                                        DARTH mode simulates MITM attacks. Tampered packets will fail GCM auth tags on receiver devices.
                                     </p>
                                 </div>
                             )}
