@@ -97,7 +97,7 @@
        
         // --- CONSTANTS & CONFIG ---
         const PROTOCOL = {
-            VERSION: '2.7-PERSISTENT',
+            VERSION: '2.8-FIXED',
             QR_CHUNK_SIZE: 1000, 
             DEFAULT_QR_FPS: 200,
             MAX_PACKET_SIZE: 5000,
@@ -502,12 +502,18 @@
                 setKeys({ rsa, ecdh });
                 const rsaExp = await window.crypto.subtle.exportKey("spki", rsa.publicKey);
                 const rsaStr = btoa(String.fromCharCode(...new Uint8Array(rsaExp)));
+                
+                // Security Fix: Export ECDH Public Key so responder can derive session key
+                const ecdhExp = await window.crypto.subtle.exportKey("raw", ecdh.publicKey);
+                const ecdhStr = btoa(String.fromCharCode(...new Uint8Array(ecdhExp)));
+
                 const myFp = await generateFingerprint(rsaExp);
                 const nonce = buf2hex(window.crypto.getRandomValues(new Uint8Array(12)));
                 
                 const payload = JSON.stringify({
                     t: "ID",
                     k: rsaStr,
+                    ek: ecdhStr, // Added: ECDH Public Key
                     fp: myFp.hex,
                     n: nonce,
                     ts: Date.now()
@@ -560,14 +566,9 @@
                     const p = JSON.parse(fullData);
 
                     // --- REPLAY PROTECTION (PERSISTENT) ---
-                    // Check 'n' for ID packets, 'iv' for Message/IV packets
-                    // Handshake replies are unique by session flow usually, but we check 's' (salt) or 'd' hash if needed.
-                    // Here we check based on packet type logic.
-                    
                     let uniqueId = null;
                     if (p.t === "ID") uniqueId = p.n;
                     else if (p.iv) uniqueId = p.iv; 
-                    // Note: HSH packets rely on cryptographic freshness of the session key derivation + ts window + salt uniqueness
                     
                     if (uniqueId) {
                         const isFresh = await replayDB.checkAndStore(uniqueId, PROTOCOL.TS_WINDOW);
@@ -584,11 +585,48 @@
                         const partnerRsa = await window.crypto.subtle.importKey(
                             "spki", kData, { name: "RSA-OAEP", hash: "SHA-256" }, true, ["encrypt"]
                         );
+                        
+                        // Protocol Fix: Import Partner's ECDH Key
+                        const ekData = Uint8Array.from(atob(p.ek), c => c.charCodeAt(0));
+                        const partnerEcdhKey = await window.crypto.subtle.importKey(
+                            "raw", ekData, { name: "ECDH", namedCurve: "P-256" }, true, []
+                        );
+
                         const myEcdhRaw = await window.crypto.subtle.exportKey("raw", keys.ecdh.publicKey);
                         const encEcdh = await window.crypto.subtle.encrypt(
                             { name: "RSA-OAEP" }, partnerRsa, myEcdhRaw
                         );
+                        
+                        // Protocol Fix: Derive Session Key on Responder Side
+                        const sharedBits = await window.crypto.subtle.deriveBits(
+                            { name: "ECDH", public: partnerEcdhKey },
+                            keys.ecdh.privateKey,
+                            256
+                        );
+
                         const salt = window.crypto.getRandomValues(new Uint8Array(16));
+                        
+                        const hkdfKey = await window.crypto.subtle.importKey(
+                            "raw", sharedBits, { name: "HKDF" }, false, ["deriveKey"]
+                        );
+                        const sessionKey = await window.crypto.subtle.deriveKey(
+                            {
+                                name: "HKDF",
+                                hash: "SHA-256",
+                                salt: salt,
+                                info: new TextEncoder().encode("Crypton_Secure_Session_v2")
+                            },
+                            hkdfKey,
+                            { name: "AES-GCM", length: 256 },
+                            false,
+                            ["encrypt", "decrypt"]
+                        );
+                        
+                        // Calculate Session Fingerprint
+                        const fp = await generateFingerprint(sharedBits);
+                        setSessionKey(sessionKey);
+                        setFingerprint(fp);
+
                         const replyPayload = JSON.stringify({ 
                             t: "HSH", 
                             d: buf2hex(encEcdh), 
@@ -598,12 +636,12 @@
                         });
                         
                         setHandshakeReply(chunkData(replyPayload));
-                        setHandshakeExpiresAt(Date.now() + PROTOCOL.HANDSHAKE_TTL); // Set expiry
+                        setHandshakeExpiresAt(Date.now() + PROTOCOL.HANDSHAKE_TTL); 
                         setScanner(null);
                         
                         setModal({
-                            title: "Partner Identity Scanned",
-                            message: `Fingerprint: ${p.fp}\n\nVerify this matches their screen exactly!`,
+                            title: "Identity Scanned",
+                            message: `Identity Fingerprint: ${p.fp}\n\nVerify this matches the partner's identity.\n\nA secure session key has been derived.`,
                             onConfirm: () => setModal(null)
                         });
                     }
