@@ -11,7 +11,7 @@
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <!-- <script src="https://cdn.tailwindcss.com"></script> -->
-    <script src="https://unpkg.com/@tailwindcss/browser@4"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
    
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
@@ -439,6 +439,9 @@
             const [keys, setKeys] = useState(null);
             const [identityPayload, setIdentityPayload] = useState(null);
             
+            // Ref to store raw identity state for verification
+            const identityStateRef = useRef(null);
+            
             // Handshake Reply + Expiry State
             const [handshakeReply, setHandshakeReply] = useState(null);
             const [handshakeExpiresAt, setHandshakeExpiresAt] = useState(null);
@@ -510,6 +513,9 @@
                 const myFp = await generateFingerprint(rsaExp);
                 const nonce = buf2hex(window.crypto.getRandomValues(new Uint8Array(12)));
                 
+                // Keep raw state for verification
+                identityStateRef.current = { n: nonce, ts: Date.now() };
+
                 const payload = JSON.stringify({
                     t: "ID",
                     k: rsaStr,
@@ -647,6 +653,12 @@
                     }
                     else if (p.t === "HSH") {
                         if (!keys) return;
+                        
+                        // BUG FIX: Compare p.n against stored identity state, NOT the chunked payload array!
+                        if (identityStateRef.current && p.n && p.n !== identityStateRef.current.n) {
+                            throw new Error(`Nonce mismatch! Sent: ${identityStateRef.current.n}, Recv: ${p.n}`);
+                        }
+
                         if (Math.abs(Date.now() - p.ts) > PROTOCOL.TS_WINDOW) throw new Error("Handshake Expired");
                         
                         const encBuf = hex2buf(p.d);
@@ -699,7 +711,11 @@
                 } catch (e) {
                     console.error(e);
                     // Differentiate between Replay and other errors for user clarity
-                    const msg = e.message.includes("Replay") ? "Replay Attack Detected: This packet has already been processed." : "Scan rejected.\n(Integrity check failed, expired timestamp, or malformed data)";
+                    let msg = "Scan rejected.\n(Integrity check failed, expired timestamp, or malformed data)";
+                    if (e.message.includes("Replay")) msg = "Replay Attack Detected: This packet has already been processed.";
+                    if (e.message.includes("No secure session")) msg = "No Secure Session Found.\nPlease complete the Identity -> Handshake flow first.";
+                    if (e.message.includes("Nonce")) msg = "Security Alert: Nonce Mismatch (Possible Replay or Man-in-the-Middle).";
+                    
                     showAlert("Security Check Failed", msg, true);
                 }
             };
