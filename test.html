@@ -22,51 +22,52 @@
     <script src="https://unpkg.com/lucide@latest"></script>
 
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;500;700&family=JetBrains+Mono:wght@400;700&display=swap');
         
         :root {
-            --bg-dark: #0f172a;
+            --neon-cyan: #00f3ff;
+            --neon-purple: #bc13fe;
+            --bg-dark: #050510;
         }
 
         body {
             background-color: var(--bg-dark);
-            color: #f8fafc;
-            font-family: 'Inter', sans-serif;
-            overflow: hidden;
-            -webkit-tap-highlight-color: transparent;
+            color: #e2e8f0;
+            font-family: 'Space Grotesk', sans-serif;
+            overflow: hidden; /* App handles scrolling */
         }
 
-        /* Animations */
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        .fade-in { animation: fadeIn 0.3s ease-out; }
-        
-        @keyframes pulse-rec { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
-        .animate-rec { animation: pulse-rec 1.5s infinite; }
-
-        /* Custom Scrollbar */
-        .hide-scrollbar::-webkit-scrollbar { display: none; }
-        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-
-        /* Scanline for Signal view */
+        /* Scanlines & CRT Effects */
         .scanline {
             width: 100%; height: 2px;
-            background: #06b6d4;
+            background: var(--neon-cyan);
             position: absolute;
             animation: scan 2s linear infinite;
-            box-shadow: 0 0 15px #06b6d4;
+            box-shadow: 0 0 15px var(--neon-cyan);
             z-index: 50;
-            pointer-events: none;
         }
         @keyframes scan { 0% { top: 0%; opacity: 0; } 50% { opacity: 1; } 100% { top: 100%; opacity: 0; } }
 
         .glass-panel {
-            background: rgba(30, 41, 59, 0.7);
-            backdrop-filter: blur(16px);
-            -webkit-backdrop-filter: blur(16px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(15, 23, 42, 0.7);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
         }
+
+        /* Utilities */
+        .font-mono { font-family: 'JetBrains Mono', monospace; }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         
-        video, img { width: 100%; height: auto; display: block; }
+        /* Animations */
+        .fade-in { animation: fadeIn 0.3s ease-in; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* Message Bubbles */
+        .msg-bubble { max-width: 80%; padding: 10px 14px; border-radius: 16px; position: relative; word-break: break-word; }
+        .msg-me { background: linear-gradient(135deg, #0891b2, #0e7490); color: white; border-bottom-right-radius: 2px; margin-left: auto; }
+        .msg-other { background: #1e293b; color: #e2e8f0; border-bottom-left-radius: 2px; margin-right: auto; }
     </style>
 </head>
 <body>
@@ -76,649 +77,577 @@
         const { useState, useEffect, useRef, useMemo, useCallback } = React;
 
         // --- CONFIG ---
-        const CHUNK_SIZE = 250; 
+        const CHUNK_SIZE = 250; // Size for QR Chunks
         const ICE_SERVERS = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
-        const FILE_CHUNK_SIZE = 16384; 
         
-        // --- UTILS ---
+        // --- CRYPTO UTILS ---
         const buf2hex = (buf) => [...new Uint8Array(buf)].map(x => x.toString(16).padStart(2, '0')).join('');
         const hex2buf = (hex) => new Uint8Array(hex.match(/.{1,2}/g).map(byte => parseInt(byte, 16))).buffer;
-        
-        const arrayBufferToBase64 = (buffer) => {
-            let binary = '';
-            const bytes = new Uint8Array(buffer);
-            const len = bytes.byteLength;
-            for (let i = 0; i < len; i++) binary += String.fromCharCode(bytes[i]);
-            return window.btoa(binary);
-        };
-        const base64ToArrayBuffer = (base64) => {
-            const binary_string = window.atob(base64);
-            const len = binary_string.length;
-            const bytes = new Uint8Array(len);
-            for (let i = 0; i < len; i++) bytes[i] = binary_string.charCodeAt(i);
-            return bytes.buffer;
-        };
 
-        const formatTime = (ms) => {
-            const s = Math.floor(ms / 1000);
-            const m = Math.floor(s / 60);
-            const rs = s % 60;
-            return `${m}:${rs.toString().padStart(2, '0')}`;
-        };
+        // --- COMPONENTS ---
 
-        // --- ICONS ---
-        const Icon = ({ name, size = 24, className, fill }) => {
+        // 1. Icon Component
+        const Icon = ({ name, size = 24, className }) => {
             useEffect(() => { lucide.createIcons(); }, [name]);
-            return <i data-lucide={name} width={size} height={size} className={className} style={{ fill: fill || 'none' }}></i>;
+            return <i data-lucide={name} width={size} height={size} className={className}></i>;
         };
 
-        // --- SUB-COMPONENTS ---
+        // 2. Animated QR Generator (For Signaling)
+        const QRAnimator = ({ data, label }) => {
+            const [index, setIndex] = useState(0);
+            const canvasRef = useRef(null);
+            
+            // Chunking Logic
+            const chunks = useMemo(() => {
+                if(!data) return [];
+                const str = typeof data === 'string' ? data : JSON.stringify(data);
+                const b64 = btoa(str); // Base64 to ensure safe chars
+                const total = Math.ceil(b64.length / CHUNK_SIZE);
+                const arr = [];
+                for(let i=0; i<total; i++) {
+                    // Protocol: "SL:Index:Total:Data"
+                    arr.push(`SL:${i}:${total}:${b64.slice(i*CHUNK_SIZE, (i+1)*CHUNK_SIZE)}`);
+                }
+                return arr;
+            }, [data]);
 
+            // Animation Loop
+            useEffect(() => {
+                if(chunks.length <= 1) return;
+                const interval = setInterval(() => {
+                    setIndex(prev => (prev + 1) % chunks.length);
+                }, 250); // 4 FPS
+                return () => clearInterval(interval);
+            }, [chunks]);
+
+            // Draw QR
+            useEffect(() => {
+                if(canvasRef.current && chunks.length > 0) {
+                    new QRious({
+                        element: canvasRef.current,
+                        value: chunks[index],
+                        size: 250,
+                        level: 'L',
+                        foreground: '#000',
+                        background: '#fff'
+                    });
+                }
+            }, [index, chunks]);
+
+            return (
+                <div className="flex flex-col items-center bg-white p-4 rounded-xl shadow-[0_0_30px_rgba(0,243,255,0.2)]">
+                    <canvas ref={canvasRef} className="rounded-lg mb-2"></canvas>
+                    <div className="w-full bg-slate-200 h-1 rounded overflow-hidden">
+                        <div className="h-full bg-cyan-500 transition-all duration-100" 
+                             style={{width: `${((index+1)/chunks.length)*100}%`}}></div>
+                    </div>
+                    <p className="text-black font-mono text-xs mt-2 font-bold">{label} ({index+1}/{chunks.length})</p>
+                </div>
+            );
+        };
+
+        // 3. QR Scanner (For Signaling)
         const QRScanner = ({ onScan }) => {
             const videoRef = useRef(null);
             const canvasRef = useRef(null);
-            
+            const [status, setStatus] = useState("Initializing Camera...");
+
             const scanLoop = useCallback(() => {
                 const video = videoRef.current;
                 const canvas = canvasRef.current;
-                if(video && canvas && video.readyState === video.HAVE_ENOUGH_DATA) {
+                if(!video || !canvas) return;
+
+                if (video.readyState === video.HAVE_ENOUGH_DATA) {
                     canvas.width = video.videoWidth;
                     canvas.height = video.videoHeight;
-                    const ctx = canvas.getContext("2d", { willReadFrequently: true });
-                    ctx.drawImage(video, 0, 0);
-                    const code = jsQR(ctx.getImageData(0,0,canvas.width,canvas.height).data, canvas.width, canvas.height);
-                    if(code && code.data.startsWith('SL:')) onScan(code.data);
+                    const ctx = canvas.getContext("2d");
+                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                    const code = jsQR(imageData.data, imageData.width, imageData.height);
+                    
+                    if (code && code.data.startsWith('SL:')) {
+                        setStatus("Chunk Detected!");
+                        onScan(code.data);
+                    } else {
+                        setStatus("Scanning...");
+                    }
                 }
                 requestAnimationFrame(scanLoop);
             }, [onScan]);
 
             useEffect(() => {
-                let stream;
-                navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } }).then(s => {
-                    stream = s;
-                    if(videoRef.current) { 
-                        videoRef.current.srcObject = s; 
-                        videoRef.current.play(); 
-                        requestAnimationFrame(scanLoop); 
+                navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+                    .then(stream => {
+                        if(videoRef.current) {
+                            videoRef.current.srcObject = stream;
+                            videoRef.current.play();
+                            requestAnimationFrame(scanLoop);
+                        }
+                    })
+                    .catch(err => setStatus("Camera Error: " + err.message));
+                
+                return () => {
+                    // Cleanup stream
+                    if(videoRef.current && videoRef.current.srcObject) {
+                        videoRef.current.srcObject.getTracks().forEach(t => t.stop());
                     }
-                }).catch(e => console.log("Cam error", e));
-                return () => { if(stream) stream.getTracks().forEach(t => t.stop()); };
+                };
             }, [scanLoop]);
 
             return (
-                <>
-                    <video ref={videoRef} className="w-full h-full object-cover" muted playsInline></video>
+                <div className="relative w-full max-w-sm aspect-square bg-black rounded-2xl overflow-hidden border-2 border-cyan-500/50 shadow-2xl">
+                    <video ref={videoRef} className="absolute inset-0 w-full h-full object-cover opacity-80" muted playsInline></video>
                     <canvas ref={canvasRef} className="hidden"></canvas>
                     <div className="scanline"></div>
-                </>
-            );
-        };
-
-        const QRAnimator = ({ data, label }) => {
-            const [idx, setIdx] = useState(0);
-            const ref = useRef(null);
-            
-            const chunks = useMemo(() => {
-                if(!data) return [];
-                const b64 = btoa(JSON.stringify(data));
-                return Array.from({length: Math.ceil(b64.length/CHUNK_SIZE)}, (_, i) => `SL:${i}:${Math.ceil(b64.length/CHUNK_SIZE)}:${b64.slice(i*CHUNK_SIZE, (i+1)*CHUNK_SIZE)}`);
-            }, [data]);
-
-            useEffect(() => { 
-                const i = setInterval(() => setIdx(p => (p+1)%chunks.length), 150); 
-                return () => clearInterval(i); 
-            }, [chunks]);
-
-            useEffect(() => { 
-                if(ref.current && chunks.length) new QRious({ element: ref.current, value: chunks[idx], size: 300 }); 
-            }, [idx, chunks]);
-
-            return (
-                <div className="bg-white p-4 rounded-xl flex flex-col items-center">
-                    <canvas ref={ref}></canvas>
-                    <p className="text-center text-black font-mono text-xs mt-2 font-bold">{label} {idx+1}/{chunks.length}</p>
-                </div>
-            );
-        };
-
-        const CameraModal = ({ isOpen, onClose, onCapture }) => {
-            const videoRef = useRef(null);
-            const [mode, setMode] = useState('PHOTO'); 
-            const [isRecording, setIsRecording] = useState(false);
-            const mediaRecorder = useRef(null);
-            const chunks = useRef([]);
-
-            useEffect(() => {
-                let stream;
-                if (isOpen) {
-                    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: true })
-                        .then(s => {
-                            stream = s;
-                            if(videoRef.current) videoRef.current.srcObject = s;
-                        });
-                }
-                return () => { if(stream) stream.getTracks().forEach(t => t.stop()); };
-            }, [isOpen]);
-
-            const takePhoto = () => {
-                const video = videoRef.current;
-                const canvas = document.createElement('canvas');
-                canvas.width = video.videoWidth;
-                canvas.height = video.videoHeight;
-                canvas.getContext('2d').drawImage(video, 0, 0);
-                canvas.toBlob(blob => {
-                    onCapture(blob, 'image/jpeg');
-                    onClose();
-                }, 'image/jpeg');
-            };
-
-            const toggleVideo = () => {
-                if (isRecording) {
-                    mediaRecorder.current.stop();
-                    setIsRecording(false);
-                } else {
-                    const stream = videoRef.current.srcObject;
-                    mediaRecorder.current = new MediaRecorder(stream);
-                    chunks.current = [];
-                    mediaRecorder.current.ondataavailable = e => chunks.current.push(e.data);
-                    mediaRecorder.current.onstop = () => {
-                        const blob = new Blob(chunks.current, { type: 'video/webm' });
-                        onCapture(blob, 'video/webm');
-                        onClose();
-                    };
-                    mediaRecorder.current.start();
-                    setIsRecording(true);
-                }
-            };
-
-            if (!isOpen) return null;
-
-            return (
-                <div className="fixed inset-0 z-50 bg-black flex flex-col">
-                    <div className="relative flex-1 bg-black overflow-hidden">
-                        <video ref={videoRef} autoPlay playsInline muted className="absolute inset-0 w-full h-full object-cover"></video>
-                        <button onClick={onClose} className="absolute top-4 right-4 p-2 bg-black/40 rounded-full text-white backdrop-blur-md"><Icon name="x" /></button>
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                        <div className="w-48 h-48 border-2 border-white/30 rounded-lg relative">
+                            <div className="absolute top-0 left-0 w-4 h-4 border-t-4 border-l-4 border-cyan-400 -mt-1 -ml-1"></div>
+                            <div className="absolute top-0 right-0 w-4 h-4 border-t-4 border-r-4 border-cyan-400 -mt-1 -mr-1"></div>
+                            <div className="absolute bottom-0 left-0 w-4 h-4 border-b-4 border-l-4 border-cyan-400 -mb-1 -ml-1"></div>
+                            <div className="absolute bottom-0 right-0 w-4 h-4 border-b-4 border-r-4 border-cyan-400 -mb-1 -mr-1"></div>
+                        </div>
                     </div>
-                    <div className="bg-black p-6 pb-10 flex flex-col items-center gap-4">
-                        <div className="flex gap-4 text-sm font-bold text-gray-400 mb-2">
-                            <button onClick={() => setMode('PHOTO')} className={mode==='PHOTO'?'text-white':''}>PHOTO</button>
-                            <button onClick={() => setMode('VIDEO')} className={mode==='VIDEO'?'text-white':''}>VIDEO</button>
-                        </div>
-                        <div className="flex items-center justify-between w-full max-w-xs">
-                            <div className="w-10"></div>
-                            <button onClick={mode === 'PHOTO' ? takePhoto : toggleVideo} className={`w-20 h-20 rounded-full border-4 border-white flex items-center justify-center transition-all ${isRecording ? 'bg-red-500 scale-110' : 'bg-transparent'}`}>
-                                <div className={`w-16 h-16 rounded-full bg-white transition-all ${isRecording ? 'scale-50 rounded-md bg-red-600' : ''}`}></div>
-                            </button>
-                            <button onClick={onClose} className="w-10 flex justify-center"><Icon name="rotate-ccw" className="text-white" /></button>
-                        </div>
+                    <div className="absolute bottom-4 left-0 right-0 text-center">
+                        <span className="bg-black/60 text-cyan-400 text-xs px-3 py-1 rounded-full font-mono backdrop-blur-md">{status}</span>
                     </div>
                 </div>
             );
         };
 
-        const IdentityModal = ({ fingerprint, onClose }) => {
-            if (!fingerprint) return null;
-            return (
-                <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex items-center justify-center p-6 fade-in">
-                    <div className="bg-slate-900 border border-slate-700 p-8 rounded-3xl w-full max-w-xs text-center relative shadow-2xl">
-                        <button onClick={onClose} className="absolute top-4 right-4 text-slate-500 hover:text-white"><Icon name="x" /></button>
-                        <div className="w-14 h-14 bg-blue-500/20 rounded-full flex items-center justify-center mx-auto mb-4 text-blue-400">
-                            <Icon name="shield-check" size={28} />
-                        </div>
-                        <h3 className="text-lg font-bold text-white mb-1">Safety Numbers</h3>
-                        <p className="text-slate-400 text-xs mb-6">Verify these match your peer's screen.</p>
-                        <div className="bg-black/50 p-4 rounded-xl border border-slate-800 mb-6">
-                            <div className="text-4xl mb-3 tracking-widest animate-pulse">{fingerprint.emoji}</div>
-                            <div className="font-mono text-blue-400 text-sm tracking-[0.2em] break-all">{fingerprint.hex}</div>
-                        </div>
-                        <button onClick={onClose} className="w-full py-3 bg-blue-600 hover:bg-blue-500 rounded-xl font-semibold text-white transition-colors cursor-pointer">Verified</button>
-                    </div>
-                </div>
-            );
-        };
-
-        const MessageBubble = ({ m, fingerprint }) => {
-            const isMe = m.type.startsWith('TX');
-            const isMedia = m.type === 'FILE' || m.type === 'TX_FILE';
-            const isImg = isMedia && m.mimeType?.startsWith('image/');
-            const isVid = isMedia && m.mimeType?.startsWith('video/');
-            const isAudio = isMedia && m.mimeType?.startsWith('audio/');
-
-            return (
-                <div className={`flex ${isMe ? 'justify-end' : 'justify-start'} mb-3 fade-in group`}>
-                     {!isMe && <div className="w-8 h-8 rounded-full bg-slate-700 flex-shrink-0 mr-2 flex items-center justify-center text-xs font-bold text-slate-300">{fingerprint?.emoji.substring(0,2)}</div>}
-                    <div className={`max-w-[85%] sm:max-w-[70%] p-3 rounded-2xl shadow-sm relative ${isMe ? 'bg-blue-600 text-white rounded-br-none' : 'bg-slate-800 text-slate-100 rounded-bl-none'}`}>
-                        {(m.type === 'TX' || m.type === 'RX') && <p className="leading-relaxed whitespace-pre-wrap text-sm">{m.text}</p>}
-                        {isImg && <div className="rounded-lg overflow-hidden mb-1 border border-white/10"><img src={m.fileUrl} className="max-h-64 object-cover" /></div>}
-                        {isVid && <div className="rounded-lg overflow-hidden mb-1 border border-white/10"><video src={m.fileUrl} controls className="max-h-64 bg-black" /></div>}
-                        {isAudio && <div className="flex items-center gap-3 p-1 min-w-[200px]"><div className={`p-2 rounded-full ${isMe?'bg-white/20':'bg-slate-700'}`}><Icon name="mic" size={16} /></div><audio src={m.fileUrl} controls className="h-8 w-full opacity-90 scale-95 origin-left" /></div>}
-                        {isMedia && !isImg && !isVid && !isAudio && (
-                            <div className="flex items-center gap-3 p-2 bg-black/20 rounded-lg">
-                                <div className="bg-white/10 p-2 rounded-lg"><Icon name="file" /></div>
-                                <div className="overflow-hidden">
-                                    <p className="font-bold truncate text-sm">{m.text}</p>
-                                    <p className="text-[10px] opacity-70">{Math.round(m.fileSize/1024)} KB</p>
-                                </div>
-                                <a href={m.fileUrl} download={m.text} className="ml-auto p-2 bg-white/20 rounded-full hover:bg-white/30"><Icon name="download" size={16} /></a>
-                            </div>
-                        )}
-                        <div className={`text-[9px] mt-1 flex items-center gap-1 opacity-60 ${isMe ? 'justify-end' : 'justify-start'}`}>{new Date(m.id).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})} {isMe && <Icon name="check" size={10} />}</div>
-                    </div>
-                </div>
-            );
-        };
-
-        // --- MAIN VIEW COMPONENTS ---
-
-        const HomeView = ({ onHost, onJoin }) => (
-            <div className="flex flex-col items-center justify-center min-h-screen p-6 bg-slate-950 relative overflow-hidden fade-in">
-                <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-5"></div>
-                <div className="w-64 h-64 bg-blue-600/20 rounded-full blur-[100px] absolute top-1/4 -left-10"></div>
-                <div className="w-64 h-64 bg-purple-600/20 rounded-full blur-[100px] absolute bottom-1/4 -right-10"></div>
-                <div className="relative z-10 text-center space-y-6 mb-12">
-                    <div className="inline-flex p-4 rounded-3xl bg-slate-900 border border-white/10 shadow-2xl mb-2"><Icon name="ghost" size={48} className="text-blue-400" /></div>
-                    <div><h1 className="text-5xl font-bold tracking-tight text-white mb-2">ShadowLink</h1><p className="text-slate-400 text-lg">Secure. Ephemeral. Peer-to-Peer.</p></div>
-                </div>
-                <div className="grid gap-4 w-full max-w-xs relative z-10">
-                    <button onClick={onHost} className="group relative p-1 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:scale-[1.02] transition-transform shadow-lg shadow-blue-900/30">
-                        <div className="bg-slate-950 rounded-xl p-5 h-full flex items-center gap-4 group-hover:bg-opacity-90 transition-all">
-                            <div className="p-3 bg-blue-500/20 rounded-lg text-blue-400"><Icon name="radio-tower" /></div>
-                            <div className="text-left"><h3 className="text-white font-bold text-lg">Create Room</h3><p className="text-slate-500 text-xs">Start a new secure channel</p></div>
-                        </div>
-                    </button>
-                    <button onClick={onJoin} className="group relative p-1 rounded-2xl bg-slate-800 hover:bg-slate-700 transition-all hover:scale-[1.02]">
-                        <div className="rounded-xl p-5 h-full flex items-center gap-4">
-                            <div className="p-3 bg-slate-700 rounded-lg text-slate-300"><Icon name="scan-line" /></div>
-                            <div className="text-left"><h3 className="text-white font-bold text-lg">Join Room</h3><p className="text-slate-500 text-xs">Scan a host to connect</p></div>
-                        </div>
-                    </button>
-                </div>
-            </div>
-        );
-
-        const SignalingView = ({ view, localSignal, scanProgress, onScan, onBack, onScanReply }) => {
-            const isScanner = view.includes('SCAN');
-            const isQR = !isScanner;
-            const title = view === 'HOST_WAIT' ? "Host Signal" : view === 'SCAN_HOST' ? "Scan Host" : view === 'SCAN_JOIN' ? "Scan Reply" : "Your Reply";
-            
-            return (
-                <div className="flex flex-col h-screen p-6 items-center justify-center bg-slate-950 fade-in relative overflow-hidden">
-                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-blue-900/20 via-slate-950 to-slate-950"></div>
-                    <div className="w-full max-w-sm glass-panel rounded-[2rem] p-8 relative z-10 shadow-2xl border border-white/10">
-                        <button onClick={onBack} className="absolute top-6 left-6 text-slate-500 hover:text-white"><Icon name="arrow-left" /></button>
-                        <div className="text-center mb-8 mt-4">
-                            <h2 className="text-2xl font-bold text-white mb-2">{isScanner ? 'Scan QR Code' : 'Share Signal'}</h2>
-                            <p className="text-sm text-slate-400">{isScanner ? "Point camera at peer's screen" : "Ask peer to scan this code"}</p>
-                        </div>
-                        <div className="flex flex-col items-center min-h-[300px] justify-center">
-                            {!isScanner && localSignal ? (
-                                <>
-                                    <QRAnimator data={localSignal} label="Signal" />
-                                    {view === 'HOST_WAIT' && (
-                                        <button onClick={onScanReply} className="mt-6 w-full py-4 bg-slate-800 hover:bg-slate-700 rounded-xl font-semibold text-white transition-colors flex items-center justify-center gap-2 border border-white/5">
-                                            <Icon name="scan-line" /> I've been Scanned
-                                        </button>
-                                    )}
-                                </>
-                            ) : (
-                                <div className="w-full">
-                                    <div className="relative aspect-square rounded-2xl overflow-hidden bg-black border-2 border-blue-500/50 shadow-[0_0_30px_rgba(59,130,246,0.3)]">
-                                        <QRScanner onScan={onScan} />
-                                    </div>
-                                    <div className="mt-4 bg-slate-900 h-2 rounded-full overflow-hidden w-full">
-                                        <div className="h-full bg-blue-500 transition-all duration-200" style={{width: `${scanProgress}%`}}></div>
-                                    </div>
-                                    <p className="text-center text-xs text-slate-500 mt-2 font-mono">{scanProgress}% PACKET CAPTURED</p>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                </div>
-            );
-        };
-
-        const ChatView = ({ 
-            messages, fingerprint, fileProgress, 
-            onSend, onFileSelect, 
-            isRecordingAudio, audioTime, onAudioStart, onAudioStop, 
-            onCapture, onLeave 
-        }) => {
-            const [msgText, setMsgText] = useState("");
-            const [showVerify, setShowVerify] = useState(false);
-            const [showCamera, setShowCamera] = useState(false);
-            const fileInputRef = useRef(null);
-            const chatEndRef = useRef(null);
-
-            useEffect(() => {
-                chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-            }, [messages, fileProgress]);
-
-            const handleSend = () => {
-                if(msgText.trim()) {
-                    onSend(msgText);
-                    setMsgText("");
-                }
-            };
-
-            return (
-                <div className="flex flex-col h-screen bg-slate-950 relative">
-                    {/* Header */}
-                    <div className="px-4 py-3 bg-slate-900/80 backdrop-blur-md flex items-center justify-between border-b border-white/5 z-10 sticky top-0">
-                        <div className="flex items-center gap-3 cursor-pointer" onClick={() => setShowVerify(true)}>
-                            <div className="relative">
-                                <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center text-lg shadow-lg">{fingerprint?.emoji.substring(0,2)}</div>
-                                <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-slate-900"></div>
-                            </div>
-                            <div>
-                                <h2 className="font-bold text-white text-sm">Secure Channel</h2>
-                                <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-mono"><Icon name="lock" size={10} className="text-green-400" /> End-to-End Encrypted</div>
-                            </div>
-                        </div>
-                        <div className="flex gap-2"><button onClick={onLeave} className="p-2 text-slate-400 hover:text-red-400 rounded-full hover:bg-white/5"><Icon name="log-out" size={20} /></button></div>
-                    </div>
-
-                    {/* Messages */}
-                    <div className="flex-1 overflow-y-auto p-4 space-y-2 bg-[url('https://www.transparenttextures.com/patterns/dark-matter.png')]">
-                        <div className="flex justify-center py-4"><span className="bg-slate-800 text-slate-500 text-[10px] px-3 py-1 rounded-full border border-slate-700">Messages are ephemeral & encrypted</span></div>
-                        {messages.map(m => m.type === 'SYS' ? <div key={m.id} className="text-center my-4"><span className="text-[10px] text-cyan-400 bg-cyan-950/30 px-3 py-1 rounded-full border border-cyan-500/20">{m.text}</span></div> : <MessageBubble key={m.id} m={m} fingerprint={fingerprint} />)}
-                        <div ref={chatEndRef}></div>
-                    </div>
-
-                    {/* Progress */}
-                    {fileProgress > 0 && <div className="h-1 bg-slate-800 w-full"><div className="h-full bg-blue-500 transition-all duration-200" style={{width: `${fileProgress}%`}}></div></div>}
-
-                    {/* Input */}
-                    <div className="p-3 bg-slate-900 border-t border-white/5 pb-6 sm:pb-3">
-                        <div className="flex items-end gap-2 max-w-4xl mx-auto">
-                            <button onClick={() => setShowCamera(true)} className="p-3 rounded-full bg-slate-800 text-blue-400 hover:bg-slate-700 transition-colors flex-shrink-0"><Icon name="camera" size={20} /></button>
-                            <div className="flex-1 bg-slate-800 rounded-2xl flex items-center min-h-[48px] px-2 transition-all border border-transparent focus-within:border-slate-600">
-                                {isRecordingAudio ? (
-                                    <div className="flex-1 flex items-center gap-3 px-2">
-                                        <div className="w-3 h-3 bg-red-500 rounded-full animate-rec"></div>
-                                        <span className="text-red-400 font-mono text-sm">{formatTime(audioTime)}</span>
-                                        <div className="flex-1"></div>
-                                        <button onClick={onAudioStop} className="text-slate-400 text-xs">Cancel</button>
-                                    </div>
-                                ) : (
-                                    <>
-                                        <input type="file" ref={fileInputRef} className="hidden" onChange={onFileSelect} />
-                                        <button onClick={() => fileInputRef.current?.click()} className="p-2 text-slate-400 hover:text-white"><Icon name="paperclip" size={20} /></button>
-                                        <input 
-                                            value={msgText}
-                                            onChange={e => setMsgText(e.target.value)}
-                                            onKeyDown={e => e.key === 'Enter' && handleSend()}
-                                            className="flex-1 bg-transparent border-none outline-none text-white placeholder-slate-500 text-sm px-2 py-3 max-h-32"
-                                            placeholder="Message..."
-                                        />
-                                    </>
-                                )}
-                            </div>
-                            {msgText ? (
-                                <button onClick={handleSend} className="p-3 rounded-full bg-blue-600 text-white shadow-lg hover:scale-105 active:scale-95 transition-all flex-shrink-0"><Icon name="send-horizontal" size={20} fill="currentColor" /></button>
-                            ) : (
-                                <button 
-                                    onMouseDown={onAudioStart} onMouseUp={onAudioStop}
-                                    onTouchStart={onAudioStart} onTouchEnd={onAudioStop}
-                                    className={`p-3 rounded-full transition-all flex-shrink-0 shadow-lg ${isRecordingAudio ? 'bg-red-500 text-white scale-110' : 'bg-slate-800 text-white hover:bg-slate-700'}`}
-                                >
-                                    <Icon name="mic" size={20} fill={isRecordingAudio ? "currentColor" : "none"} />
-                                </button>
-                            )}
-                        </div>
-                    </div>
-
-                    <CameraModal isOpen={showCamera} onClose={() => setShowCamera(false)} onCapture={onCapture} />
-                    {showVerify && <IdentityModal fingerprint={fingerprint} onClose={() => setShowVerify(false)} />}
-                </div>
-            );
-        };
-
+        // --- MAIN APP ---
         const App = () => {
-            const [view, setView] = useState('HOME');
-            const [role, setRole] = useState(null);
+            // States
+            const [view, setView] = useState('HOME'); // HOME, HOST_WAIT, SCAN_HOST, JOIN_WAIT, SCAN_JOIN, CHAT
+            const [role, setRole] = useState(null); // HOST, JOINER
+            const [logs, setLogs] = useState([]);
+            const [msgText, setMsgText] = useState("");
             const [messages, setMessages] = useState([]);
-            const [fileProgress, setFileProgress] = useState(0); 
+            const [progress, setProgress] = useState(null); // File transfer progress
             
-            // Audio State
-            const [isRecordingAudio, setIsRecordingAudio] = useState(false);
-            const [audioTime, setAudioTime] = useState(0);
-            const audioRecorder = useRef(null);
-            const audioChunks = useRef([]);
-            const audioTimer = useRef(null);
-            
-            // Core Refs
+            // WebRTC Refs
             const pc = useRef(null);
             const dc = useRef(null);
             const candidates = useRef([]);
-            const keys = useRef({ rsa: null, ecdh: null });
-            const sessionKey = useRef(null);
-            const fingerprint = useRef(null);
-            const incomingFiles = useRef({});
             
-            // Signal State
-            const [localSignal, setLocalSignal] = useState(null);
+            // Crypto Refs
+            const keys = useRef({ rsa: null, ecdh: null }); // My Keys
+            const sessionKey = useRef(null); // AES-GCM Shared Key
+            const fingerprint = useRef(null);
+
+            // Signaling State
+            const [localSignal, setLocalSignal] = useState(null); // My SDP to show
             const scannedChunks = useRef(new Map());
             const [scanProgress, setScanProgress] = useState(0);
 
+            // --- 1. INITIALIZATION & KEYS ---
             useEffect(() => {
                 const initKeys = async () => {
-                    keys.current.rsa = await window.crypto.subtle.generateKey({ name: "RSA-OAEP", modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: "SHA-256" }, true, ["encrypt", "decrypt"]);
-                    keys.current.ecdh = await window.crypto.subtle.generateKey({ name: "ECDH", namedCurve: "P-256" }, true, ["deriveKey", "deriveBits"]);
+                    // Generate Identity (RSA)
+                    keys.current.rsa = await window.crypto.subtle.generateKey(
+                        { name: "RSA-OAEP", modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: "SHA-256" },
+                        true, ["encrypt", "decrypt"]
+                    );
+                    // Generate Ephemeral (ECDH)
+                    keys.current.ecdh = await window.crypto.subtle.generateKey(
+                        { name: "ECDH", namedCurve: "P-256" },
+                        true, ["deriveKey", "deriveBits"]
+                    );
+                    addLog("Keys Generated. Ready.");
                 };
                 initKeys();
             }, []);
 
-            // Audio Handlers
-            const startAudioRecording = async () => {
-                try {
-                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                    audioRecorder.current = new MediaRecorder(stream);
-                    audioChunks.current = [];
-                    audioRecorder.current.ondataavailable = e => audioChunks.current.push(e.data);
-                    audioRecorder.current.onstop = () => {
-                        const blob = new Blob(audioChunks.current, { type: 'audio/webm' });
-                        processAndSendFile(blob, `voice_${Date.now()}.webm`, 'audio/webm');
-                        stream.getTracks().forEach(t => t.stop());
-                    };
-                    audioRecorder.current.start();
-                    setIsRecordingAudio(true);
-                    setAudioTime(0);
-                    audioTimer.current = setInterval(() => setAudioTime(t => t + 100), 100);
-                } catch(e) { console.error(e); }
-            };
+            const addLog = (txt) => setLogs(p => [...p.slice(-4), txt]);
 
-            const stopAudioRecording = () => {
-                if (audioRecorder.current && audioRecorder.current.state !== 'inactive') {
-                    audioRecorder.current.stop();
-                    setIsRecordingAudio(false);
-                    clearInterval(audioTimer.current);
-                }
-            };
-
-            // File Handling
-            const processAndSendFile = async (blob, filename, mimeType) => {
-                if (!sessionKey.current) return;
-                const buffer = await blob.arrayBuffer();
-                const fileIv = window.crypto.getRandomValues(new Uint8Array(12));
-                const encryptedFile = await window.crypto.subtle.encrypt({ name: "AES-GCM", iv: fileIv }, sessionKey.current, buffer);
+            // --- 2. WEBRTC SETUP ---
+            const createPeer = () => {
+                pc.current = new RTCPeerConnection(ICE_SERVERS);
                 
-                const fileId = crypto.randomUUID();
-                const metaRaw = JSON.stringify({ name: filename, size: blob.size, type: mimeType, iv: buf2hex(fileIv), encSize: encryptedFile.byteLength });
-                const metaIv = window.crypto.getRandomValues(new Uint8Array(12));
-                const encMeta = await window.crypto.subtle.encrypt({ name: "AES-GCM", iv: metaIv }, sessionKey.current, new TextEncoder().encode(metaRaw));
-
-                dc.current.send(JSON.stringify({ t: 'FILE_HEADER', id: fileId, iv: buf2hex(metaIv), meta: buf2hex(encMeta) }));
-                
-                const totalChunks = Math.ceil(encryptedFile.byteLength / FILE_CHUNK_SIZE);
-                let offset = 0;
-                for (let i = 0; i < totalChunks; i++) {
-                    const chunk = encryptedFile.slice(offset, offset + FILE_CHUNK_SIZE);
-                    const b64Chunk = arrayBufferToBase64(chunk);
-                    if (i % 20 === 0) await new Promise(r => setTimeout(r, 10)); 
-                    dc.current.send(JSON.stringify({ t: 'FILE_CHUNK', id: fileId, idx: i, d: b64Chunk }));
-                    offset += FILE_CHUNK_SIZE;
-                    setFileProgress(Math.round(((i + 1) / totalChunks) * 100));
-                }
-                setFileProgress(0);
-                const url = URL.createObjectURL(blob);
-                setMessages(prev => [...prev, { id: Date.now(), type: 'TX_FILE', text: filename, mimeType, fileUrl: url, fileSize: blob.size }]);
-            };
-
-            const handleFileSelect = (e) => {
-                const file = e.target.files[0];
-                if(file) processAndSendFile(file, file.name, file.type);
-            };
-
-            const sendMessage = async (txt) => {
-                if(!txt.trim() || !sessionKey.current) return;
-                setMessages(prev => [...prev, { id: Date.now(), type: 'TX', text: txt }]);
-                const iv = window.crypto.getRandomValues(new Uint8Array(12));
-                const enc = await window.crypto.subtle.encrypt({ name: "AES-GCM", iv }, sessionKey.current, new TextEncoder().encode(txt));
-                dc.current.send(JSON.stringify({ t: 'ENC', iv: buf2hex(iv), d: buf2hex(enc) }));
-            };
-
-            // Packet Handling & Crypto
-            const handlePacket = async (raw) => {
-                try {
-                    const p = JSON.parse(raw);
-                    if (p.t === 'HELLO') {
-                        const peerRsa = await window.crypto.subtle.importKey("spki", hex2buf(p.rsa), { name: "RSA-OAEP", hash: "SHA-256" }, true, ["encrypt"]);
-                        const peerEcdh = await window.crypto.subtle.importKey("raw", hex2buf(p.ecdh), { name: "ECDH", namedCurve: "P-256" }, true, []);
-                        const sharedBits = await window.crypto.subtle.deriveBits({ name: "ECDH", public: peerEcdh }, keys.current.ecdh.privateKey, 256);
-                        const hkdfKey = await window.crypto.subtle.importKey("raw", sharedBits, { name: "HKDF" }, false, ["deriveKey"]);
-                        sessionKey.current = await window.crypto.subtle.deriveKey({ name: "HKDF", hash: "SHA-256", salt: new Uint8Array(), info: new TextEncoder().encode("ShadowLink") }, hkdfKey, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
-                        const fpHash = await window.crypto.subtle.digest("SHA-256", sharedBits);
-                        const fpArr = new Uint8Array(fpHash);
-                        const emojis = ["💀","👽","🤖","👻","🤡","👹","👺","👾","🎃","🐉","🦄","🦉","🕸","⚡","🔥","❄️"];
-                        let fpEmoji = "";
-                        for(let i=0; i<4; i++) fpEmoji += emojis[fpArr[i] % emojis.length];
-                        fingerprint.current = { emoji: fpEmoji, hex: buf2hex(fpHash).substring(0, 8).toUpperCase() };
-                        setView('CHAT');
-                        setMessages(prev => [...prev, { id: Date.now(), type: 'SYS', text: 'Secured with AES-GCM' }]);
-                    } else if (p.t === 'ENC') {
-                        const pt = await window.crypto.subtle.decrypt({ name: "AES-GCM", iv: hex2buf(p.iv) }, sessionKey.current, hex2buf(p.d));
-                        setMessages(prev => [...prev, { id: Date.now(), type: 'RX', text: new TextDecoder().decode(pt) }]);
-                    } else if (p.t === 'FILE_HEADER') {
-                        const pt = await window.crypto.subtle.decrypt({ name: "AES-GCM", iv: hex2buf(p.iv) }, sessionKey.current, hex2buf(p.meta));
-                        const meta = JSON.parse(new TextDecoder().decode(pt));
-                        incomingFiles.current[p.id] = { meta, chunks: [], receivedSize: 0 };
-                    } else if (p.t === 'FILE_CHUNK') {
-                        const ctx = incomingFiles.current[p.id];
-                        if (ctx) {
-                            const data = base64ToArrayBuffer(p.d);
-                            ctx.chunks.push({ idx: p.idx, data });
-                            ctx.receivedSize += data.byteLength;
-                            if (ctx.receivedSize >= ctx.meta.encSize) {
-                                ctx.chunks.sort((a,b) => a.idx - b.idx);
-                                const totalLen = ctx.chunks.reduce((acc, c) => acc + c.data.byteLength, 0);
-                                const buf = new Uint8Array(totalLen);
-                                let off = 0;
-                                ctx.chunks.forEach(c => { buf.set(new Uint8Array(c.data), off); off += c.data.byteLength; });
-                                try {
-                                    const dec = await window.crypto.subtle.decrypt({ name: "AES-GCM", iv: hex2buf(ctx.meta.iv) }, sessionKey.current, buf);
-                                    const blob = new Blob([dec], { type: ctx.meta.type });
-                                    const url = URL.createObjectURL(blob);
-                                    setMessages(prev => [...prev, { id: Date.now(), type: 'FILE', text: ctx.meta.name, mimeType: ctx.meta.type, fileUrl: url, fileSize: ctx.meta.size }]);
-                                    delete incomingFiles.current[p.id];
-                                } catch(e) { console.error(e); }
-                            }
-                        }
-                    }
-                } catch(e) { console.error(e); }
-            };
-
-            const createPeer = useCallback(() => {
-                const peer = new RTCPeerConnection(ICE_SERVERS);
-                peer.onicecandidate = e => e.candidate && candidates.current.push(e.candidate);
-                pc.current = peer;
-                return peer;
-            }, []);
-
-            const setupDataChannel = (ch) => {
-                ch.onopen = async () => {
-                    const rsaPub = await window.crypto.subtle.exportKey("spki", keys.current.rsa.publicKey);
-                    const ecdhPub = await window.crypto.subtle.exportKey("raw", keys.current.ecdh.publicKey);
-                    ch.send(JSON.stringify({ t: 'HELLO', rsa: buf2hex(rsaPub), ecdh: buf2hex(ecdhPub) }));
+                pc.current.onicecandidate = (e) => {
+                    if (e.candidate) candidates.current.push(e.candidate);
                 };
-                ch.onmessage = e => handlePacket(e.data);
+
+                pc.current.onconnectionstatechange = () => {
+                    addLog(`Connection: ${pc.current.connectionState}`);
+                };
+
+                return pc.current;
             };
 
-            const startHost = async () => {
-                setRole('HOST');
-                const peer = createPeer();
-                dc.current = peer.createDataChannel("shadowlink");
-                setupDataChannel(dc.current);
-                const offer = await peer.createOffer();
-                await peer.setLocalDescription(offer);
-                await new Promise(r => setTimeout(r, 500));
-                setLocalSignal({ type: 'offer', sdp: peer.localDescription, candidates: candidates.current });
-                setView('HOST_WAIT');
-            };
-
-            const startJoin = () => {
-                setRole('JOINER');
-                const peer = createPeer();
-                peer.ondatachannel = e => { dc.current = e.channel; setupDataChannel(dc.current); };
-                setView('SCAN_HOST');
-            };
-
-            const handleScannedChunk = useCallback((raw) => {
+            // --- 3. SIGNALING LOGIC (QR CHUNK HANDLER) ---
+            const handleScannedChunk = (raw) => {
+                // Protocol: "SL:Index:Total:Data"
                 const parts = raw.split(':');
                 if(parts.length < 4) return;
+                
                 const idx = parseInt(parts[1]);
                 const total = parseInt(parts[2]);
-                const data = parts.slice(3).join(':');
+                const data = parts.slice(3).join(':'); // Rejoin valid base64 chars
+
                 if(!scannedChunks.current.has(idx)) {
                     scannedChunks.current.set(idx, data);
                     setScanProgress(Math.round((scannedChunks.current.size / total) * 100));
+                    
                     if(scannedChunks.current.size === total) {
-                        try {
-                            const signal = JSON.parse(atob(Array.from({length: total}, (_, i) => scannedChunks.current.get(i)).join('')));
-                            scannedChunks.current.clear();
-                            processSignal(signal);
-                        } catch(e) {}
+                        // All chunks received
+                        const fullB64 = Array.from({length: total}, (_, i) => scannedChunks.current.get(i)).join('');
+                        const jsonStr = atob(fullB64);
+                        const signalData = JSON.parse(jsonStr);
+                        
+                        addLog("Signal Captured. Processing...");
+                        scannedChunks.current.clear();
+                        processSignal(signalData);
                     }
-                }
-            }, [role]);
-
-            const processSignal = async (data) => {
-                if (!pc.current) return;
-                if(role === 'HOST' && data.type === 'answer') {
-                    await pc.current.setRemoteDescription(new RTCSessionDescription(data.sdp));
-                    data.candidates.forEach(c => pc.current.addIceCandidate(new RTCIceCandidate(c)));
-                } else if (role === 'JOINER' && data.type === 'offer') {
-                    await pc.current.setRemoteDescription(new RTCSessionDescription(data.sdp));
-                    data.candidates.forEach(c => pc.current.addIceCandidate(new RTCIceCandidate(c)));
-                    const answer = await pc.current.createAnswer();
-                    await pc.current.setLocalDescription(answer);
-                    await new Promise(r => setTimeout(r, 500));
-                    setLocalSignal({ type: 'answer', sdp: pc.current.localDescription, candidates: candidates.current });
-                    setView('JOIN_WAIT');
                 }
             };
 
-            if(view === 'HOME') return <HomeView onHost={startHost} onJoin={startJoin} />;
-            if(view === 'CHAT') return <ChatView 
-                                            messages={messages} 
-                                            fingerprint={fingerprint.current} 
-                                            fileProgress={fileProgress}
-                                            onSend={sendMessage}
-                                            onFileSelect={handleFileSelect}
-                                            onCapture={(b,t) => processAndSendFile(b, `capture_${Date.now()}.${t.split('/')[1]}`, t)}
-                                            isRecordingAudio={isRecordingAudio}
-                                            audioTime={audioTime}
-                                            onAudioStart={startAudioRecording}
-                                            onAudioStop={stopAudioRecording}
-                                            onLeave={() => window.location.reload()}
-                                        />;
-            return <SignalingView 
-                        view={view} 
-                        localSignal={localSignal} 
-                        scanProgress={scanProgress} 
-                        onScan={handleScannedChunk} 
-                        onBack={() => window.location.reload()}
-                        onScanReply={() => setView('SCAN_JOIN')}
-                    />;
+            const processSignal = async (data) => {
+                if(role === 'HOST' && data.type === 'answer') {
+                    // Host receives Answer
+                    await pc.current.setRemoteDescription(new RTCSessionDescription(data.sdp));
+                    data.candidates.forEach(c => pc.current.addIceCandidate(new RTCIceCandidate(c)));
+                    addLog("Remote Description Set. Waiting for Channel...");
+                } else if (role === 'JOINER' && data.type === 'offer') {
+                    // Joiner receives Offer
+                    await pc.current.setRemoteDescription(new RTCSessionDescription(data.sdp));
+                    data.candidates.forEach(c => pc.current.addIceCandidate(new RTCIceCandidate(c)));
+                    
+                    const answer = await pc.current.createAnswer();
+                    await pc.current.setLocalDescription(answer);
+                    
+                    // Wait for local candidates
+                    await new Promise(r => setTimeout(r, 500));
+                    
+                    const payload = {
+                        type: 'answer',
+                        sdp: pc.current.localDescription,
+                        candidates: candidates.current
+                    };
+                    setLocalSignal(payload);
+                    setView('JOIN_WAIT'); // Show Answer QR
+                }
+            };
+
+            // --- 4. HOST FLOW ---
+            const startHost = async () => {
+                setRole('HOST');
+                const peer = createPeer();
+                
+                // Create Data Channel
+                dc.current = peer.createDataChannel("shadowlink");
+                setupDataChannel(dc.current);
+
+                const offer = await peer.createOffer();
+                await peer.setLocalDescription(offer);
+                
+                // Buffer for candidates
+                await new Promise(r => setTimeout(r, 500));
+                
+                const payload = {
+                    type: 'offer',
+                    sdp: peer.localDescription,
+                    candidates: candidates.current
+                };
+                setLocalSignal(payload);
+                setView('HOST_WAIT');
+            };
+
+            // --- 5. JOIN FLOW ---
+            const startJoin = () => {
+                setRole('JOINER');
+                const peer = createPeer();
+                
+                peer.ondatachannel = (e) => {
+                    dc.current = e.channel;
+                    setupDataChannel(dc.current);
+                };
+                
+                setView('SCAN_HOST'); // Joiner scans Host first
+            };
+
+            // --- 6. DATA CHANNEL & CRYPTO HANDSHAKE ---
+            const setupDataChannel = (channel) => {
+                channel.onopen = () => {
+                    addLog("Tunnel Open. Starting Crypto Handshake...");
+                    initiateSecureHandshake();
+                };
+                channel.onmessage = async (e) => handlePacket(e.data);
+            };
+
+            const initiateSecureHandshake = async () => {
+                // Export Public Keys
+                const rsaPub = await window.crypto.subtle.exportKey("spki", keys.current.rsa.publicKey);
+                const ecdhPub = await window.crypto.subtle.exportKey("raw", keys.current.ecdh.publicKey);
+
+                // Send HELLO packet
+                const packet = {
+                    t: 'HELLO',
+                    rsa: buf2hex(rsaPub),
+                    ecdh: buf2hex(ecdhPub)
+                };
+                dc.current.send(JSON.stringify(packet));
+            };
+
+            const handlePacket = async (raw) => {
+                if(typeof raw !== 'string') return; // Binary file chunk
+                
+                let p;
+                try { p = JSON.parse(raw); } catch(e) { return; }
+
+                if(p.t === 'HELLO') {
+                    // 1. Import Peer RSA
+                    const peerRsa = await window.crypto.subtle.importKey(
+                        "spki", hex2buf(p.rsa), { name: "RSA-OAEP", hash: "SHA-256" }, true, ["encrypt"]
+                    );
+                    
+                    // 2. Import Peer ECDH
+                    const peerEcdh = await window.crypto.subtle.importKey(
+                        "raw", hex2buf(p.ecdh), { name: "ECDH", namedCurve: "P-256" }, true, []
+                    );
+
+                    // 3. Derive Shared Secret (ECDH)
+                    const sharedBits = await window.crypto.subtle.deriveBits(
+                        { name: "ECDH", public: peerEcdh },
+                        keys.current.ecdh.privateKey,
+                        256
+                    );
+
+                    // 4. Derive AES-GCM Session Key (HKDF)
+                    const hkdfKey = await window.crypto.subtle.importKey(
+                        "raw", sharedBits, { name: "HKDF" }, false, ["deriveKey"]
+                    );
+                    sessionKey.current = await window.crypto.subtle.deriveKey(
+                        { name: "HKDF", hash: "SHA-256", salt: new Uint8Array(), info: new TextEncoder().encode("ShadowLink") },
+                        hkdfKey,
+                        { name: "AES-GCM", length: 256 },
+                        false,
+                        ["encrypt", "decrypt"]
+                    );
+
+                    // 5. Generate Fingerprint (Visual Hash of Shared Key)
+                    const fpHash = await window.crypto.subtle.digest("SHA-256", sharedBits);
+                    const fpArr = new Uint8Array(fpHash);
+                    const emojis = ["💀","👽","🤖","👻","🤡","👹","👺","👾","🎃","🐉","🦄","🦉","🕸","⚡","🔥","❄️"];
+                    let fpStr = "";
+                    for(let i=0; i<4; i++) fpStr += emojis[fpArr[i] % emojis.length];
+                    fingerprint.current = fpStr;
+
+                    addLog(`Secure Handshake Complete. FP: ${fpStr}`);
+                    setView('CHAT');
+                    
+                    // Send system msg
+                    setMessages(prev => [...prev, { id: Date.now(), type: 'SYS', text: `SECURE CHANNEL ESTABLISHED. FINGERPRINT: ${fpStr}` }]);
+                } 
+                else if (p.t === 'ENC') {
+                    // Decrypt Message
+                    if(!sessionKey.current) return;
+                    const iv = hex2buf(p.iv);
+                    const ct = hex2buf(p.d);
+                    try {
+                        const pt = await window.crypto.subtle.decrypt(
+                            { name: "AES-GCM", iv: iv },
+                            sessionKey.current,
+                            ct
+                        );
+                        const text = new TextDecoder().decode(pt);
+                        setMessages(prev => [...prev, { id: Date.now(), type: 'RX', text: text }]);
+                    } catch(e) {
+                        console.error("Decryption failed", e);
+                    }
+                }
+            };
+
+            // --- 7. MESSAGING & UI ---
+            const sendMessage = async () => {
+                if(!msgText.trim() || !sessionKey.current) return;
+                
+                const txt = msgText;
+                setMsgText("");
+                setMessages(prev => [...prev, { id: Date.now(), type: 'TX', text: txt }]);
+
+                // Encrypt
+                const iv = window.crypto.getRandomValues(new Uint8Array(12));
+                const enc = await window.crypto.subtle.encrypt(
+                    { name: "AES-GCM", iv: iv },
+                    sessionKey.current,
+                    new TextEncoder().encode(txt)
+                );
+                
+                const packet = {
+                    t: 'ENC',
+                    iv: buf2hex(iv),
+                    d: buf2hex(enc)
+                };
+                dc.current.send(JSON.stringify(packet));
+            };
+
+            // --- RENDERERS ---
+
+            const renderHome = () => (
+                <div className="flex flex-col items-center justify-center min-h-screen p-6 space-y-8 animate-fade-in">
+                    <div className="text-center space-y-2">
+                        <div className="relative inline-block">
+                            <Icon name="ghost" size={64} className="text-cyan-400 mx-auto" />
+                            <div className="absolute top-0 right-0 w-3 h-3 bg-purple-500 rounded-full animate-ping"></div>
+                        </div>
+                        <h1 className="text-4xl font-bold tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-purple-500">
+                            ShadowLink
+                        </h1>
+                        <p className="text-slate-400 text-sm font-mono">Zero-Knowledge Kinetic Mesh</p>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-4 w-full max-w-xs">
+                        <button onClick={startHost} className="group relative overflow-hidden p-6 rounded-2xl bg-slate-800 border border-slate-700 hover:border-cyan-500 transition-all text-left">
+                            <div className="absolute top-0 left-0 w-1 h-full bg-cyan-500 group-hover:w-full transition-all duration-300 opacity-20"></div>
+                            <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                                <Icon name="radio-tower" size={20} /> Host Room
+                            </h3>
+                            <p className="text-xs text-slate-400 mt-1">Create a secure signal.</p>
+                        </button>
+
+                        <button onClick={startJoin} className="group relative overflow-hidden p-6 rounded-2xl bg-slate-800 border border-slate-700 hover:border-purple-500 transition-all text-left">
+                            <div className="absolute top-0 left-0 w-1 h-full bg-purple-500 group-hover:w-full transition-all duration-300 opacity-20"></div>
+                            <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                                <Icon name="scan-line" size={20} /> Join Room
+                            </h3>
+                            <p className="text-xs text-slate-400 mt-1">Scan a signal to connect.</p>
+                        </button>
+                    </div>
+
+                    <div className="text-[10px] text-slate-600 font-mono text-center">
+                        RSA-2048 • ECDH P-256 • AES-GCM • WebRTC
+                    </div>
+                </div>
+            );
+
+            const renderSignaling = () => {
+                const isScanner = view === 'SCAN_HOST' || view === 'SCAN_JOIN';
+                const isQR = view === 'HOST_WAIT' || view === 'JOIN_WAIT';
+                const title = view === 'HOST_WAIT' ? "Host Signal" 
+                            : view === 'SCAN_HOST' ? "Scan Host" 
+                            : view === 'SCAN_JOIN' ? "Scan Reply" 
+                            : "Your Reply";
+                
+                const instr = view === 'HOST_WAIT' ? "Ask peer to SCAN this." 
+                            : view === 'SCAN_HOST' ? "Point camera at Host's screen." 
+                            : view === 'SCAN_JOIN' ? "Host must scan Joiner's screen." 
+                            : "Show this back to Host.";
+
+                return (
+                    <div className="flex flex-col h-screen p-4 items-center justify-center space-y-6 fade-in">
+                        <div className="w-full max-w-md glass-panel rounded-3xl p-6 relative">
+                            <button onClick={() => window.location.reload()} className="absolute top-4 left-4 p-2 bg-slate-800 rounded-full hover:bg-red-500/20 text-slate-400 hover:text-red-400 transition-all">
+                                <Icon name="x" size={16} />
+                            </button>
+                            
+                            <div className="text-center mb-6">
+                                <h2 className="text-2xl font-bold text-white mb-1">{title}</h2>
+                                <p className="text-xs text-cyan-400 font-mono">{instr}</p>
+                            </div>
+
+                            <div className="flex justify-center min-h-[250px] items-center">
+                                {isQR && localSignal && (
+                                    <div className="space-y-4 w-full">
+                                        <QRAnimator data={localSignal} label="Signal Packet" />
+                                        {view === 'HOST_WAIT' && (
+                                            <button onClick={() => setView('SCAN_JOIN')} className="w-full py-4 bg-gradient-to-r from-purple-600 to-indigo-600 rounded-xl font-bold shadow-lg shadow-purple-900/40 flex items-center justify-center gap-2">
+                                                <Icon name="scan-eye" /> I've been Scanned, Scan Reply
+                                            </button>
+                                        )}
+                                    </div>
+                                )}
+
+                                {isScanner && (
+                                    <div className="w-full space-y-4">
+                                        <QRScanner onScan={handleScannedChunk} />
+                                        {scanProgress > 0 && scanProgress < 100 && (
+                                            <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                                                <div className="h-full bg-green-500 transition-all" style={{width: `${scanProgress}%`}}></div>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="font-mono text-[10px] text-slate-500 bg-black/50 px-4 py-2 rounded-lg">
+                            {logs[logs.length-1] || "Initializing..."}
+                        </div>
+                    </div>
+                );
+            };
+
+            const renderChat = () => (
+                <div className="flex flex-col h-screen bg-[#0b141a]">
+                    {/* Header */}
+                    <header className="px-4 py-3 bg-[#1f2c34] flex items-center justify-between shadow-md z-10">
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center text-white font-bold text-xl shadow-[0_0_15px_rgba(6,182,212,0.5)]">
+                                {fingerprint.current ? fingerprint.current[0] : '?'}
+                            </div>
+                            <div>
+                                <h2 className="font-bold text-slate-100 text-sm">Secure Peer</h2>
+                                <p className="text-[10px] text-emerald-400 font-mono tracking-wider">
+                                    AES-GCM-256 • {fingerprint.current}
+                                </p>
+                            </div>
+                        </div>
+                        <button onClick={() => window.location.reload()} className="p-2 text-slate-400 hover:text-red-400">
+                            <Icon name="log-out" size={20} />
+                        </button>
+                    </header>
+
+                    {/* Chat Area */}
+                    <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')]">
+                        {messages.map((m) => (
+                            m.type === 'SYS' ? (
+                                <div key={m.id} className="flex justify-center">
+                                    <span className="bg-slate-800/80 text-cyan-400 text-[10px] px-3 py-1 rounded-full font-mono border border-cyan-900">
+                                        {m.text}
+                                    </span>
+                                </div>
+                            ) : (
+                                <div key={m.id} className={`flex ${m.type === 'TX' ? 'justify-end' : 'justify-start'}`}>
+                                    <div className={`msg-bubble ${m.type === 'TX' ? 'msg-me' : 'msg-other'} shadow-sm text-sm`}>
+                                        {m.text}
+                                        <div className={`text-[9px] mt-1 opacity-60 text-right font-mono`}>
+                                            {new Date(m.id).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}
+                                        </div>
+                                    </div>
+                                </div>
+                            )
+                        ))}
+                    </div>
+
+                    {/* Input */}
+                    <div className="p-2 bg-[#1f2c34] flex items-center gap-2">
+                         <button className="p-3 rounded-full text-slate-400 hover:bg-white/5 transition-colors">
+                            <Icon name="paperclip" size={20} />
+                        </button>
+                        <div className="flex-1 bg-[#2a3942] rounded-2xl flex items-center px-4 py-2">
+                            <input 
+                                value={msgText}
+                                onChange={e => setMsgText(e.target.value)}
+                                onKeyDown={e => e.key === 'Enter' && sendMessage()}
+                                type="text" 
+                                placeholder="Message" 
+                                className="bg-transparent border-none outline-none text-slate-200 w-full placeholder-slate-500 text-sm"
+                            />
+                        </div>
+                        <button 
+                            onClick={sendMessage}
+                            className={`p-3 rounded-full transition-all ${msgText ? 'bg-cyan-600 text-white shadow-[0_0_15px_rgba(8,145,178,0.4)]' : 'bg-[#2a3942] text-slate-500'}`}
+                        >
+                            <Icon name="send-horizontal" size={20} />
+                        </button>
+                    </div>
+                </div>
+            );
+
+            // Router Logic
+            if(view === 'HOME') return renderHome();
+            if(view === 'CHAT') return renderChat();
+            return renderSignaling();
         };
 
         const root = ReactDOM.createRoot(document.getElementById('root'));
