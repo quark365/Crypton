@@ -683,7 +683,9 @@
                 
                 peer.ontrack = (e) => {
                     const stream = e.streams[0] || new MediaStream([e.track]);
-                    setRemoteStream(stream);
+                    // FORCE UPDATE: Create a new MediaStream reference to ensure React detects the change
+                    // This fixes the issue where subsequent tracks (video arriving after audio) were ignored by UI
+                    setRemoteStream(new MediaStream(stream.getTracks()));
                 };
 
                 pc.current = peer;
