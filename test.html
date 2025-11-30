@@ -264,21 +264,22 @@
             );
         };
 
-        // --- CALL UI COMPONENT ---
+        // --- CALL UI COMPONENT (UPDATED) ---
         const CallOverlay = ({ status, localStream, remoteStream, onAnswer, onHangup, isVideo, onToggleMute, onToggleVideo }) => {
             const localVideoRef = useRef(null);
             const remoteVideoRef = useRef(null);
+            
+            // UI States for visual feedback
             const [isMuted, setIsMuted] = useState(false);
             const [isCameraOff, setIsCameraOff] = useState(false);
 
-            // Ref for Video Toggle UI update
+            // Sync video stream to video elements
             useEffect(() => {
                 if (localVideoRef.current && localStream) {
                     localVideoRef.current.srcObject = localStream;
                 }
             }, [localStream, isCameraOff]); 
 
-            // Ref for Remote Video
             useEffect(() => {
                 if (remoteVideoRef.current && remoteStream) {
                     remoteVideoRef.current.srcObject = remoteStream;
@@ -286,12 +287,15 @@
                 }
             }, [remoteStream]);
 
-            const handleToggleMute = () => {
-                if(onToggleMute()) setIsMuted(prev => !prev);
+            // Handlers that update UI only if the action succeeded
+            const handleMuteClick = () => {
+                const success = onToggleMute();
+                if(success) setIsMuted(prev => !prev);
             };
 
-            const handleToggleVideo = () => {
-                if(onToggleVideo()) setIsCameraOff(prev => !prev);
+            const handleVideoClick = () => {
+                const success = onToggleVideo();
+                if(success) setIsCameraOff(prev => !prev);
             };
 
             if (status === 'IDLE') return null;
@@ -301,10 +305,11 @@
 
             return (
                 <div className="fixed inset-0 z-[70] bg-black/95 flex flex-col items-center justify-center app-height animate-fade-in backdrop-blur-md">
-                    {/* Main Video Container */}
+                    
+                    {/* Main Video/Audio Container */}
                     <div className="relative w-full h-full max-w-7xl max-h-[100dvh] mx-auto bg-slate-900 overflow-hidden md:rounded-2xl shadow-2xl">
                         
-                        {/* Remote Stream - Always render video element for audio playback, hide if no video */}
+                        {/* Remote Stream Layer */}
                         <video 
                             ref={remoteVideoRef} 
                             autoPlay 
@@ -312,13 +317,18 @@
                             className={`w-full h-full object-cover ${remoteHasVideo ? '' : 'hidden'}`} 
                         />
 
-                        {/* Audio-only Placeholder */}
+                        {/* Audio-only Avatar Visualization (Shown if video is off or audio call) */}
                         {!remoteHasVideo && (
                             <div className="absolute inset-0 w-full h-full flex flex-col items-center justify-center bg-slate-900 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-slate-800 to-slate-950">
-                                <div className="w-40 h-40 rounded-full bg-gradient-to-br from-cyan-500/20 to-purple-500/20 border border-white/10 animate-pulse flex items-center justify-center mb-6 shadow-[0_0_50px_rgba(6,182,212,0.15)]">
-                                    <Icon name="user" size={80} className="text-cyan-100/50" />
+                                <div className="relative">
+                                    <div className={`absolute inset-0 bg-cyan-500 rounded-full blur-2xl opacity-20 ${status === 'ACTIVE' ? 'animate-pulse' : ''}`}></div>
+                                    <div className="w-40 h-40 rounded-full bg-gradient-to-br from-cyan-500/20 to-purple-500/20 border border-white/10 flex items-center justify-center relative z-10 shadow-[0_0_50px_rgba(6,182,212,0.15)]">
+                                        <Icon name="user" size={80} className="text-cyan-100/50" />
+                                    </div>
                                 </div>
-                                <p className="text-slate-400 font-mono tracking-widest text-sm uppercase">{status === 'ACTIVE' ? 'Voice Connected' : 'Connecting...'}</p>
+                                <p className="text-slate-400 font-mono tracking-widest text-sm uppercase mt-8 animate-pulse">
+                                    {status === 'ACTIVE' ? 'Voice Connected' : status === 'OUTGOING' ? 'Calling...' : 'Connecting...'}
+                                </p>
                             </div>
                         )}
 
@@ -342,30 +352,53 @@
                                     </div>
                                 </div>
 
-                                <div className="flex items-center justify-center gap-6">
+                                <div className="flex items-center justify-center gap-8">
                                     {status === 'INCOMING' ? (
                                         <>
-                                            <button onClick={onHangup} className="p-5 bg-red-500/20 text-red-500 border border-red-500/50 rounded-full shadow-lg hover:bg-red-500 hover:text-white hover:scale-110 transition-all backdrop-blur-md">
-                                                <Icon name="phone-off" size={32} />
+                                            <button onClick={onHangup} className="flex flex-col items-center gap-2 group">
+                                                <div className="p-5 bg-red-500/20 text-red-500 border border-red-500/50 rounded-full shadow-lg group-hover:bg-red-500 group-hover:text-white transition-all backdrop-blur-md">
+                                                    <Icon name="phone-off" size={32} />
+                                                </div>
+                                                <span className="text-xs font-bold text-red-400 uppercase tracking-wider">Decline</span>
                                             </button>
-                                            <button onClick={onAnswer} className="p-5 bg-green-500 rounded-full text-white shadow-[0_0_30px_rgba(34,197,94,0.4)] hover:bg-green-400 hover:scale-110 transition-all animate-bounce">
-                                                <Icon name="phone" size={32} />
+
+                                            <button onClick={onAnswer} className="flex flex-col items-center gap-2 group">
+                                                <div className="p-5 bg-green-500 rounded-full text-white shadow-[0_0_30px_rgba(34,197,94,0.4)] group-hover:bg-green-400 group-hover:scale-110 transition-all animate-bounce">
+                                                    <Icon name="phone" size={32} />
+                                                </div>
+                                                <span className="text-xs font-bold text-green-400 uppercase tracking-wider">Accept</span>
                                             </button>
                                         </>
                                     ) : (
                                         <>
-                                            <button onClick={handleToggleMute} className={`p-4 rounded-full transition-all backdrop-blur-md border ${isMuted ? 'bg-white text-black border-white' : 'bg-white/10 text-white border-white/20 hover:bg-white/20'}`}>
-                                                <Icon name={isMuted ? "mic-off" : "mic"} size={24} />
+                                            {/* MUTE BUTTON */}
+                                            <button 
+                                                onClick={handleMuteClick} 
+                                                className={`p-5 rounded-full transition-all backdrop-blur-md border shadow-lg ${
+                                                    isMuted 
+                                                        ? 'bg-red-600 border-red-500 text-white hover:bg-red-500' 
+                                                        : 'bg-white/10 border-white/20 text-white hover:bg-white/20'
+                                                }`}
+                                            >
+                                                <Icon key={isMuted ? "mic-off" : "mic"} name={isMuted ? "mic-off" : "mic"} size={28} />
                                             </button>
                                             
-                                            <button onClick={onHangup} className="p-5 bg-red-600 rounded-full text-white shadow-xl hover:bg-red-500 hover:scale-105 transition-all">
-                                                <Icon name="phone-off" size={32} />
+                                            {/* HANGUP BUTTON */}
+                                            <button onClick={onHangup} className="p-6 bg-red-600 rounded-full text-white shadow-xl hover:bg-red-500 hover:scale-110 transition-all border-4 border-black/30">
+                                                <Icon name="phone-off" size={36} />
                                             </button>
 
-                                            {/* Only show Video Toggle if it is a Video Call */}
+                                            {/* VIDEO TOGGLE - ONLY IF VIDEO CALL */}
                                             {isVideo && (
-                                                <button onClick={handleToggleVideo} className={`p-4 rounded-full transition-all backdrop-blur-md border ${isCameraOff ? 'bg-white text-black border-white' : 'bg-white/10 text-white border-white/20 hover:bg-white/20'}`}>
-                                                    <Icon name={isCameraOff ? "video-off" : "video"} size={24} />
+                                                <button 
+                                                    onClick={handleVideoClick} 
+                                                    className={`p-5 rounded-full transition-all backdrop-blur-md border shadow-lg ${
+                                                        isCameraOff 
+                                                            ? 'bg-red-600 border-red-500 text-white hover:bg-red-500' 
+                                                            : 'bg-white/10 border-white/20 text-white hover:bg-white/20'
+                                                    }`}
+                                                >
+                                                    <Icon key={isCameraOff ? "video-off" : "video"} name={isCameraOff ? "video-off" : "video"} size={28} />
                                                 </button>
                                             )}
                                         </>
@@ -560,7 +593,7 @@
             // Call State
             const [callStatus, setCallStatus] = useState('IDLE'); // IDLE, OUTGOING, INCOMING, ACTIVE
             const [localStream, setLocalStream] = useState(null);
-            const localStreamRef = useRef(null); // Fix: Active reference for stream manipulation
+            const localStreamRef = useRef(null); // Ref to hold active stream for immediate access in toggles
             const [remoteStream, setRemoteStream] = useState(null);
             const [isVideoCall, setIsVideoCall] = useState(false);
             const pendingOffer = useRef(null);
@@ -568,15 +601,17 @@
             // Initial Key Gen
             useEffect(() => {
                 const initKeys = async () => {
+                    // Generate RSA Keys for Identity
                     keys.current.rsa = await window.crypto.subtle.generateKey(
                         { name: "RSA-OAEP", modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: "SHA-256" },
                         true, ["encrypt", "decrypt"]
                     );
+                    // Generate ECDH Keys for Session Secrecy
                     keys.current.ecdh = await window.crypto.subtle.generateKey(
                         { name: "ECDH", namedCurve: "P-256" },
                         true, ["deriveKey", "deriveBits"]
                     );
-                    addLog("Keys Generated.");
+                    addLog("Crypto System Initialized (RSA + ECDH).");
                 };
                 initKeys();
             }, []);
@@ -705,6 +740,7 @@
                 channel.onmessage = async (e) => handlePacket(e.data);
             };
 
+            // Hybrid Cryptography Handshake (RSA Identity + ECDH Session)
             const initiateSecureHandshake = async () => {
                 const rsaPub = await window.crypto.subtle.exportKey("spki", keys.current.rsa.publicKey);
                 const ecdhPub = await window.crypto.subtle.exportKey("raw", keys.current.ecdh.publicKey);
@@ -712,15 +748,22 @@
             };
 
             const deriveSession = async (p) => {
+                // Import Peer's RSA Key (Identity)
                 const peerRsa = await window.crypto.subtle.importKey("spki", hex2buf(p.rsa), { name: "RSA-OAEP", hash: "SHA-256" }, true, ["encrypt"]);
+                // Import Peer's ECDH Key (Diffie-Hellman)
                 const peerEcdh = await window.crypto.subtle.importKey("raw", hex2buf(p.ecdh), { name: "ECDH", namedCurve: "P-256" }, true, []);
+                
+                // Derive Shared Secret
                 const sharedBits = await window.crypto.subtle.deriveBits({ name: "ECDH", public: peerEcdh }, keys.current.ecdh.privateKey, 256);
+                
+                // Create Session Key (AES-GCM)
                 const hkdfKey = await window.crypto.subtle.importKey("raw", sharedBits, { name: "HKDF" }, false, ["deriveKey"]);
                 sessionKey.current = await window.crypto.subtle.deriveKey(
                     { name: "HKDF", hash: "SHA-256", salt: new Uint8Array(), info: new TextEncoder().encode("ShadowLink") },
                     hkdfKey, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]
                 );
 
+                // Generate Fingerprint from RSA+ECDH data (Safety Number)
                 const fpHash = await window.crypto.subtle.digest("SHA-256", sharedBits);
                 const fpArr = new Uint8Array(fpHash);
                 const emojis = ["💀","👽","🤖","👻","🤡","👹","👺","👾","🎃","🐉","🦄","🦉","🕸","⚡","🔥","❄️"];
@@ -907,7 +950,7 @@
                 try {
                     const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: video });
                     setLocalStream(stream);
-                    localStreamRef.current = stream; // Fix: Update Ref
+                    localStreamRef.current = stream; // Important for toggles
                     setIsVideoCall(video);
                     
                     stream.getTracks().forEach(track => pc.current.addTrack(track, stream));
@@ -935,7 +978,7 @@
                     }
                     
                     setLocalStream(stream);
-                    localStreamRef.current = stream; // Fix: Update Ref
+                    localStreamRef.current = stream; // Important for toggles
                     
                     stream.getTracks().forEach(track => pc.current.addTrack(track, stream));
                     
@@ -956,7 +999,6 @@
             };
 
             const endCallCleanup = () => {
-                // Fix: Use ref to clean up active stream, preventing zombie camera
                 if(localStreamRef.current) {
                     localStreamRef.current.getTracks().forEach(t => t.stop());
                     localStreamRef.current = null;
@@ -969,6 +1011,7 @@
                 setCallStatus('IDLE');
             };
 
+            // Toggle Functions return true if successful, allowing UI to update
             const toggleMute = () => {
                 if(localStreamRef.current) {
                     const audioTrack = localStreamRef.current.getAudioTracks()[0];
@@ -1137,7 +1180,7 @@
                             <div>
                                 <h2 className="font-bold text-slate-100 text-sm group-hover:text-cyan-400 transition-colors">Secure Peer</h2>
                                 <p className="text-[10px] text-emerald-400 font-mono tracking-wider flex items-center gap-1">
-                                    <Icon name="lock" size={10} /> AES-GCM-256
+                                    <Icon name="lock" size={10} /> AES-256 + RSA
                                 </p>
                             </div>
                         </div>
