@@ -129,9 +129,40 @@
 
         // --- COMPONENTS ---
 
+        // FIXED: Crash-proof Icon component. 
+        // Uses a wrapper span and manual DOM manipulation to avoid React/Lucide reconciliation conflicts.
         const Icon = ({ name, size = 24, className, onClick }) => {
-            useEffect(() => { lucide.createIcons(); }, [name]);
-            return <i data-lucide={name} width={size} height={size} className={className} onClick={onClick}></i>;
+            const ref = useRef(null);
+
+            useEffect(() => {
+                if(!window.lucide || !ref.current) return;
+                
+                const el = document.createElement('i');
+                el.setAttribute('data-lucide', name);
+                
+                ref.current.innerHTML = '';
+                ref.current.appendChild(el);
+                
+                window.lucide.createIcons({
+                    root: ref.current,
+                    attrs: {
+                        width: size,
+                        height: size,
+                        // className applied to parent span cascades color, 
+                        // so we don't need to force it onto the SVG usually.
+                    }
+                });
+            }, [name, size]);
+
+            return (
+                <span 
+                    ref={ref} 
+                    onClick={onClick} 
+                    className={`inline-flex items-center justify-center ${className || ''}`}
+                    style={{ cursor: onClick ? 'pointer' : 'default' }}
+                >
+                </span>
+            );
         };
 
         const QRAnimator = ({ data, label }) => {
