@@ -97,7 +97,7 @@
        
         // --- CONSTANTS & CONFIG ---
         const PROTOCOL = {
-            VERSION: '2.8-FIXED',
+            VERSION: '2.9-FIXED',
             QR_CHUNK_SIZE: 1000, 
             DEFAULT_QR_FPS: 200,
             MAX_PACKET_SIZE: 5000,
@@ -676,7 +676,8 @@
                             keys.ecdh.privateKey,
                             256
                         );
-                        const salt = p.s ? hex2buf(p.s) : new Uint8Array();
+                        const saltBuf = p.s ? hex2buf(p.s) : new ArrayBuffer(0);
+                        const salt = new Uint8Array(saltBuf);
                         const hkdfKey = await window.crypto.subtle.importKey(
                             "raw", sharedBits, { name: "HKDF" }, false, ["deriveKey"]
                         );
@@ -705,10 +706,10 @@
                     }
                     else if (p.iv) {
                         if (!sessionKey) throw new Error("No secure session.");
-                        const iv = hex2buf(p.iv);
+                        const ivBuf = hex2buf(p.iv);
                         const ct = hex2buf(p.d);
                         const pt = await window.crypto.subtle.decrypt(
-                            { name: "AES-GCM", iv }, sessionKey, ct
+                            { name: "AES-GCM", iv: ivBuf }, sessionKey, ct
                         );
                         const text = new TextDecoder().decode(pt);
                         setChat(prev => [...prev, { from: 'Partner', text }]);
@@ -721,6 +722,9 @@
                     }
                 } catch (e) {
                     console.error(e);
+                    // FIX: Reset chunk buffer on error to avoid stuck state
+                    chunkBuffer.current = { chunks: [], total: 0, count: 0 };
+                    
                     // Differentiate between Replay and other errors for user clarity
                     let msg = "Scan rejected.\n(Integrity check failed, expired timestamp, or malformed data)";
                     if (e.message.includes("Replay")) msg = "Replay Attack Detected: This packet has already been processed.";
@@ -789,7 +793,7 @@
                             <div>
                                 <h1 className="font-bold text-lg leading-none tracking-tight">Crypton</h1>
                                 <span className={`text-[10px] font-bold tracking-widest ${textClass} opacity-80`}>
-                                    {mode==='DARTH' ? 'INTERCEPTOR ACTIVE' : 'SECURE CHANNEL v2.7'}
+                                    {mode==='DARTH' ? 'INTERCEPTOR ACTIVE' : 'SECURE CHANNEL v2.9'}
                                 </span>
                             </div>
                         </div>
