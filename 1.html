@@ -1,0 +1,1568 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>ShadowLink | Secure P2P</title>
+    <link rel="icon" type="image/png" href="shadow.png">
+    
+    <!-- React & DOM -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>       
+    
+    <!-- QR Tools -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+    
+    <!-- Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;700&family=JetBrains+Mono:wght@400;700&display=swap');
+        
+        :root {
+            --primary: #00f3ff;
+            --primary-dim: rgba(0, 243, 255, 0.1);
+            --secondary: #bc13fe;
+            --bg-dark: #050510;
+            --surface: #0f141e;
+            --surface-glass: rgba(15, 20, 30, 0.7);
+            --text-main: #e2e8f0;
+            --text-muted: #94a3b8;
+            --success: #10b981;
+            --danger: #ef4444;
+            --radius-lg: 24px;
+            --radius-md: 16px;
+            --radius-sm: 8px;
+            --shadow-glow: 0 0 20px rgba(0, 243, 255, 0.15);
+        }
+
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        
+        body {
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            font-family: 'Space Grotesk', sans-serif;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            height: 100vh;
+            height: 100dvh;
+        }
+
+        /* --- Layout & Utilities --- */
+        #root { height: 100%; width: 100%; }
+        
+        .app-view {
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .center-stage {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            padding: 20px;
+            text-align: center;
+            animation: fadeIn 0.4s ease-out;
+        }
+
+        .glass-panel {
+            background: var(--surface-glass);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: var(--radius-lg);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+
+        .btn-icon {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            padding: 10px;
+            border-radius: 50%;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .btn-icon:hover { color: var(--text-main); background: rgba(255,255,255,0.05); }
+        .btn-icon:active { transform: scale(0.95); }
+
+        .hidden { display: none !important; }
+        .font-mono { font-family: 'JetBrains Mono', monospace; }
+        
+        /* --- Animations --- */
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes pulse-glow { 0% { box-shadow: 0 0 0 0 rgba(0, 243, 255, 0.4); } 70% { box-shadow: 0 0 0 10px rgba(0, 243, 255, 0); } 100% { box-shadow: 0 0 0 0 rgba(0, 243, 255, 0); } }
+        @keyframes pulse-red { 0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); } 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } }
+        @keyframes scan { 0% { top: 0%; opacity: 0; } 50% { opacity: 1; } 100% { top: 100%; opacity: 0; } }
+
+        /* --- Home View --- */
+        .home-title {
+            font-size: 2.5rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin: 10px 0 5px 0;
+            letter-spacing: -1px;
+        }
+        
+        .card-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 16px;
+            width: 100%;
+            max-width: 600px;
+            margin-top: 40px;
+        }
+        @media (min-width: 768px) { .card-grid { grid-template-columns: 1fr 1fr; } }
+
+        .action-card {
+            background: linear-gradient(180deg, rgba(30, 41, 59, 0.5), rgba(15, 23, 42, 0.8));
+            border: 1px solid rgba(255,255,255,0.05);
+            padding: 24px;
+            border-radius: var(--radius-lg);
+            text-align: left;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+            position: relative;
+            overflow: hidden;
+        }
+        .action-card:hover {
+            transform: translateY(-2px);
+            border-color: var(--primary-dim);
+            box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
+        }
+        .action-card::before {
+            content: ''; position: absolute; top: 0; left: 0; width: 4px; height: 100%;
+            background: var(--primary); opacity: 0.3; transition: 0.3s;
+        }
+        .action-card:hover::before { opacity: 1; }
+        .action-card.secondary::before { background: var(--secondary); }
+
+        .action-card h3 { margin: 0; color: white; display: flex; align-items: center; gap: 10px; font-size: 1.2rem; }
+        .action-card p { margin: 8px 0 0 0; color: var(--text-muted); font-size: 0.85rem; }
+
+        /* --- Signaling / QR --- */
+        .qr-wrapper {
+            background: white;
+            padding: 16px;
+            border-radius: var(--radius-md);
+            box-shadow: var(--shadow-glow);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .qr-progress { width: 100%; height: 4px; background: #e2e8f0; border-radius: 2px; margin-top: 10px; overflow: hidden; }
+        .qr-bar { height: 100%; background: var(--primary); transition: width 0.1s linear; }
+        
+        .scan-container {
+            position: relative;
+            width: 100%;
+            max-width: 320px;
+            aspect-ratio: 1;
+            border-radius: var(--radius-lg);
+            overflow: hidden;
+            border: 2px solid var(--primary);
+            box-shadow: var(--shadow-glow);
+            background: black;
+        }
+        .scan-video { width: 100%; height: 100%; object-fit: cover; opacity: 0.8; }
+        .scanline {
+            width: 100%; height: 2px; background: var(--primary);
+            position: absolute; top: 0; left: 0; z-index: 10;
+            box-shadow: 0 0 10px var(--primary);
+            animation: scan 2s linear infinite;
+        }
+
+        /* --- Chat Interface --- */
+        .chat-container {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            background-color: #080b12;
+            background-image: radial-gradient(circle at 50% 50%, #111827 0%, #050510 100%);
+        }
+
+        .chat-header {
+            padding: 12px 20px;
+            background: rgba(5, 5, 16, 0.85);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 20;
+        }
+
+        .identity-badge {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            cursor: pointer;
+        }
+        .avatar {
+            width: 40px; height: 40px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--primary), #2563eb);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.2rem; color: white;
+            box-shadow: 0 0 10px rgba(0, 243, 255, 0.3);
+        }
+
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            scroll-behavior: smooth;
+        }
+
+        .sys-msg { align-self: center; margin: 10px 0; }
+        .sys-pill {
+            background: rgba(30, 41, 59, 0.6);
+            color: var(--primary);
+            font-size: 0.7rem;
+            padding: 4px 12px;
+            border-radius: 20px;
+            border: 1px solid rgba(0, 243, 255, 0.2);
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .msg-row { display: flex; width: 100%; animation: fadeIn 0.2s ease-out; }
+        .msg-row.me { justify-content: flex-end; }
+        
+        .bubble {
+            max-width: 80%;
+            padding: 10px 16px;
+            border-radius: 18px;
+            position: relative;
+            font-size: 0.95rem;
+            line-height: 1.4;
+            word-wrap: break-word;
+        }
+        .msg-row.me .bubble {
+            background: linear-gradient(135deg, #0891b2, #2563eb);
+            color: white;
+            border-bottom-right-radius: 4px;
+            box-shadow: 0 4px 15px rgba(37, 99, 235, 0.3);
+        }
+        .msg-row.other .bubble {
+            background: #1e293b;
+            color: var(--text-main);
+            border: 1px solid rgba(255,255,255,0.05);
+            border-bottom-left-radius: 4px;
+        }
+
+        .timestamp {
+            font-size: 0.65rem; opacity: 0.6; margin-top: 4px;
+            display: flex; justify-content: flex-end; align-items: center; gap: 4px;
+        }
+
+        .media-preview {
+            max-width: 100%; max-height: 200px;
+            border-radius: 8px; margin-top: 8px;
+            background: rgba(0,0,0,0.3);
+        }
+
+        /* --- Chat Input --- */
+        .chat-footer {
+            padding: 12px 16px;
+            background: #0f141e;
+            border-top: 1px solid rgba(255,255,255,0.05);
+            padding-bottom: max(12px, env(safe-area-inset-bottom));
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .input-bar {
+            flex: 1;
+            background: #1e293b;
+            border-radius: 24px;
+            display: flex;
+            align-items: center;
+            padding: 4px 6px 4px 16px;
+            border: 1px solid transparent;
+            transition: 0.3s;
+        }
+        .input-bar:focus-within { border-color: rgba(0, 243, 255, 0.3); background: #243042; }
+        
+        .msg-input {
+            flex: 1;
+            background: transparent;
+            border: none;
+            color: white;
+            padding: 10px 0;
+            outline: none;
+            font-family: inherit;
+        }
+
+        .btn-send {
+            background: var(--primary);
+            color: #000;
+            border: none;
+            width: 40px; height: 40px;
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        .btn-send:hover { transform: scale(1.05); box-shadow: 0 0 15px var(--primary); }
+
+        .btn-rec {
+            background: #334155;
+            color: var(--text-muted);
+            width: 40px; height: 40px;
+            border-radius: 50%;
+            border: none; display: flex; align-items: center; justify-content: center;
+            cursor: pointer;
+        }
+        .btn-rec:hover { background: rgba(239, 68, 68, 0.2); color: var(--danger); }
+
+        .recording-bar {
+            flex: 1;
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            border-radius: 24px;
+            height: 48px;
+            display: flex; align-items: center;
+            padding: 0 16px;
+            gap: 12px;
+            animation: pulse-border 1.5s infinite;
+        }
+
+        /* --- Emoji Picker --- */
+        .emoji-grid {
+            position: absolute;
+            bottom: 80px; left: 16px;
+            background: rgba(30, 41, 59, 0.95);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 16px;
+            padding: 8px;
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 4px;
+            z-index: 50;
+        }
+        .emoji-btn { font-size: 1.5rem; background: none; border: none; padding: 8px; cursor: pointer; border-radius: 8px; }
+        .emoji-btn:hover { background: rgba(255,255,255,0.1); }
+
+        /* --- Modals --- */
+        .modal-overlay {
+            position: fixed; inset: 0; z-index: 100;
+            background: rgba(0,0,0,0.8);
+            backdrop-filter: blur(8px);
+            display: flex; align-items: center; justify-content: center;
+            padding: 20px;
+            animation: fadeIn 0.2s;
+        }
+        .modal-content {
+            background: #0f172a;
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 24px;
+            padding: 32px;
+            width: 100%; max-width: 360px;
+            text-align: center;
+            position: relative;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+        }
+        
+        /* --- Call Overlay --- */
+        .call-screen {
+            position: fixed; inset: 0; z-index: 90;
+            background: #000;
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+        }
+        .remote-video {
+            width: 100%; height: 100%;
+            object-fit: cover;
+            position: absolute; inset: 0;
+        }
+        .local-video-pip {
+            position: absolute;
+            top: 20px; right: 20px;
+            width: 120px; height: 160px;
+            background: #000;
+            border-radius: 16px;
+            border: 1px solid rgba(255,255,255,0.2);
+            overflow: hidden;
+            z-index: 92;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+        .local-video-pip video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+        
+        .call-controls {
+            position: absolute; bottom: 0; left: 0; right: 0;
+            padding: 40px 20px 60px;
+            background: linear-gradient(to top, rgba(0,0,0,0.9), transparent);
+            display: flex; justify-content: center; gap: 20px;
+            z-index: 95;
+        }
+        .ctrl-btn {
+            width: 60px; height: 60px;
+            border-radius: 50%;
+            border: none;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.2rem; cursor: pointer;
+            backdrop-filter: blur(10px);
+            transition: transform 0.2s;
+        }
+        .ctrl-btn:active { transform: scale(0.9); }
+        .ctrl-btn.normal { background: rgba(255,255,255,0.2); color: white; }
+        .ctrl-btn.danger { background: var(--danger); color: white; }
+        .ctrl-btn.success { background: var(--success); color: white; animation: pulse-glow 2s infinite; }
+        .ctrl-btn.active { background: white; color: black; }
+
+        /* --- Camera Modal --- */
+        .camera-full {
+            position: fixed; inset: 0; z-index: 80; background: black;
+            display: flex; flex-direction: column;
+        }
+        .cam-view { flex: 1; position: relative; overflow: hidden; background: #000; }
+        .cam-view video { width: 100%; height: 100%; object-fit: cover; }
+        .cam-ui {
+            background: rgba(0,0,0,0.8);
+            padding: 30px;
+            display: flex; justify-content: space-around; align-items: center;
+            padding-bottom: max(30px, env(safe-area-inset-bottom));
+        }
+        .shutter-btn {
+            width: 72px; height: 72px;
+            border-radius: 50%;
+            border: 4px solid white;
+            background: transparent;
+            position: relative;
+            cursor: pointer;
+        }
+        .shutter-inner {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: 56px; height: 56px; background: white; border-radius: 50%; transition: 0.2s;
+        }
+        .shutter-btn:active .shutter-inner { width: 48px; height: 48px; }
+        .shutter-btn.rec { border-color: var(--danger); }
+        .shutter-btn.rec .shutter-inner { background: var(--danger); width: 40px; height: 40px; border-radius: 8px; }
+
+        /* Utility Helpers */
+        .text-cyan { color: var(--primary); }
+        .text-purple { color: var(--secondary); }
+        .text-center { text-align: center; }
+        .mt-4 { margin-top: 16px; }
+        .mb-2 { margin-bottom: 8px; }
+        .flex-col { display: flex; flex-direction: column; }
+        .w-full { width: 100%; }
+
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef, useMemo, useCallback } = React;
+
+        // --- CONFIG ---
+        const CHUNK_SIZE = 250;
+        const ICE_SERVERS = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+        const FILE_CHUNK_SIZE = 16384; 
+        const EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "😡", "🎉", "🔥", "👻", "🤖", "👀", "🚀", "💀", "💩", "👋", "✅"];
+        
+        // --- UTILS ---
+        const buf2hex = (buf) => [...new Uint8Array(buf)].map(x => x.toString(16).padStart(2, '0')).join('');
+        const hex2buf = (hex) => new Uint8Array(hex.match(/.{1,2}/g).map(byte => parseInt(byte, 16))).buffer;
+        
+        const arrayBufferToBase64 = (buffer) => {
+            let binary = '';
+            const bytes = new Uint8Array(buffer);
+            for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+            return window.btoa(binary);
+        };
+        const base64ToArrayBuffer = (base64) => {
+            const binary_string = window.atob(base64);
+            const len = binary_string.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) bytes[i] = binary_string.charCodeAt(i);
+            return bytes.buffer;
+        };
+
+        const formatTime = (seconds) => {
+            const mins = Math.floor(seconds / 60);
+            const secs = seconds % 60;
+            return `${mins}:${secs.toString().padStart(2, '0')}`;
+        };
+
+        // --- COMPONENTS ---
+
+        const Icon = ({ name, size = 24, className, onClick }) => {
+            const ref = useRef(null);
+
+            useEffect(() => {
+                if(!window.lucide || !ref.current) return;
+                const el = document.createElement('i');
+                el.setAttribute('data-lucide', name);
+                ref.current.innerHTML = '';
+                ref.current.appendChild(el);
+                window.lucide.createIcons({ root: ref.current, attrs: { width: size, height: size } });
+            }, [name, size]);
+
+            return (
+                <span 
+                    ref={ref} 
+                    onClick={onClick} 
+                    className={className}
+                    style={{ cursor: onClick ? 'pointer' : 'default', display: 'inline-flex' }}
+                ></span>
+            );
+        };
+
+        const QRAnimator = ({ data, label }) => {
+            const [index, setIndex] = useState(0);
+            const canvasRef = useRef(null);
+            
+            const chunks = useMemo(() => {
+                if(!data) return [];
+                const str = typeof data === 'string' ? data : JSON.stringify(data);
+                const b64 = btoa(str); 
+                const total = Math.ceil(b64.length / CHUNK_SIZE);
+                const arr = [];
+                for(let i=0; i<total; i++) {
+                    arr.push(`SL:${i}:${total}:${b64.slice(i*CHUNK_SIZE, (i+1)*CHUNK_SIZE)}`);
+                }
+                return arr;
+            }, [data]);
+
+            useEffect(() => {
+                if(chunks.length <= 1) return;
+                const interval = setInterval(() => {
+                    setIndex(prev => (prev + 1) % chunks.length);
+                }, 250);
+                return () => clearInterval(interval);
+            }, [chunks]);
+
+            useEffect(() => {
+                if(canvasRef.current && chunks.length > 0) {
+                    new QRious({
+                        element: canvasRef.current,
+                        value: chunks[index],
+                        size: 250,
+                        level: 'L',
+                        foreground: '#000',
+                        background: '#fff'
+                    });
+                }
+            }, [index, chunks]);
+
+            return (
+                <div className="qr-wrapper">
+                    <canvas ref={canvasRef} style={{ borderRadius: '8px' }}></canvas>
+                    <div className="qr-progress">
+                        <div className="qr-bar" style={{width: `${((index+1)/chunks.length)*100}%`}}></div>
+                    </div>
+                    <p className="font-mono" style={{ color: '#000', fontSize: '12px', fontWeight: 'bold', marginTop: '8px' }}>
+                        {label} ({index+1}/{chunks.length})
+                    </p>
+                </div>
+            );
+        };
+
+        const QRScanner = ({ onScan }) => {
+            const videoRef = useRef(null);
+            const canvasRef = useRef(null);
+            const [status, setStatus] = useState("Initializing Camera...");
+
+            const scanLoop = useCallback(() => {
+                const video = videoRef.current;
+                const canvas = canvasRef.current;
+                if(!video || !canvas) return;
+
+                if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                    const code = jsQR(imageData.data, imageData.width, imageData.height);
+                    
+                    if (code && code.data.startsWith('SL:')) {
+                        setStatus("Packet Detected");
+                        onScan(code.data);
+                    } else {
+                        setStatus("Scanning...");
+                    }
+                }
+                requestAnimationFrame(scanLoop);
+            }, [onScan]);
+
+            useEffect(() => {
+                let stream = null;
+                navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+                    .then(s => {
+                        stream = s;
+                        if(videoRef.current) {
+                            videoRef.current.srcObject = stream;
+                            videoRef.current.play().catch(e => console.error(e));
+                            requestAnimationFrame(scanLoop);
+                        }
+                    })
+                    .catch(err => setStatus("Camera Error: " + err.message));
+                return () => { if(stream) stream.getTracks().forEach(t => t.stop()); };
+            }, [scanLoop]);
+
+            return (
+                <div className="scan-container">
+                    <video ref={videoRef} className="scan-video" muted playsInline></video>
+                    <canvas ref={canvasRef} className="hidden"></canvas>
+                    <div className="scanline"></div>
+                    <div style={{ position: 'absolute', bottom: '16px', left: 0, right: 0, textAlign: 'center' }}>
+                        <span className="sys-pill" style={{ background: status === "Packet Detected" ? 'rgba(16, 185, 129, 0.9)' : 'rgba(0,0,0,0.6)', color: status === "Packet Detected" ? '#fff' : '#00f3ff' }}>
+                            {status}
+                        </span>
+                    </div>
+                </div>
+            );
+        };
+
+        const IdentityModal = ({ fingerprint, onClose }) => {
+            if (!fingerprint) return null;
+            return (
+                <div className="modal-overlay">
+                    <div className="modal-content">
+                        <button onClick={onClose} style={{ position: 'absolute', top: '16px', right: '16px', background: 'none', border: 'none', color: '#64748b', cursor: 'pointer' }}>
+                            <Icon name="x" size={20} />
+                        </button>
+                        <div style={{ width: '64px', height: '64px', background: 'rgba(0, 243, 255, 0.1)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px auto', border: '1px solid rgba(0, 243, 255, 0.3)' }}>
+                            <Icon name="shield-check" size={32} className="text-cyan" />
+                        </div>
+                        <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', color: 'white', marginBottom: '8px' }}>Safety Number</h3>
+                        <p style={{ color: '#94a3b8', fontSize: '0.9rem', marginBottom: '24px' }}>Compare this unique fingerprint with your peer.</p>
+                        <div style={{ background: 'rgba(0,0,0,0.5)', padding: '20px', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.05)', marginBottom: '24px' }}>
+                            <div style={{ fontSize: '3rem', marginBottom: '12px', letterSpacing: '8px' }}>{fingerprint.emoji}</div>
+                            <div className="font-mono text-cyan" style={{ fontSize: '1.1rem', letterSpacing: '0.2em', wordBreak: 'break-all' }}>{fingerprint.hex}</div>
+                        </div>
+                        <button onClick={onClose} style={{ width: '100%', padding: '12px', background: 'var(--primary)', border: 'none', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer', color: '#000' }}>Verified</button>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- CALL UI COMPONENT ---
+        const CallOverlay = ({ status, localStream, remoteStream, onAnswer, onHangup, isVideo, onToggleMute, onToggleVideo }) => {
+            const localVideoRef = useRef(null);
+            const remoteVideoRef = useRef(null);
+            
+            const [isMuted, setIsMuted] = useState(false);
+            const [isCameraOff, setIsCameraOff] = useState(false);
+
+            useEffect(() => {
+                if (localVideoRef.current && localStream) {
+                    localVideoRef.current.srcObject = localStream;
+                }
+            }, [localStream, isCameraOff]); 
+
+            useEffect(() => {
+                if (remoteVideoRef.current && remoteStream) {
+                    remoteVideoRef.current.srcObject = remoteStream;
+                    remoteVideoRef.current.play().catch(e => console.log("Auto-play err", e));
+                }
+            }, [remoteStream]);
+
+            const handleMuteClick = () => {
+                const success = onToggleMute();
+                if(success) setIsMuted(prev => !prev);
+            };
+
+            const handleVideoClick = () => {
+                const success = onToggleVideo();
+                if(success) setIsCameraOff(prev => !prev);
+            };
+
+            if (status === 'IDLE') return null;
+
+            const remoteHasVideo = remoteStream && remoteStream.getVideoTracks().length > 0;
+
+            return (
+                <div className="call-screen">
+                    {/* Remote Stream */}
+                    <video ref={remoteVideoRef} autoPlay playsInline className="remote-video" />
+
+                    {/* Audio Avatar if no video */}
+                    {!remoteHasVideo && (
+                        <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#0f172a', zIndex: 10 }}>
+                            <div style={{ position: 'relative' }}>
+                                <div style={{ position: 'absolute', inset: 0, background: 'var(--primary)', borderRadius: '50%', filter: 'blur(40px)', opacity: 0.3 }}></div>
+                                <div style={{ width: '120px', height: '120px', borderRadius: '50%', background: 'rgba(15, 23, 42, 0.8)', border: '1px solid rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', zIndex: 10 }}>
+                                    <Icon name="user" size={60} style={{ color: 'rgba(255,255,255,0.5)' }} />
+                                </div>
+                            </div>
+                            <p className="font-mono" style={{ color: '#94a3b8', letterSpacing: '0.2em', fontSize: '0.9rem', textTransform: 'uppercase', marginTop: '32px' }}>
+                                {status === 'ACTIVE' ? 'Voice Connected' : status === 'OUTGOING' ? 'Calling...' : 'Connecting...'}
+                            </p>
+                        </div>
+                    )}
+
+                    {/* PiP Local Video */}
+                    {localStream && isVideo && !isCameraOff && (
+                        <div className="local-video-pip">
+                            <video ref={localVideoRef} autoPlay playsInline muted />
+                        </div>
+                    )}
+
+                    {/* Controls */}
+                    <div className="call-controls">
+                        {status === 'INCOMING' ? (
+                            <>
+                                <button onClick={onHangup} className="ctrl-btn danger">
+                                    <Icon name="phone-off" size={28} />
+                                </button>
+                                <button onClick={onAnswer} className="ctrl-btn success">
+                                    <Icon name="phone" size={28} />
+                                </button>
+                            </>
+                        ) : (
+                            <>
+                                <button onClick={handleMuteClick} className={`ctrl-btn ${isMuted ? 'danger' : 'normal'}`}>
+                                    <Icon name={isMuted ? "mic-off" : "mic"} size={24} />
+                                </button>
+                                
+                                <button onClick={onHangup} className="ctrl-btn danger" style={{ transform: 'scale(1.1)' }}>
+                                    <Icon name="phone-off" size={32} />
+                                </button>
+
+                                {isVideo && (
+                                    <button onClick={handleVideoClick} className={`ctrl-btn ${isCameraOff ? 'danger' : 'normal'}`}>
+                                        <Icon name={isCameraOff ? "video-off" : "video"} size={24} />
+                                    </button>
+                                )}
+                            </>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        // --- CAMERA COMPONENT ---
+        const CameraModal = ({ onClose, onCapture }) => {
+            const videoRef = useRef(null);
+            const canvasRef = useRef(null);
+            const mediaRecorderRef = useRef(null);
+            const [stream, setStream] = useState(null);
+            const [mode, setMode] = useState('PHOTO'); // PHOTO or VIDEO
+            const [isRecording, setIsRecording] = useState(false);
+            const [preview, setPreview] = useState(null); // { type: 'image'|'video', url, blob }
+            const [timer, setTimer] = useState(0);
+
+            useEffect(() => {
+                let s = null;
+                navigator.mediaDevices.getUserMedia({ 
+                    video: { facingMode: "environment" }, 
+                    audio: true 
+                }).then(mediaStream => {
+                    s = mediaStream;
+                    setStream(mediaStream);
+                    if(videoRef.current) {
+                        videoRef.current.srcObject = mediaStream;
+                        videoRef.current.play();
+                    }
+                }).catch(err => console.error("Cam Access Denied", err));
+                return () => { if(s) s.getTracks().forEach(t => t.stop()); }
+            }, []);
+
+            useEffect(() => {
+                let interval;
+                if(isRecording) {
+                    interval = setInterval(() => setTimer(t => t+1), 1000);
+                } else {
+                    setTimer(0);
+                }
+                return () => clearInterval(interval);
+            }, [isRecording]);
+
+            const takePhoto = () => {
+                if(!videoRef.current || !canvasRef.current) return;
+                const w = videoRef.current.videoWidth;
+                const h = videoRef.current.videoHeight;
+                canvasRef.current.width = w;
+                canvasRef.current.height = h;
+                const ctx = canvasRef.current.getContext('2d');
+                ctx.drawImage(videoRef.current, 0, 0, w, h);
+                canvasRef.current.toBlob(blob => {
+                    setPreview({ type: 'image', url: URL.createObjectURL(blob), blob });
+                }, 'image/jpeg', 0.85);
+            };
+
+            const toggleVideo = () => {
+                if(isRecording) {
+                    mediaRecorderRef.current.stop();
+                    setIsRecording(false);
+                } else {
+                    const chunks = [];
+                    const mr = new MediaRecorder(stream, { mimeType: 'video/webm' });
+                    mr.ondataavailable = e => { if(e.data.size > 0) chunks.push(e.data); };
+                    mr.onstop = () => {
+                        const blob = new Blob(chunks, { type: 'video/webm' });
+                        setPreview({ type: 'video', url: URL.createObjectURL(blob), blob });
+                    };
+                    mr.start();
+                    mediaRecorderRef.current = mr;
+                    setIsRecording(true);
+                }
+            };
+
+            const handleSend = () => {
+                if(preview) {
+                    const name = preview.type === 'image' ? `photo_${Date.now()}.jpg` : `video_${Date.now()}.webm`;
+                    const type = preview.type === 'image' ? 'image/jpeg' : 'video/webm';
+                    onCapture(preview.blob, name, type);
+                    onClose();
+                }
+            };
+
+            const retake = () => {
+                setPreview(null);
+            };
+
+            return (
+                <div className="camera-full">
+                    <div style={{ padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'black', zIndex: 10 }}>
+                        <button onClick={onClose} className="btn-icon"><Icon name="x" /></button>
+                        {isRecording && <div className="sys-pill" style={{ background: 'red', color: 'white' }}>REC {formatTime(timer)}</div>}
+                        <div style={{ width: '40px' }}></div>
+                    </div>
+
+                    <div className="cam-view">
+                        {!preview ? (
+                            <>
+                                <video ref={videoRef} muted playsInline></video>
+                                <canvas ref={canvasRef} className="hidden"></canvas>
+                                {/* Grid Overlay */}
+                                <div style={{ position: 'absolute', inset: 0, opacity: 0.2, pointerEvents: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                    <div style={{ width: '80%', height: '60%', border: '1px solid white' }}></div>
+                                </div>
+                            </>
+                        ) : (
+                            <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                {preview.type === 'image' ? 
+                                    <img src={preview.url} style={{maxWidth:'100%', maxHeight:'100%', objectFit:'contain'}} alt="preview" /> : 
+                                    <video src={preview.url} controls style={{maxWidth:'100%', maxHeight:'100%', objectFit:'contain'}} />
+                                }
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="cam-ui">
+                        {!preview ? (
+                            <>
+                                <div style={{ display: 'flex', gap: '20px' }}>
+                                    <button onClick={() => setMode('PHOTO')} style={{ color: mode === 'PHOTO' ? '#fbbf24' : '#64748b', background: 'none', border: 'none', fontWeight: 'bold' }}>PHOTO</button>
+                                    <button onClick={() => setMode('VIDEO')} style={{ color: mode === 'VIDEO' ? '#fbbf24' : '#64748b', background: 'none', border: 'none', fontWeight: 'bold' }}>VIDEO</button>
+                                </div>
+                                
+                                <button 
+                                    onClick={mode === 'PHOTO' ? takePhoto : toggleVideo} 
+                                    className={`shutter-btn ${isRecording ? 'rec' : ''}`}
+                                >
+                                    <div className="shutter-inner"></div>
+                                </button>
+
+                                <div style={{ width: '60px' }}></div> {/* Spacer */}
+                            </>
+                        ) : (
+                            <div style={{ width: '100%', display: 'flex', justifyContent: 'space-between', padding: '0 20px' }}>
+                                <button onClick={retake} style={{ background: 'none', border: 'none', color: 'white', fontSize: '1rem' }}>Retake</button>
+                                <button onClick={handleSend} style={{ background: 'var(--primary)', color: 'black', padding: '10px 30px', borderRadius: '30px', border: 'none', fontWeight: 'bold', fontSize: '1rem' }}>Send</button>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        // --- MAIN APP ---
+        const App = () => {
+            const [view, setView] = useState('HOME');
+            const [role, setRole] = useState(null);
+            const [logs, setLogs] = useState([]);
+            const [msgText, setMsgText] = useState("");
+            const [messages, setMessages] = useState([]);
+            const [showVerify, setShowVerify] = useState(false);
+            const [fileProgress, setFileProgress] = useState(0); 
+            const [showCamera, setShowCamera] = useState(false);
+            const [showEmoji, setShowEmoji] = useState(false);
+            
+            // Audio Recording State
+            const [isRecordingAudio, setIsRecordingAudio] = useState(false);
+            const [audioTimer, setAudioTimer] = useState(0);
+            const audioRecorderRef = useRef(null);
+            const audioChunksRef = useRef([]);
+
+            // WebRTC Refs
+            const pc = useRef(null);
+            const dc = useRef(null);
+            const candidates = useRef([]);
+            
+            // Crypto Refs
+            const keys = useRef({ rsa: null, ecdh: null });
+            const sessionKey = useRef(null);
+            const fingerprint = useRef(null);
+            const incomingFiles = useRef({});
+            const fileInputRef = useRef(null);
+            const chatEndRef = useRef(null);
+
+            // Signaling State
+            const [localSignal, setLocalSignal] = useState(null);
+            const scannedChunks = useRef(new Map());
+            const [scanProgress, setScanProgress] = useState(0);
+
+            // Call State
+            const [callStatus, setCallStatus] = useState('IDLE'); // IDLE, OUTGOING, INCOMING, ACTIVE
+            const [localStream, setLocalStream] = useState(null);
+            const localStreamRef = useRef(null);
+            const [remoteStream, setRemoteStream] = useState(null);
+            const [isVideoCall, setIsVideoCall] = useState(false);
+            const pendingOffer = useRef(null);
+
+            // Initial Key Gen
+            useEffect(() => {
+                const initKeys = async () => {
+                    keys.current.rsa = await window.crypto.subtle.generateKey(
+                        { name: "RSA-OAEP", modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: "SHA-256" },
+                        true, ["encrypt", "decrypt"]
+                    );
+                    keys.current.ecdh = await window.crypto.subtle.generateKey(
+                        { name: "ECDH", namedCurve: "P-256" },
+                        true, ["deriveKey", "deriveBits"]
+                    );
+                    addLog("Crypto System Initialized (RSA + ECDH).");
+                };
+                initKeys();
+            }, []);
+
+            useEffect(() => {
+                if (chatEndRef.current) chatEndRef.current.scrollIntoView({ behavior: "smooth" });
+            }, [messages]);
+
+            useEffect(() => {
+                let interval;
+                if(isRecordingAudio) {
+                    interval = setInterval(() => setAudioTimer(t => t+1), 1000);
+                } else {
+                    setAudioTimer(0);
+                }
+                return () => clearInterval(interval);
+            }, [isRecordingAudio]);
+
+            const addLog = (txt) => setLogs(p => [...p.slice(-4), txt]);
+
+            // WebRTC Setup
+            const createPeer = useCallback(() => {
+                const peer = new RTCPeerConnection(ICE_SERVERS);
+                peer.onicecandidate = (e) => { 
+                    if (e.candidate) {
+                        if (dc.current && dc.current.readyState === 'open') {
+                             dc.current.send(JSON.stringify({ t: 'SIG_ICE', c: e.candidate }));
+                        } else {
+                            candidates.current.push(e.candidate); 
+                        }
+                    } 
+                };
+                peer.onconnectionstatechange = () => addLog(`Connection: ${peer.connectionState}`);
+                peer.ontrack = (e) => {
+                    const stream = e.streams[0] || new MediaStream([e.track]);
+                    setRemoteStream(new MediaStream(stream.getTracks()));
+                };
+                pc.current = peer;
+                return peer;
+            }, []);
+
+            const processSignal = useCallback(async (data) => {
+                if (!pc.current) return;
+                if(role === 'HOST' && data.type === 'answer') {
+                    await pc.current.setRemoteDescription(new RTCSessionDescription(data.sdp));
+                    data.candidates.forEach(c => pc.current.addIceCandidate(new RTCIceCandidate(c)));
+                    addLog("Remote Desc Set.");
+                } else if (role === 'JOINER' && data.type === 'offer') {
+                    await pc.current.setRemoteDescription(new RTCSessionDescription(data.sdp));
+                    data.candidates.forEach(c => pc.current.addIceCandidate(new RTCIceCandidate(c)));
+                    const answer = await pc.current.createAnswer();
+                    await pc.current.setLocalDescription(answer);
+                    await new Promise(r => setTimeout(r, 500)); 
+                    setLocalSignal({
+                        type: 'answer',
+                        sdp: pc.current.localDescription,
+                        candidates: candidates.current
+                    });
+                    setView('JOIN_WAIT');
+                }
+            }, [role]);
+
+            const handleScannedChunk = useCallback((raw) => {
+                const parts = raw.split(':');
+                if(parts.length < 4) return;
+                const idx = parseInt(parts[1]);
+                const total = parseInt(parts[2]);
+                const data = parts.slice(3).join(':');
+
+                if(!scannedChunks.current.has(idx)) {
+                    scannedChunks.current.set(idx, data);
+                    setScanProgress(Math.round((scannedChunks.current.size / total) * 100));
+                    if(scannedChunks.current.size === total) {
+                        const fullB64 = Array.from({length: total}, (_, i) => scannedChunks.current.get(i)).join('');
+                        try {
+                            const jsonStr = atob(fullB64);
+                            const signalData = JSON.parse(jsonStr);
+                            addLog("Signal Captured.");
+                            scannedChunks.current.clear();
+                            processSignal(signalData);
+                        } catch(e) {
+                            console.error("Signal parse error", e);
+                            addLog("Error Parsing Signal");
+                        }
+                    }
+                }
+            }, [processSignal]);
+
+            const startHost = async () => {
+                setRole('HOST');
+                const peer = createPeer();
+                dc.current = peer.createDataChannel("shadowlink");
+                setupDataChannel(dc.current);
+                const offer = await peer.createOffer();
+                await peer.setLocalDescription(offer);
+                await new Promise(r => setTimeout(r, 500));
+                setLocalSignal({ type: 'offer', sdp: peer.localDescription, candidates: candidates.current });
+                setView('HOST_WAIT');
+            };
+
+            const startJoin = () => {
+                setRole('JOINER');
+                const peer = createPeer();
+                peer.ondatachannel = (e) => {
+                    dc.current = e.channel;
+                    setupDataChannel(dc.current);
+                };
+                setView('SCAN_HOST');
+            };
+
+            const setupDataChannel = (channel) => {
+                channel.onopen = () => {
+                    addLog("Tunnel Open.");
+                    initiateSecureHandshake();
+                };
+                channel.onmessage = async (e) => handlePacket(e.data);
+            };
+
+            // NEW: Signed Handshake to Prevent MitM
+            const initiateSecureHandshake = async () => {
+                const rsaPub = await window.crypto.subtle.exportKey("spki", keys.current.rsa.publicKey);
+                const ecdhPub = await window.crypto.subtle.exportKey("raw", keys.current.ecdh.publicKey);
+                
+                dc.current.send(JSON.stringify({ t: 'HELLO', rsa: buf2hex(rsaPub), ecdh: buf2hex(ecdhPub) }));
+            };
+
+            const deriveSession = async (p) => {
+                const peerRsa = await window.crypto.subtle.importKey("spki", hex2buf(p.rsa), { name: "RSA-OAEP", hash: "SHA-256" }, true, ["encrypt"]);
+                const peerEcdh = await window.crypto.subtle.importKey("raw", hex2buf(p.ecdh), { name: "ECDH", namedCurve: "P-256" }, true, []);
+                
+                const sharedBits = await window.crypto.subtle.deriveBits({ name: "ECDH", public: peerEcdh }, keys.current.ecdh.privateKey, 256);
+                
+                const hkdfKey = await window.crypto.subtle.importKey("raw", sharedBits, { name: "HKDF" }, false, ["deriveKey"]);
+                sessionKey.current = await window.crypto.subtle.deriveKey(
+                    { name: "HKDF", hash: "SHA-256", salt: new Uint8Array(), info: new TextEncoder().encode("ShadowLink") },
+                    hkdfKey, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]
+                );
+
+                // --- NEW FINGERPRINT LOGIC ---
+                // SHA-256( SharedSecret || Sort(RSA_A, RSA_B) )
+                const localRsaExp = await window.crypto.subtle.exportKey("spki", keys.current.rsa.publicKey);
+                const remoteRsaExp = hex2buf(p.rsa);
+                
+                // Sort keys to ensure both parties hash in the same order
+                // Simple byte comparison for sorting
+                const localArr = new Uint8Array(localRsaExp);
+                const remoteArr = new Uint8Array(remoteRsaExp);
+                let first = localArr, second = remoteArr;
+                
+                for(let i=0; i<Math.min(localArr.length, remoteArr.length); i++) {
+                    if (localArr[i] < remoteArr[i]) { first = localArr; second = remoteArr; break; }
+                    if (localArr[i] > remoteArr[i]) { first = remoteArr; second = localArr; break; }
+                }
+
+                // Concatenate: Shared + FirstKey + SecondKey
+                const totalLen = sharedBits.byteLength + first.length + second.length;
+                const combined = new Uint8Array(totalLen);
+                combined.set(new Uint8Array(sharedBits), 0);
+                combined.set(first, sharedBits.byteLength);
+                combined.set(second, sharedBits.byteLength + first.length);
+
+                const fpHash = await window.crypto.subtle.digest("SHA-256", combined);
+                const fpArr = new Uint8Array(fpHash);
+                const emojis = ["💀","👽","🤖","👻","🤡","👹","👺","👾","🎃","🐉","🦄","🦉","🕸","⚡","🔥","❄️"];
+                let fpEmoji = "";
+                for(let i=0; i<4; i++) fpEmoji += emojis[fpArr[i] % emojis.length];
+                const fpHex = buf2hex(fpHash).substring(0, 8).toUpperCase();
+                fingerprint.current = { emoji: fpEmoji, hex: fpHex };
+                
+                addLog(`Secured: ${fpEmoji}`);
+                setView('CHAT');
+                setMessages(prev => [...prev, { id: Date.now(), type: 'SYS', text: `SECURE CHANNEL ESTABLISHED` }]);
+            };
+
+            const handlePacket = async (raw) => {
+                try {
+                    const p = JSON.parse(raw);
+                    if (p.t === 'HELLO') await deriveSession(p);
+                    else if (p.t === 'ENC') {
+                        const pt = await decryptData(p.iv, p.d);
+                        const text = new TextDecoder().decode(pt);
+                        setMessages(prev => [...prev, { id: Date.now(), type: 'RX', text: text }]);
+                    }
+                    else if (p.t === 'SIG_OFFER') {
+                        pendingOffer.current = p.sdp;
+                        setIsVideoCall(p.video);
+                        setCallStatus('INCOMING');
+                    }
+                    else if (p.t === 'SIG_ANSWER') {
+                        if (pc.current.signalingState !== 'stable') {
+                            await pc.current.setRemoteDescription(new RTCSessionDescription(p.sdp));
+                            setCallStatus('ACTIVE');
+                        }
+                    }
+                    else if (p.t === 'SIG_ICE') await pc.current.addIceCandidate(new RTCIceCandidate(p.c));
+                    else if (p.t === 'CALL_END') endCallCleanup();
+                    else if (p.t === 'FILE_HEADER') {
+                        const pt = await decryptData(p.iv, p.meta);
+                        const meta = JSON.parse(new TextDecoder().decode(pt));
+                        incomingFiles.current[p.id] = { meta, chunks: [], receivedSize: 0, startTime: Date.now() };
+                        setMessages(prev => [...prev, { id: Date.now(), type: 'SYS', text: `Receiving ${meta.name}...` }]);
+                    }
+                    else if (p.t === 'FILE_CHUNK') {
+                        const fileCtx = incomingFiles.current[p.id];
+                        if (fileCtx) {
+                            const chunkData = base64ToArrayBuffer(p.d);
+                            fileCtx.chunks.push({ idx: p.idx, data: chunkData });
+                            fileCtx.receivedSize += chunkData.byteLength;
+                            if (fileCtx.receivedSize >= fileCtx.meta.encSize) {
+                                fileCtx.chunks.sort((a,b) => a.idx - b.idx);
+                                const totalLen = fileCtx.chunks.reduce((acc, c) => acc + c.data.byteLength, 0);
+                                const cipherBuffer = new Uint8Array(totalLen);
+                                let offset = 0;
+                                fileCtx.chunks.forEach(c => {
+                                    cipherBuffer.set(new Uint8Array(c.data), offset);
+                                    offset += c.data.byteLength;
+                                });
+                                try {
+                                    const fileData = await window.crypto.subtle.decrypt(
+                                        { name: "AES-GCM", iv: hex2buf(fileCtx.meta.iv) },
+                                        sessionKey.current,
+                                        cipherBuffer
+                                    );
+                                    const blob = new Blob([fileData], { type: fileCtx.meta.type });
+                                    const url = URL.createObjectURL(blob);
+                                    setMessages(prev => [...prev, { 
+                                        id: Date.now(), type: 'FILE', text: fileCtx.meta.name, fileUrl: url, fileSize: fileCtx.meta.size, mimeType: fileCtx.meta.type
+                                    }]);
+                                    delete incomingFiles.current[p.id];
+                                } catch(e) {
+                                    console.error("Decrypt Fail", e);
+                                    setMessages(prev => [...prev, { id: Date.now(), type: 'SYS', text: `Decryption Failed` }]);
+                                }
+                            }
+                        }
+                    }
+                } catch(e) { console.error("Packet Error", e); }
+            };
+
+            const decryptData = async (ivHex, dataHex) => {
+                return await window.crypto.subtle.decrypt(
+                    { name: "AES-GCM", iv: hex2buf(ivHex) },
+                    sessionKey.current,
+                    hex2buf(dataHex)
+                );
+            };
+
+            const sendMessage = async () => {
+                if(!msgText.trim() || !sessionKey.current) return;
+                const txt = msgText;
+                setMsgText("");
+                setMessages(prev => [...prev, { id: Date.now(), type: 'TX', text: txt }]);
+                const iv = window.crypto.getRandomValues(new Uint8Array(12));
+                const enc = await window.crypto.subtle.encrypt(
+                    { name: "AES-GCM", iv: iv },
+                    sessionKey.current,
+                    new TextEncoder().encode(txt)
+                );
+                dc.current.send(JSON.stringify({ t: 'ENC', iv: buf2hex(iv), d: buf2hex(enc) }));
+            };
+
+            const processAndSendFile = async (blob, fileName, fileType) => {
+                 if (!sessionKey.current) return;
+                const buffer = await blob.arrayBuffer();
+                const fileIv = window.crypto.getRandomValues(new Uint8Array(12));
+                const encryptedFile = await window.crypto.subtle.encrypt({ name: "AES-GCM", iv: fileIv }, sessionKey.current, buffer);
+                const fileId = crypto.randomUUID();
+                const metaRaw = JSON.stringify({ name: fileName, size: blob.size, type: fileType, iv: buf2hex(fileIv), encSize: encryptedFile.byteLength });
+                const metaIv = window.crypto.getRandomValues(new Uint8Array(12));
+                const encMeta = await window.crypto.subtle.encrypt({ name: "AES-GCM", iv: metaIv }, sessionKey.current, new TextEncoder().encode(metaRaw));
+                dc.current.send(JSON.stringify({ t: 'FILE_HEADER', id: fileId, iv: buf2hex(metaIv), meta: buf2hex(encMeta) }));
+                setMessages(prev => [...prev, { id: Date.now(), type: 'SYS', text: `Sending ${fileName}...` }]);
+                const totalChunks = Math.ceil(encryptedFile.byteLength / FILE_CHUNK_SIZE);
+                let offset = 0;
+                for (let i = 0; i < totalChunks; i++) {
+                    const chunk = encryptedFile.slice(offset, offset + FILE_CHUNK_SIZE);
+                    const b64Chunk = arrayBufferToBase64(chunk);
+                    if (i % 10 === 0) await new Promise(r => setTimeout(r, 10)); 
+                    dc.current.send(JSON.stringify({ t: 'FILE_CHUNK', id: fileId, idx: i, d: b64Chunk }));
+                    offset += FILE_CHUNK_SIZE;
+                    setFileProgress(Math.round(((i + 1) / totalChunks) * 100));
+                }
+                setFileProgress(0);
+                const localUrl = URL.createObjectURL(blob);
+                setMessages(prev => [...prev, { id: Date.now(), type: 'TX_FILE', text: fileName, fileUrl: localUrl, mimeType: fileType }]);
+            };
+
+            const handleFileSelect = (e) => {
+                const file = e.target.files[0];
+                if (file) processAndSendFile(file, file.name, file.type);
+            };
+
+            // --- CALLING LOGIC ---
+            const startCall = async (video = false) => {
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: video });
+                    setLocalStream(stream);
+                    localStreamRef.current = stream; 
+                    setIsVideoCall(video);
+                    stream.getTracks().forEach(track => pc.current.addTrack(track, stream));
+                    const offer = await pc.current.createOffer();
+                    await pc.current.setLocalDescription(offer);
+                    dc.current.send(JSON.stringify({ t: 'SIG_OFFER', sdp: offer, video }));
+                    setCallStatus('OUTGOING');
+                } catch(e) {
+                    console.error("Call Error", e);
+                    alert("Could not access camera/microphone");
+                }
+            };
+
+            const answerCall = async () => {
+                try {
+                    let stream;
+                    try {
+                        stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: isVideoCall });
+                    } catch(e) {
+                        if (isVideoCall) stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+                        else throw e;
+                    }
+                    setLocalStream(stream);
+                    localStreamRef.current = stream; 
+                    stream.getTracks().forEach(track => pc.current.addTrack(track, stream));
+                    await pc.current.setRemoteDescription(new RTCSessionDescription(pendingOffer.current));
+                    const answer = await pc.current.createAnswer();
+                    await pc.current.setLocalDescription(answer);
+                    dc.current.send(JSON.stringify({ t: 'SIG_ANSWER', sdp: answer }));
+                    setCallStatus('ACTIVE');
+                } catch(e) { console.error("Answer Error", e); }
+            };
+
+            const endCall = () => {
+                dc.current.send(JSON.stringify({ t: 'CALL_END' }));
+                endCallCleanup();
+            };
+
+            const endCallCleanup = () => {
+                if(localStreamRef.current) {
+                    localStreamRef.current.getTracks().forEach(t => t.stop());
+                    localStreamRef.current = null;
+                    setLocalStream(null);
+                }
+                if (pc.current) pc.current.getSenders().forEach(sender => pc.current.removeTrack(sender));
+                setRemoteStream(null);
+                setCallStatus('IDLE');
+            };
+
+            const toggleMute = () => {
+                if(localStreamRef.current) {
+                    const audioTrack = localStreamRef.current.getAudioTracks()[0];
+                    if(audioTrack) {
+                        audioTrack.enabled = !audioTrack.enabled;
+                        return true;
+                    }
+                }
+                return false;
+            };
+
+            const toggleVideo = () => {
+                if(localStreamRef.current) {
+                    const videoTrack = localStreamRef.current.getVideoTracks()[0];
+                    if(videoTrack) {
+                        videoTrack.enabled = !videoTrack.enabled;
+                        return true;
+                    }
+                }
+                return false;
+            };
+
+            const startAudioRecord = async () => {
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    const recorder = new MediaRecorder(stream);
+                    audioChunksRef.current = [];
+                    recorder.ondataavailable = e => audioChunksRef.current.push(e.data);
+                    recorder.onstop = () => {
+                        const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+                        processAndSendFile(blob, `voice_${Date.now()}.webm`, 'audio/webm');
+                        stream.getTracks().forEach(t => t.stop());
+                    };
+                    recorder.start();
+                    audioRecorderRef.current = recorder;
+                    setIsRecordingAudio(true);
+                } catch(e) { console.error("Mic Error", e); }
+            };
+
+            const stopAudioRecord = () => {
+                if(audioRecorderRef.current && isRecordingAudio) {
+                    audioRecorderRef.current.stop();
+                    setIsRecordingAudio(false);
+                }
+            };
+
+            const renderMediaContent = (m) => {
+                const type = m.mimeType || '';
+                if (type.startsWith('image/')) {
+                    return (<a href={m.fileUrl} target="_blank" rel="noopener noreferrer"><img src={m.fileUrl} className="media-preview" alt="content" /></a>);
+                } else if (type.startsWith('video/')) {
+                    return <video src={m.fileUrl} controls className="media-preview" />;
+                } else if (type.startsWith('audio/')) {
+                    return <div className="mt-4 w-full"><audio src={m.fileUrl} controls style={{ width: '100%', height: '32px' }} /></div>;
+                }
+                return (<a href={m.fileUrl} download={m.text} className="mt-4 flex items-center justify-center gap-2 w-full py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-xs font-bold transition-colors" style={{ padding: '8px', background: 'rgba(255,255,255,0.1)', borderRadius: '8px', textDecoration: 'none', color: 'white', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.8rem' }}><Icon name="download" size={14} /> Download File</a>);
+            };
+
+            const renderHome = () => (
+                <div className="app-view">
+                    <div className="center-stage">
+                        <div style={{ position: 'relative', marginBottom: '20px' }}>
+                            <Icon name="ghost" size={80} className="text-cyan" />
+                            <div style={{ position: 'absolute', top: 0, right: 0, width: '12px', height: '12px', background: 'var(--secondary)', borderRadius: '50%', boxShadow: '0 0 15px var(--secondary)' }}></div>
+                        </div>
+                        <h1 className="home-title">ShadowLink</h1>
+                        <p style={{ color: '#94a3b8', fontFamily: 'monospace' }}>Zero-Knowledge Kinetic Mesh</p>
+                        
+                        <div className="card-grid">
+                            <button onClick={startHost} className="action-card">
+                                <h3><Icon name="radio-tower" size={24} className="text-cyan" /> Host Room</h3>
+                                <p>Create a secure signal.</p>
+                            </button>
+                            <button onClick={startJoin} className="action-card secondary">
+                                <h3><Icon name="scan-line" size={24} className="text-purple" /> Join Room</h3>
+                                <p>Scan a signal to connect.</p>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+
+            const renderSignaling = () => {
+                const isScanner = view === 'SCAN_HOST' || view === 'SCAN_JOIN';
+                const isQR = view === 'HOST_WAIT' || view === 'JOIN_WAIT';
+                const title = view === 'HOST_WAIT' ? "Host Signal" : view === 'SCAN_HOST' ? "Scan Host" : view === 'SCAN_JOIN' ? "Scan Reply" : "Your Reply";
+                return (
+                    <div className="app-view">
+                        <div className="center-stage">
+                            <div className="glass-panel" style={{ padding: '32px', maxWidth: '400px', width: '100%', position: 'relative' }}>
+                                <button onClick={() => window.location.reload()} style={{ position: 'absolute', top: '16px', left: '16px', background: 'none', border: 'none', color: '#64748b', cursor: 'pointer' }}>
+                                    <Icon name="x" size={20} />
+                                </button>
+                                
+                                <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold', marginBottom: '4px' }}>{title}</h2>
+                                <p className="font-mono text-cyan" style={{ fontSize: '0.8rem', marginBottom: '24px' }}>
+                                    {isScanner ? "Point camera at peer's screen" : "Show this to peer"}
+                                </p>
+
+                                <div style={{ display: 'flex', justifyContent: 'center', minHeight: '260px', alignItems: 'center' }}>
+                                    {isQR && localSignal && (
+                                        <div className="flex-col w-full" style={{ gap: '16px' }}>
+                                            <QRAnimator data={localSignal} label="Signal Packet" />
+                                            {view === 'HOST_WAIT' && (
+                                                <button onClick={() => setView('SCAN_JOIN')} style={{ width: '100%', padding: '16px', marginTop: '16px', background: 'linear-gradient(90deg, var(--secondary), #4f46e5)', border: 'none', borderRadius: '12px', color: 'white', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                                                    <Icon name="scan-eye" /> I've been Scanned
+                                                </button>
+                                            )}
+                                        </div>
+                                    )}
+                                    {isScanner && (
+                                        <div className="w-full flex-col" style={{ gap: '16px' }}>
+                                            <QRScanner onScan={handleScannedChunk} />
+                                            {scanProgress > 0 && scanProgress < 100 && (
+                                                <div style={{ width: '100%', height: '6px', background: '#334155', borderRadius: '3px', overflow: 'hidden' }}>
+                                                    <div style={{ height: '100%', background: 'var(--success)', width: `${scanProgress}%`, transition: 'width 0.2s' }}></div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                            <div style={{ marginTop: '20px', fontFamily: 'monospace', fontSize: '10px', color: '#64748b', background: 'rgba(0,0,0,0.4)', padding: '4px 12px', borderRadius: '4px' }}>
+                                {logs[logs.length-1] || "Initializing..."}
+                            </div>
+                        </div>
+                    </div>
+                );
+            };
+
+            const renderChat = () => (
+                <div className="app-view">
+                    <div className="chat-container">
+                        <header className="chat-header">
+                            <div className="identity-badge" onClick={() => setShowVerify(true)}>
+                                <div className="avatar">
+                                    {fingerprint.current?.emoji.substring(0,2)}
+                                </div>
+                                <div>
+                                    <h2 style={{ fontSize: '0.9rem', fontWeight: 'bold', margin: 0 }}>Secure Peer</h2>
+                                    <p className="font-mono" style={{ fontSize: '0.65rem', color: 'var(--success)', margin: 0, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                        <Icon name="lock" size={10} /> AES-256
+                                    </p>
+                                </div>
+                            </div>
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                                <button onClick={() => startCall(false)} disabled={callStatus !== 'IDLE'} className="btn-icon" style={{ opacity: callStatus !== 'IDLE' ? 0.3 : 1 }}>
+                                    <Icon name="phone" size={20} />
+                                </button>
+                                <button onClick={() => startCall(true)} disabled={callStatus !== 'IDLE'} className="btn-icon" style={{ opacity: callStatus !== 'IDLE' ? 0.3 : 1 }}>
+                                    <Icon name="video" size={20} />
+                                </button>
+                                <button onClick={() => window.location.reload()} className="btn-icon" style={{ color: 'var(--danger)' }}>
+                                    <Icon name="log-out" size={20} />
+                                </button>
+                            </div>
+                        </header>
+
+                        <div className="chat-messages">
+                            {messages.map((m) => (
+                                m.type === 'SYS' ? (
+                                    <div key={m.id} className="sys-msg"><span className="sys-pill">{m.text}</span></div>
+                                ) : (
+                                    <div key={m.id} className={`msg-row ${['TX', 'TX_FILE'].includes(m.type) ? 'me' : 'other'}`}>
+                                        <div className="bubble">
+                                            {['FILE', 'TX_FILE'].includes(m.type) ? (
+                                                <>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', paddingBottom: '8px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                                                        <Icon name={m.mimeType?.startsWith('image') ? 'image' : m.mimeType?.startsWith('video') ? 'video' : m.mimeType?.startsWith('audio') ? 'mic' : 'file'} size={14} style={{ opacity: 0.7 }} />
+                                                        <span style={{ fontWeight: 'bold', fontSize: '0.8rem', opacity: 0.9 }}>{m.text}</span>
+                                                    </div>
+                                                    {renderMediaContent(m)}
+                                                </>
+                                            ) : (m.text)}
+                                            <div className="timestamp">
+                                                {new Date(m.id).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}
+                                                {['TX', 'TX_FILE'].includes(m.type) && <Icon name="check" size={10} />}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )
+                            ))}
+                            <div ref={chatEndRef}></div>
+                        </div>
+
+                        {fileProgress > 0 && (
+                            <div style={{ height: '4px', width: '100%', background: '#1e293b' }}>
+                                <div style={{ height: '100%', width: `${fileProgress}%`, background: 'var(--secondary)', transition: 'width 0.1s' }}></div>
+                            </div>
+                        )}
+
+                        {showEmoji && (
+                            <div className="emoji-grid">
+                                {EMOJIS.map(e => (
+                                    <button key={e} onClick={() => { setMsgText(p => p + e); setShowEmoji(false); }} className="emoji-btn">
+                                        {e}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+
+                        <div className="chat-footer">
+                            {!isRecordingAudio ? (
+                                <>
+                                    <button onClick={() => setShowEmoji(!showEmoji)} className="btn-icon" style={{ color: showEmoji ? '#fbbf24' : '' }}>
+                                        <Icon name="smile" size={24} />
+                                    </button>
+                                    <button onClick={() => fileInputRef.current?.click()} className="btn-icon">
+                                        <Icon name="paperclip" size={24} />
+                                        <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileSelect} />
+                                    </button>
+                                    
+                                    <div className="input-bar">
+                                        <input 
+                                            value={msgText} 
+                                            onChange={e => setMsgText(e.target.value)} 
+                                            onKeyDown={e => e.key === 'Enter' && sendMessage()} 
+                                            type="text" 
+                                            placeholder="Message..." 
+                                            className="msg-input" 
+                                            autoComplete="off" 
+                                        />
+                                        {msgText.length > 0 && (
+                                            <button onClick={() => setShowCamera(true)} className="btn-icon">
+                                                <Icon name="camera" size={20} />
+                                            </button>
+                                        )}
+                                    </div>
+
+                                    {msgText ? (
+                                        <button onClick={sendMessage} className="btn-send">
+                                            <Icon name="send-horizontal" size={20} />
+                                        </button>
+                                    ) : (
+                                        <div style={{ display: 'flex', gap: '8px' }}>
+                                            <button onClick={() => setShowCamera(true)} className="btn-icon">
+                                                <Icon name="camera" size={24} />
+                                            </button>
+                                            <button onClick={startAudioRecord} className="btn-rec">
+                                                <Icon name="mic" size={24} />
+                                            </button>
+                                        </div>
+                                    )}
+                                </>
+                            ) : (
+                                <div className="recording-bar">
+                                    <div style={{ width: '10px', height: '10px', background: 'var(--danger)', borderRadius: '50%', animation: 'pulse-red 1.5s infinite' }}></div>
+                                    <span style={{ color: 'var(--danger)', fontFamily: 'monospace', fontWeight: 'bold', flex: 1 }}>
+                                        Recording {formatTime(audioTimer)}
+                                    </span>
+                                    <button onClick={() => setIsRecordingAudio(false)} style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: '0.75rem', fontWeight: 'bold', cursor: 'pointer' }}>CANCEL</button>
+                                    <button onClick={stopAudioRecord} className="btn-send" style={{ background: 'var(--danger)', color: 'white' }}>
+                                        <Icon name="send-horizontal" size={20} />
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                    {showVerify && fingerprint.current && (<IdentityModal fingerprint={fingerprint.current} onClose={() => setShowVerify(false)} />)}
+                    {showCamera && (<CameraModal onClose={() => setShowCamera(false)} onCapture={processAndSendFile} />)}
+                    {callStatus !== 'IDLE' && (<CallOverlay status={callStatus} localStream={localStream} remoteStream={remoteStream} isVideo={isVideoCall} onAnswer={answerCall} onHangup={endCall} onToggleMute={toggleMute} onToggleVideo={toggleVideo} />)}
+                </div>
+            );
+
+            if(view === 'HOME') return renderHome();
+            if(view === 'CHAT') return renderChat();
+            return renderSignaling();
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
